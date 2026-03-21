@@ -133,30 +133,66 @@ def best_label(kw, articles):
     return kw.title()
 
 def cluster_topics(all_arts):
-    kw_idx = defaultdict(list)
+    # Flatten articles
+    flat = []
     for sid, arts in all_arts.items():
         for art in arts:
-            for kw in extract_keywords(art["title"]):
-                kw_idx[kw].append((sid, art))
-    kw_src = {kw:len(set(s for s,_ in a)) for kw,a in kw_idx.items()}
-    hot = {kw:c for kw,c in kw_src.items() if c>=2} or {kw:c for kw,c in kw_src.items() if len(kw_idx[kw])>=3}
-    sorted_kws = sorted(hot.items(), key=lambda x:(-x[1],-len(kw_idx[x[0]])))
+            flat.append({**art, "source_id": sid})
+    if not flat:
+        return []
+
+    # Extract keywords per article
+    art_kws = [(art, set(extract_keywords(art["title"]))) for art in flat]
+
+    # Count how many articles mention each keyword
+    kw_freq = defaultdict(int)
+    for _, kws in art_kws:
+        for kw in kws:
+            kw_freq[kw] += 1
+
+    # KEY FIX: words appearing in >10% of all articles are "generic connective
+    # tissue" (trump, biden, president, american) — not story anchors.
+    # Filter them out so each cluster represents ONE specific story, not
+    # "everything that mentions Trump."
+    max_freq = max(4, len(flat) * 0.10)
+
+    # Build index of specific keywords only
+    spec_idx = defaultdict(list)
+    for art, kws in art_kws:
+        for kw in kws:
+            if kw_freq[kw] <= max_freq:
+                spec_idx[kw].append(art)
+
+    # Source diversity per keyword
+    kw_srcs = {kw: set(a["source_id"] for a in arts) for kw, arts in spec_idx.items()}
+
+    # Require 2+ sources OR 3+ articles to surface a cluster
+    hot = {kw for kw, srcs in kw_srcs.items()
+           if len(srcs) >= 2 or len(spec_idx[kw]) >= 3}
+
+    sorted_kws = sorted(hot, key=lambda kw: (-len(kw_srcs[kw]), -len(spec_idx[kw])))
+
     used, clusters = set(), []
     tier1 = {s["id"] for s in SOURCES if s["tier"]==1}
-    for kw, src_count in sorted_kws[:40]:
+
+    for kw in sorted_kws[:60]:
         cl_arts, cl_srcs = [], set()
-        for sid, art in kw_idx[kw]:
-            k = (sid, art["title"])
+        for art in spec_idx[kw]:
+            k = (art["source_id"], art["title"])
             if k not in used:
-                cl_arts.append({**art,"source_id":sid}); cl_srcs.add(sid); used.add(k)
-        if len(cl_arts)<2: continue
+                cl_arts.append(art); cl_srcs.add(art["source_id"]); used.add(k)
+        if len(cl_arts) < 2:
+            continue
         t1 = [a for a in cl_arts if a["source_id"] in tier1]
         best = (t1 or cl_arts)[0]
         label = best_label(kw, cl_arts)
-        clusters.append({"keyword":label,"topic":best["title"],"articles":cl_arts[:10],
-                         "sources":list(cl_srcs),"source_count":len(cl_srcs),
-                         "article_count":len(cl_arts),"heat_score":src_count*12+len(cl_arts)})
-    clusters.sort(key=lambda x:-x["heat_score"])
+        src_count = len(cl_srcs)
+        clusters.append({"keyword": label, "topic": best["title"],
+                         "articles": cl_arts[:10], "sources": list(cl_srcs),
+                         "source_count": src_count, "article_count": len(cl_arts),
+                         "heat_score": src_count * 12 + len(cl_arts)})
+
+    clusters.sort(key=lambda x: -x["heat_score"])
     return clusters[:20]
 
 def compute_alignment(all_arts, topics):
