@@ -111,6 +111,27 @@ def extract_keywords(title):
         if w not in seen: seen.add(w); result.append(w)
     return result
 
+def best_label(kw, articles):
+    """Find the best 2-3 word proper noun label for a cluster keyword."""
+    phrases = defaultdict(int)
+    for art in articles:
+        words = re.findall(r'\b[A-Z][a-z]{1,}\b', art["title"])
+        lowers = [w.lower() for w in words]
+        for i, lw in enumerate(lowers):
+            if lw == kw:
+                if i > 0:
+                    two = f"{words[i-1]} {words[i]}"
+                    phrases[two] += 1
+                if i < len(words)-1:
+                    two = f"{words[i]} {words[i+1]}"
+                    phrases[two] += 1
+                if i > 0 and i < len(words)-1:
+                    three = f"{words[i-1]} {words[i]} {words[i+1]}"
+                    phrases[three] += 1
+    if phrases:
+        return max(phrases.items(), key=lambda x: (x[1], len(x[0])))[0]
+    return kw.title()
+
 def cluster_topics(all_arts):
     kw_idx = defaultdict(list)
     for sid, arts in all_arts.items():
@@ -131,7 +152,8 @@ def cluster_topics(all_arts):
         if len(cl_arts)<2: continue
         t1 = [a for a in cl_arts if a["source_id"] in tier1]
         best = (t1 or cl_arts)[0]
-        clusters.append({"keyword":kw.title(),"topic":best["title"],"articles":cl_arts[:10],
+        label = best_label(kw, cl_arts)
+        clusters.append({"keyword":label,"topic":best["title"],"articles":cl_arts[:10],
                          "sources":list(cl_srcs),"source_count":len(cl_srcs),
                          "article_count":len(cl_arts),"heat_score":src_count*12+len(cl_arts)})
     clusters.sort(key=lambda x:-x["heat_score"])
@@ -173,7 +195,7 @@ def refresh_data():
         sid = s["id"]; li = LEAN.get(s["lean"],{"label":s["lean"],"color":"#374151"})
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":all_arts.get(sid,[])[:8],"status":"ok" if sid in all_arts else "error"}
     with data_lock:
-        data_store.update({"last_updated":datetime.now().isoformat(),"sources":srcs,"trending_topics":topics,
+        data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "google_trends":gt,"alignment_score":align,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
