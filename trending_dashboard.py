@@ -81,28 +81,43 @@ STOP_WORDS = {
     'recall','accident','incident',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"alignment_score":None,"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"alignment_score":None,"sources_live":0,"loading":True}
 data_lock = threading.Lock()
+
+# Google Trends cache — only re-fetch every 2 hours to avoid rate limiting
+_gt_cache = {"data": [], "fetched_at": 0}
 
 def fetch_source(source):
     try:
         feed = feedparser.parse(source["rss"])
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
-        for e in feed.entries[:12]:
+        for i, e in enumerate(feed.entries[:12]):
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
-            arts.append({"title":t,"link":e.get("link","#"),"summary":re.sub(r'<[^>]+>','',e.get("summary",""))[:200],"published":e.get("published","")})
+            # Track feed position: position 0 = lead/hero story for that outlet
+            arts.append({"title":t,"link":e.get("link","#"),
+                         "summary":re.sub(r'<[^>]+>','',e.get("summary",""))[:200],
+                         "published":e.get("published",""),
+                         "feed_position": i})
         return source["id"], arts
     except: return source["id"], []
 
 def fetch_google_trends():
-    if not HAS_PYTRENDS: return []
+    global _gt_cache
+    # Serve cache if fresher than 2 hours
+    if time.time() - _gt_cache["fetched_at"] < 7200 and _gt_cache["data"]:
+        return _gt_cache["data"], _gt_cache["fetched_at"]
+    if not HAS_PYTRENDS:
+        return _gt_cache["data"], _gt_cache["fetched_at"]
     try:
-        pt = TrendReq(hl='en-US',tz=300,timeout=(15,30),requests_args={'headers':{'User-Agent':'Mozilla/5.0'}})
-        return pt.trending_searches(pn='united_states')[0].tolist()[:25]
+        pt = TrendReq(hl='en-US',tz=300,timeout=(15,30),requests_args={'headers':{'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}})
+        result = pt.trending_searches(pn='united_states')[0].tolist()[:25]
+        _gt_cache = {"data": result, "fetched_at": time.time()}
+        return result, _gt_cache["fetched_at"]
     except Exception as e:
-        print(f"  Google Trends error: {e}"); return []
+        print(f"  Google Trends error: {e}")
+        return _gt_cache["data"], _gt_cache["fetched_at"]  # return stale cache on failure
 
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
@@ -189,29 +204,46 @@ def cluster_topics(all_arts):
         best = (t1 or cl_arts)[0]
         label = best_label(kw, cl_arts)
         src_count = len(cl_srcs)
+        # Hero boost: count how many outlets placed this as their #1 or #2 story
+        hero_sources = [a["source_id"] for a in cl_arts if a.get("feed_position", 99) <= 1]
+        hero_count = len(set(hero_sources))
+        # Each hero placement = +20 bonus on top of base heat score
+        heat = src_count * 12 + len(cl_arts) + (hero_count * 20)
         clusters.append({"keyword": label, "topic": best["title"],
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
-                         "heat_score": src_count * 12 + len(cl_arts)})
+                         "heat_score": heat, "hero_sources": hero_sources})
 
     clusters.sort(key=lambda x: -x["heat_score"])
     return clusters[:20]
 
 def compute_alignment(all_arts, topics):
     dw = all_arts.get("dailywire",[])
-    if not dw or not topics: return None
     dw_kws = set()
-    for a in dw: dw_kws.update(extract_keywords(a["title"]))
+    if dw:
+        for a in dw: dw_kws.update(extract_keywords(a["title"]))
     top10, covered, details = topics[:10], 0, []
+    covered_set = set()  # topic keywords covered by DW
     for t in top10:
         kw = t["keyword"].lower()
-        ok = kw in dw_kws or any(kw in a["title"].lower() for a in dw)
+        # Check multi-word label too (e.g. "Robert Mueller" → check "mueller")
+        kw_parts = [w.lower() for w in kw.split() if len(w) > 3]
+        ok = (any(p in dw_kws for p in kw_parts) or
+              any(kw in a["title"].lower() for a in dw) or
+              any(any(p in a["title"].lower() for p in kw_parts) for a in dw))
         covered += int(ok)
-        match = next((a["title"] for a in dw if kw in a["title"].lower()), None)
+        if ok: covered_set.add(t["keyword"])
+        match = next((a["title"] for a in dw
+                      if any(p in a["title"].lower() for p in kw_parts)), None)
         details.append({"topic":t["keyword"],"covered":ok,"dw_article":match,"heat_score":t["heat_score"]})
     score = round(covered/len(top10)*100) if top10 else 0
     grade = "A" if score>=80 else "B" if score>=60 else "C" if score>=40 else "D"
-    return {"score":score,"grade":grade,"covered":covered,"total":len(top10),"details":details}
+    # Attach per-topic DW coverage flag back onto the topic objects
+    for t in topics:
+        kw_parts = [w.lower() for w in t["keyword"].lower().split() if len(w) > 3]
+        t["dw_covered"] = (any(p in dw_kws for p in kw_parts) or
+                           any(any(p in a["title"].lower() for p in kw_parts) for a in dw))
+    return {"score":score,"grade":grade,"covered":covered,"total":len(top10),"details":details,"covered_set":list(covered_set)}
 
 def refresh_data():
     ts = datetime.now().strftime('%H:%M:%S')
@@ -222,8 +254,8 @@ def refresh_data():
             if arts: all_arts[sid]=arts; print(f"  ✓ {sid}: {len(arts)}")
             else: print(f"  ✗ {sid}: no data")
     print("  Fetching Google Trends...")
-    gt = fetch_google_trends()
-    print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable'}")
+    gt, gt_fetched_at = fetch_google_trends()
+    print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable (serving cache)'}")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
     align = compute_alignment(all_arts, topics)
@@ -234,7 +266,8 @@ def refresh_data():
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":all_arts.get(sid,[])[:8],"status":"ok" if sid in all_arts else "error"}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
-                           "google_trends":gt,"alignment_score":align,"sources_live":len(all_arts),"loading":False})
+                           "google_trends":gt,"google_trends_fetched_at":gt_fetched_at,
+                           "alignment_score":align,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
 def bg_loop(interval=1800):
@@ -306,6 +339,9 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 .hfl{height:4px;background:var(--red);border-radius:2px}
 .hn{font-family:Georgia,serif;font-size:11px;font-weight:700;color:var(--red);width:26px;text-align:right}
 .ei{font-size:10px;color:var(--ink-l);flex-shrink:0}
+.hbadge{font-size:9px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;background:var(--navy);color:#fff;padding:2px 6px;border-radius:2px;flex-shrink:0}
+.dwgap{font-size:9px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;background:#C41230;color:#fff;padding:2px 6px;border-radius:2px;flex-shrink:0;animation:lp 2s infinite}
+.hero-art{background:rgba(26,39,68,.04);border-left:3px solid var(--navy)}
 .ta{display:none;background:var(--linen);border-top:1px solid var(--border-l)}
 .ta.o{display:block}
 .tar{padding:7px 16px 7px 50px;border-bottom:1px solid var(--border-l);font-size:12px}
@@ -370,15 +406,26 @@ function rT(topics){
   const mx=topics[0].heat_score||1;
   el.innerHTML=topics.map((t,i)=>{
     const pct=Math.round((t.heat_score/mx)*100),hot=i<3;
-    const dots=(t.sources||[]).map(s=>'<span class="sd" style="background:'+((window._L||{})[s]||'#6B7280')+'" title="'+e(s)+'"></span>').join('');
-    const arts=(t.articles||[]).map(a=>'<div class="tar"><div class="tas">'+e(a.source_id)+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>').join('');
-    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk">'+e(t.keyword)+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw"><div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
+    const heroSrcs=new Set(t.hero_sources||[]);
+    const dots=(t.sources||[]).map(s=>{
+      const isHero=heroSrcs.has(s);
+      return '<span class="sd" style="background:'+((window._L||{})[s]||'#6B7280')+';'+(isHero?'width:11px;height:11px;outline:2px solid var(--navy);outline-offset:1px;':'')+'" title="'+e(s)+(isHero?' — LEAD STORY':'')+'"></span>';
+    }).join('');
+    const heroBadge=heroSrcs.size>0?'<span class="hbadge">Lead at '+heroSrcs.size+' outlet'+(heroSrcs.size>1?'s':'')+'</span>':'';
+    const dwBadge=(!t.dw_covered&&i<10)?'<span class="dwgap">● DW Gap</span>':'';
+    const arts=(t.articles||[]).map(a=>{
+      const isHeroArt=a.feed_position===0||a.feed_position===1;
+      return '<div class="tar'+(isHeroArt?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+(isHeroArt?' ★':'')+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
+    }).join('');
+    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw"><div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
   }).join('');
 }
 function tg(i){document.getElementById('ta'+i).classList.toggle('o');const ic=document.getElementById('ei'+i);ic.textContent=ic.textContent==='▸'?'▾':'▸'}
-function rG(gt){
+function rG(gt,fetchedAt){
   const el=document.getElementById('gl');
-  if(!gt||!gt.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Google Trends unavailable<br><i style="font-size:11px">Rate-limited. Try again later.</i></div>';return}
+  const hdr=document.querySelector('#gcard .chr');
+  if(fetchedAt){const age=Math.round((Date.now()/1000-fetchedAt)/60);hdr.textContent=age<5?'Right now':age<60?age+'m ago':Math.floor(age/60)+'h ago';}
+  if(!gt||!gt.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Google Trends unavailable<br><i style="font-size:11px">Cached data shown when available.</i></div>';return}
   el.innerHTML=gt.slice(0,25).map((t,i)=>'<div class="gi"><span class="grank">'+(i+1)+'</span><span class="gterm">'+e(t)+'</span><div class="gbw"><div class="gbb"><div class="gbf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
 }
 function rS(srcs){
@@ -408,7 +455,7 @@ async function ld(){
     const now=new Date();
     document.getElementById('ed').textContent=now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     document.getElementById('es').textContent=(d.sources_live||0)+' of 15 sources reporting';
-    rT(d.trending_topics);rG(d.google_trends);rS(d.sources);rA(d.alignment_score);
+    rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);rS(d.sources);rA(d.alignment_score);
   }catch(ex){setTimeout(ld,5000)}
 }
 async function fr(){
