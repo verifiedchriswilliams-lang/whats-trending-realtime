@@ -27,7 +27,8 @@ except ImportError:
     except: HAS_PYTRENDS = False; print("  pytrends unavailable.")
 
 SOURCES = [
-    {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/latest",                  "lean":"right",        "tier":1},
+    # Tier 1 — editorial homepage / top-story feeds where available
+    {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/national",               "lean":"right",        "tier":1},
     {"id":"cnn",        "name":"CNN",               "rss":"https://rss.cnn.com/rss/cnn_topstories.rss",               "lean":"left",         "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
@@ -36,11 +37,12 @@ SOURCES = [
     {"id":"reuters",    "name":"Reuters",           "rss":"https://feeds.reuters.com/reuters/topNews",                "lean":"center",       "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
     {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/rss.xml",                        "lean":"right",        "tier":1},
-    {"id":"breitbart",  "name":"Breitbart",         "rss":"https://feeds.feedburner.com/breitbart",                   "lean":"right",        "tier":2},
+    # Tier 2 — strong opinion/political feeds
+    {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
     {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
     {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/rss/syndication/all-news",             "lean":"center",       "tier":2},
     {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
-    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://feeds.foxbusiness.com/foxbusiness/latest",         "lean":"right",        "tier":2},
+    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://feeds.foxbusiness.com/foxbusiness/markets",        "lean":"right",        "tier":2},
     {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss",                                 "lean":"right",        "tier":2},
 ]
 
@@ -87,7 +89,7 @@ def fetch_source(source):
         feed = feedparser.parse(source["rss"])
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
-        for e in feed.entries[:20]:
+        for e in feed.entries[:12]:
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
             arts.append({"title":t,"link":e.get("link","#"),"summary":re.sub(r'<[^>]+>','',e.get("summary",""))[:200],"published":e.get("published","")})
