@@ -5,7 +5,7 @@ Newspaper theme. Clustering fix. 15 sources incl. NYT.
 """
 
 import json, time, threading, re, sys, os, webbrowser
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -84,40 +84,63 @@ STOP_WORDS = {
 data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"alignment_score":None,"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
-# Google Trends cache — only re-fetch every 2 hours to avoid rate limiting
-_gt_cache = {"data": [], "fetched_at": 0}
+# Previous topics for trajectory tracking (heat score deltas)
+_prev_heat = {}  # keyword → heat_score from last refresh
+
+# Google Trends cache — only re-fetch every 2 hours, back off 4h on failure
+_gt_cache = {"data": [], "fetched_at": 0, "next_retry": 0}
+
+def parse_pub_date(entry):
+    """Parse publication date from a feed entry. Returns UTC datetime or None."""
+    try:
+        t = entry.get("published_parsed") or entry.get("updated_parsed")
+        if t: return datetime(*t[:6], tzinfo=timezone.utc)
+    except: pass
+    return None
 
 def fetch_source(source):
     try:
         feed = feedparser.parse(source["rss"])
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
         for i, e in enumerate(feed.entries[:12]):
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
-            # Track feed position: position 0 = lead/hero story for that outlet
+            # Reject articles older than 48 hours — stale stories pollute clustering
+            pub = parse_pub_date(e)
+            if pub and pub < cutoff:
+                continue
             arts.append({"title":t,"link":e.get("link","#"),
                          "summary":re.sub(r'<[^>]+>','',e.get("summary",""))[:200],
                          "published":e.get("published",""),
+                         "pub_ts": pub.isoformat() if pub else None,
                          "feed_position": i})
         return source["id"], arts
     except: return source["id"], []
 
 def fetch_google_trends():
     global _gt_cache
-    # Serve cache if fresher than 2 hours
-    if time.time() - _gt_cache["fetched_at"] < 7200 and _gt_cache["data"]:
+    now = time.time()
+    # Serve cache if data exists and is fresh (< 2 hours)
+    if _gt_cache["data"] and now - _gt_cache["fetched_at"] < 7200:
+        return _gt_cache["data"], _gt_cache["fetched_at"]
+    # Back off if we failed recently (4-hour cooldown after failure)
+    if now < _gt_cache["next_retry"]:
+        print(f"  Google Trends: in backoff, next retry in {int((_gt_cache['next_retry']-now)/60)}m")
         return _gt_cache["data"], _gt_cache["fetched_at"]
     if not HAS_PYTRENDS:
         return _gt_cache["data"], _gt_cache["fetched_at"]
     try:
-        pt = TrendReq(hl='en-US',tz=300,timeout=(15,30),requests_args={'headers':{'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}})
+        pt = TrendReq(hl='en-US',tz=300,timeout=(15,30),
+                      requests_args={'headers':{'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}})
         result = pt.trending_searches(pn='united_states')[0].tolist()[:25]
-        _gt_cache = {"data": result, "fetched_at": time.time()}
-        return result, _gt_cache["fetched_at"]
+        _gt_cache = {"data": result, "fetched_at": now, "next_retry": 0}
+        return result, now
     except Exception as e:
-        print(f"  Google Trends error: {e}")
-        return _gt_cache["data"], _gt_cache["fetched_at"]  # return stale cache on failure
+        print(f"  Google Trends error: {e} — backing off 4h")
+        _gt_cache["next_retry"] = now + 14400  # don't retry for 4 hours
+        return _gt_cache["data"], _gt_cache["fetched_at"]
 
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
@@ -222,27 +245,43 @@ def compute_alignment(all_arts, topics):
     dw_kws = set()
     if dw:
         for a in dw: dw_kws.update(extract_keywords(a["title"]))
+
+    def dw_covers(topic):
+        """True if Daily Wire is covering this topic cluster.
+        Checks ALL keywords from ALL articles in the cluster — not just the label.
+        This prevents false gaps when DW uses different framing than the cluster seed."""
+        # Gather every keyword from every article in the cluster
+        cluster_kws = set()
+        for a in topic.get("articles", []):
+            cluster_kws.update(extract_keywords(a["title"]))
+        # Also check the display label parts
+        for w in topic["keyword"].lower().split():
+            if len(w) > 3: cluster_kws.add(w)
+        # DW covers it if they share ANY specific keyword with the cluster
+        shared = cluster_kws & dw_kws
+        if shared: return True, shared
+        # Fallback: substring match on DW article titles
+        for a in dw:
+            for kw in cluster_kws:
+                if len(kw) > 4 and kw in a["title"].lower():
+                    return True, {kw}
+        return False, set()
+
     top10, covered, details = topics[:10], 0, []
-    covered_set = set()  # topic keywords covered by DW
+    covered_set = set()
     for t in top10:
-        kw = t["keyword"].lower()
-        # Check multi-word label too (e.g. "Robert Mueller" → check "mueller")
-        kw_parts = [w.lower() for w in kw.split() if len(w) > 3]
-        ok = (any(p in dw_kws for p in kw_parts) or
-              any(kw in a["title"].lower() for a in dw) or
-              any(any(p in a["title"].lower() for p in kw_parts) for a in dw))
+        ok, matched_kws = dw_covers(t)
         covered += int(ok)
         if ok: covered_set.add(t["keyword"])
         match = next((a["title"] for a in dw
-                      if any(p in a["title"].lower() for p in kw_parts)), None)
+                      if any(kw in a["title"].lower() for kw in matched_kws)), None) if matched_kws else None
         details.append({"topic":t["keyword"],"covered":ok,"dw_article":match,"heat_score":t["heat_score"]})
     score = round(covered/len(top10)*100) if top10 else 0
     grade = "A" if score>=80 else "B" if score>=60 else "C" if score>=40 else "D"
-    # Attach per-topic DW coverage flag back onto the topic objects
+    # Attach coverage flag to ALL topics (not just top 10)
     for t in topics:
-        kw_parts = [w.lower() for w in t["keyword"].lower().split() if len(w) > 3]
-        t["dw_covered"] = (any(p in dw_kws for p in kw_parts) or
-                           any(any(p in a["title"].lower() for p in kw_parts) for a in dw))
+        ok, _ = dw_covers(t)
+        t["dw_covered"] = ok
     return {"score":score,"grade":grade,"covered":covered,"total":len(top10),"details":details,"covered_set":list(covered_set)}
 
 def refresh_data():
@@ -260,6 +299,14 @@ def refresh_data():
     print(f"  → {len(topics)} trending topics")
     align = compute_alignment(all_arts, topics)
     if align: print(f"  → DW alignment: {align['score']}% ({align['grade']})")
+
+    # Trajectory: compare heat scores to previous refresh
+    global _prev_heat
+    for t in topics:
+        prev = _prev_heat.get(t["keyword"])
+        t["delta"] = (t["heat_score"] - prev) if prev is not None else None
+    _prev_heat = {t["keyword"]: t["heat_score"] for t in topics}
+
     srcs = {}
     for s in SOURCES:
         sid = s["id"]; li = LEAN.get(s["lean"],{"label":s["lean"],"color":"#374151"})
@@ -413,11 +460,13 @@ function rT(topics){
     }).join('');
     const heroBadge=heroSrcs.size>0?'<span class="hbadge">Lead at '+heroSrcs.size+' outlet'+(heroSrcs.size>1?'s':'')+'</span>':'';
     const dwBadge=(!t.dw_covered&&i<10)?'<span class="dwgap">● DW Gap</span>':'';
+    const d=t.delta;
+    const deltaBadge=d===null||d===undefined?'':d>0?'<span style="font-size:10px;font-weight:700;color:#15803D;flex-shrink:0">▲'+d+'</span>':d<0?'<span style="font-size:10px;font-weight:700;color:#C41230;flex-shrink:0">▼'+Math.abs(d)+'</span>':'<span style="font-size:10px;color:#6B7280;flex-shrink:0">—</span>';
     const arts=(t.articles||[]).map(a=>{
       const isHeroArt=a.feed_position===0||a.feed_position===1;
       return '<div class="tar'+(isHeroArt?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+(isHeroArt?' ★':'')+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
     }).join('');
-    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw"><div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
+    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
   }).join('');
 }
 function tg(i){document.getElementById('ta'+i).classList.toggle('o');const ic=document.getElementById('ei'+i);ic.textContent=ic.textContent==='▸'?'▾':'▸'}
