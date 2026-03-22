@@ -52,17 +52,17 @@ SOURCES = [
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
     {"id":"nypost",     "name":"NY Post",           "rss":"https://nypost.com/feed/",                                 "lean":"right",        "tier":1},
-    {"id":"ap",         "name":"AP News",           "rss":"https://feeds.apnews.com/apnews/topnews",                  "lean":"center",       "tier":1},
+    {"id":"ap",         "name":"AP News",           "rss":"https://apnews.com/hub/ap-top-news?format=feed",           "lean":"center",       "tier":1},
     {"id":"reuters",    "name":"Reuters",           "rss":"https://feeds.reuters.com/reuters/topNews",                "lean":"center",       "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
-    {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/rss.xml",                        "lean":"right",        "tier":1},
+    {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/feeds/rss.xml",                  "lean":"right",        "tier":1},
     # Tier 2 — strong opinion/political feeds
     {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
     {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
-    {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/rss/syndication/all-news",             "lean":"center",       "tier":2},
+    {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/feed/",                                "lean":"center",       "tier":2},
     {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
-    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://feeds.foxbusiness.com/foxbusiness/markets",        "lean":"right",        "tier":2},
-    {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss",                                 "lean":"right",        "tier":2},
+    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://feeds.foxbusiness.com/foxbusiness/latest",         "lean":"right",        "tier":2},
+    {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss/tipsheet",                        "lean":"right",        "tier":2},
 ]
 
 LEAN = {
@@ -137,7 +137,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"alignment_score":None,"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"twitter_trends":[],"drudge_links":[],"alignment_score":None,"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Previous topics for trajectory tracking (heat score deltas)
@@ -154,9 +154,14 @@ def parse_pub_date(entry):
     except: pass
     return None
 
+_RSS_HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+}
+
 def fetch_source(source):
     try:
-        feed = feedparser.parse(source["rss"])
+        feed = feedparser.parse(source["rss"], request_headers=_RSS_HEADERS)
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
@@ -248,6 +253,95 @@ def scrape_homepage(sid, url):
         print(f"  scrape {sid}: {ex}")
         return frozenset()
 
+_DRUDGE_CACHE   = {"data": [], "fetched_at": 0}
+_TWITTER_CACHE  = {"data": [], "fetched_at": 0}
+
+def fetch_drudge():
+    """Scrape Drudge Report for its top 12 headline links.
+    Drudge is the single best proxy for what conservative 25-65 Americans are clicking.
+    Simple static HTML — no JS required, extremely reliable scrape target."""
+    global _DRUDGE_CACHE
+    now = time.time()
+    if _DRUDGE_CACHE["data"] and now - _DRUDGE_CACHE["fetched_at"] < 1800:
+        return _DRUDGE_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _DRUDGE_CACHE["data"]
+    try:
+        r = requests.get("https://www.drudgereport.com", timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.9',
+        })
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
+        links = []
+        seen_texts = set()
+        for a in soup.find_all('a', href=True):
+            href = a.get('href', '')
+            text = a.get_text(strip=True)
+            # Skip navigation, drudge self-links, and short/empty text
+            if not text or len(text) < 15: continue
+            if 'drudgereport.com' in href: continue
+            if href.startswith('mailto:'): continue
+            if href.startswith('javascript:'): continue
+            norm = text.lower()
+            if norm in seen_texts: continue
+            seen_texts.add(norm)
+            links.append({"title": text, "link": href})
+            if len(links) >= 12: break
+        if links:
+            _DRUDGE_CACHE = {"data": links, "fetched_at": now}
+            print(f"  Drudge: {len(links)} links scraped")
+        return _DRUDGE_CACHE["data"]
+    except Exception as ex:
+        print(f"  Drudge scrape error: {ex}")
+        return _DRUDGE_CACHE["data"]
+
+
+def fetch_twitter_trends():
+    """Scrape US Twitter/X trending topics from trends24.in — a public aggregator
+    that mirrors X trending data without requiring API access or payment."""
+    global _TWITTER_CACHE
+    now = time.time()
+    if _TWITTER_CACHE["data"] and now - _TWITTER_CACHE["fetched_at"] < 1800:
+        return _TWITTER_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _TWITTER_CACHE["data"]
+    try:
+        r = requests.get("https://trends24.in/united-states/", timeout=15, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.9',
+        })
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
+        trends = []
+        seen = set()
+        # trends24.in structure: trend cards with ordered lists of trend items
+        for card in soup.select('.trend-card'):
+            for li in card.select('ol li a, .trend-card__list li a'):
+                text = li.get_text(strip=True)
+                if text and text not in seen:
+                    seen.add(text)
+                    trends.append(text)
+            if len(trends) >= 25: break
+        # Fallback: any link in a list inside a trending section
+        if not trends:
+            for li in soup.select('li a'):
+                text = li.get_text(strip=True)
+                if text and len(text) > 2 and text not in seen:
+                    seen.add(text)
+                    trends.append(text)
+                if len(trends) >= 25: break
+        if trends:
+            _TWITTER_CACHE = {"data": trends[:25], "fetched_at": now}
+            print(f"  Twitter/X trends: {len(trends[:25])} trends scraped")
+        return _TWITTER_CACHE["data"]
+    except Exception as ex:
+        print(f"  Twitter trends scrape error: {ex}")
+        return _TWITTER_CACHE["data"]
+
+
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
     filtered = [w for w in words if w not in STOP_WORDS and len(w)>3]
@@ -329,6 +423,25 @@ def cluster_topics(all_arts):
                 cl_arts.append(art); cl_srcs.add(art["source_id"]); used.add(k)
         if len(cl_arts) < 2:
             continue
+
+        # --- Cluster coherence check ---
+        # Articles should share more than just the seed keyword.
+        # Build a frequency map of all keywords across cluster articles.
+        cl_kw_freq = defaultdict(int)
+        for a in cl_arts:
+            for w in extract_keywords(a["title"]):
+                if w != kw: cl_kw_freq[w] += 1
+        # Count secondary keywords shared by 2+ articles (beyond the seed)
+        secondary_shared = sum(1 for w, cnt in cl_kw_freq.items() if cnt >= 2)
+        # Weak cluster: only 1 source and no secondary shared keywords
+        # → require 3+ articles before surfacing (stricter threshold)
+        if secondary_shared == 0 and len(cl_srcs) < 2:
+            continue
+        # Very weak cluster: multiple sources but ZERO secondary shared keywords
+        # → likely a false cluster like the old "Security" bug; require 3+ sources
+        if secondary_shared == 0 and len(cl_srcs) < 3:
+            continue
+
         t1 = [a for a in cl_arts if a["source_id"] in tier1]
         best = (t1 or cl_arts)[0]
         label = best_label(kw, cl_arts)
@@ -351,16 +464,36 @@ def cluster_topics(all_arts):
         )
         # Each hero placement = +20 bonus; double-confirmed = +10 extra
         heat = src_count * 12 + len(cl_arts) + (hero_count * 20) + (double_confirmed * 10)
+
+        # Story age: derived from the most recently published article in the cluster
+        now_utc = datetime.now(timezone.utc)
+        pub_times = [datetime.fromisoformat(a["pub_ts"]) for a in cl_arts if a.get("pub_ts")]
+        if pub_times:
+            newest = max(pub_times)
+            age_minutes = int((now_utc - newest).total_seconds() / 60)
+        else:
+            age_minutes = None
+        is_breaking = age_minutes is not None and age_minutes < 90
+
         clusters.append({"keyword": label, "topic": best["title"],
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
-                         "heat_score": heat, "hero_sources": hero_sources})
+                         "heat_score": heat, "hero_sources": hero_sources,
+                         "age_minutes": age_minutes, "is_breaking": is_breaking})
 
     clusters.sort(key=lambda x: -x["heat_score"])
     return clusters[:20]
 
 def compute_alignment(all_arts, topics):
-    dw = all_arts.get("dailywire",[])
+    dw_all = all_arts.get("dailywire", [])
+    # Only count DW articles published in the last 6 hours as "covering" a topic.
+    # Older DW articles produce false negatives — yesterday's Gaza story suppresses
+    # today's DW Gap badge, hiding a real same-day assignment opportunity.
+    six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+    dw = [a for a in dw_all if a.get("pub_ts") and
+          datetime.fromisoformat(a["pub_ts"]) > six_hours_ago]
+    if not dw:
+        dw = dw_all  # fall back to all articles if none are recent (e.g. weekend lull)
     dw_kws = set()
     if dw:
         for a in dw: dw_kws.update(extract_keywords(a["title"]))
@@ -439,9 +572,13 @@ def refresh_data():
                     for h in sc_set
                 )
 
-    print("  Fetching Google Trends...")
+    print("  Fetching Google Trends + Drudge + Twitter/X...")
     gt, gt_fetched_at = fetch_google_trends()
-    print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable (serving cache)'}")
+    drudge_links     = fetch_drudge()
+    twitter_trends   = fetch_twitter_trends()
+    print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable'}")
+    print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
+    print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
     align = compute_alignment(all_arts, topics)
@@ -461,6 +598,7 @@ def refresh_data():
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "google_trends":gt,"google_trends_fetched_at":gt_fetched_at,
+                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,
                            "alignment_score":align,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
@@ -542,12 +680,25 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 .tar:last-child{border-bottom:none}
 .tas{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-l);margin-bottom:2px}
 .tar a{color:var(--navy);text-decoration:none}.tar a:hover{color:var(--red);text-decoration:underline}
+/* BREAKING badge */
+.brk{font-size:9px;font-weight:900;letter-spacing:1px;text-transform:uppercase;background:#C41230;color:#fff;padding:2px 6px;border-radius:2px;flex-shrink:0;animation:lp 1.5s infinite}
+.age-badge{font-size:9px;font-weight:700;color:var(--ink-l);background:var(--linen-d);border:1px solid var(--border);padding:1px 5px;border-radius:2px;flex-shrink:0}
+/* Signals sidebar — tabbed */
 #gcard{grid-area:trends}
+.stabs{display:flex;border-bottom:2px solid var(--navy);background:var(--white)}
+.stab{flex:1;padding:7px 4px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:var(--ink-l);text-align:center;cursor:pointer;border:none;background:none;transition:all .15s;border-bottom:2px solid transparent;margin-bottom:-2px}
+.stab.active{color:var(--navy);border-bottom-color:var(--red)}
+.stab:hover:not(.active){color:var(--ink)}
+.spanel{display:none}.spanel.active{display:block}
 .gi{display:flex;align-items:center;gap:8px;padding:7px 14px;border-bottom:1px solid var(--border-l);font-size:13px}
 .gi:last-child{border-bottom:none}
 .grank{font-family:Georgia,serif;font-size:12px;font-weight:700;color:var(--red);width:18px;flex-shrink:0}
 .gterm{flex:1;color:var(--ink)}
 .gbw{width:34px;flex-shrink:0}.gbb{height:3px;background:var(--linen-dd);border-radius:2px}.gbf{height:3px;background:#1D4ED8;border-radius:2px}
+/* Drudge links */
+.di{padding:7px 14px;border-bottom:1px solid var(--border-l);font-size:12px;line-height:1.4}
+.di:last-child{border-bottom:none}
+.di a{font-family:Georgia,serif;color:var(--navy);text-decoration:none}.di a:hover{color:var(--red);text-decoration:underline}
 #ss{grid-area:sources}
 .sg{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:10px;padding:12px}
 .sc{background:var(--white);border:1px solid var(--border);border-radius:2px;overflow:hidden;box-shadow:0 1px 3px var(--sh)}
@@ -584,7 +735,17 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 <div class="eb"><span id="ed">Loading...</span><span id="es">—</span></div>
 <div class="main">
   <div class="card" id="tc"><div class="ch"><span>🔥</span><h2>Top Trending Topics</h2><span class="chr">Ranked by cross-source heat score · Click to expand</span></div><div id="tl"><div style="padding:20px;text-align:center;color:var(--ink-l)">Loading...</div></div></div>
-  <div class="card" id="gcard"><div class="ch"><span>📈</span><h2>Google Trends US</h2><span class="chr">Right now</span></div><div id="gl"><div style="padding:16px;text-align:center;color:var(--ink-l)">Loading...</div></div></div>
+  <div class="card" id="gcard">
+    <div class="ch"><span>📡</span><h2>Signals</h2><span class="chr" id="sig-age">—</span></div>
+    <div class="stabs">
+      <button class="stab active" onclick="switchTab('gt')">📈 Google</button>
+      <button class="stab" onclick="switchTab('tw')">𝕏 Twitter</button>
+      <button class="stab" onclick="switchTab('dr')">🔦 Drudge</button>
+    </div>
+    <div id="sp-gt" class="spanel active"><div id="gl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+    <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+    <div id="sp-dr" class="spanel"><div id="dl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+  </div>
   <div class="card" id="ss"><div class="ch"><span>📰</span><h2>Source Headlines</h2><span class="chr">Fox · NYT · CNN · Daily Mail · NY Post · AP · Reuters · Breitbart · Sky · NBC · Hill · DW · WashTimes · FoxBiz · Townhall</span></div><div class="sg" id="sg"></div></div>
   <div class="card" id="ac"><div class="ch"><span>🎯</span><h2>Daily Wire Coverage Alignment</h2><span class="chr">Are you covering what's trending?</span></div><div id="al"><div style="padding:20px;text-align:center;color:var(--ink-l)">Loading...</div></div></div>
 </div>
@@ -607,6 +768,9 @@ function rT(topics){
     }).join('');
     const heroBadge=heroSrcs.size>0?'<span class="hbadge">Lead at '+heroSrcs.size+' outlet'+(heroSrcs.size>1?'s':'')+'</span>':'';
     const dwBadge=(!t.dw_covered&&i<10)?'<span class="dwgap">● DW Gap</span>':'';
+    const brkBadge=t.is_breaking?'<span class="brk">Breaking</span>':'';
+    const ageMin=t.age_minutes;
+    const ageBadge=(!t.is_breaking&&ageMin!=null)?'<span class="age-badge">'+(ageMin<60?ageMin+'m':Math.floor(ageMin/60)+'h')+'</span>':'';
     const d=t.delta;
     const deltaBadge=d===null||d===undefined?'':d>0?'<span style="font-size:10px;font-weight:700;color:#15803D;flex-shrink:0">▲'+d+'</span>':d<0?'<span style="font-size:10px;font-weight:700;color:#C41230;flex-shrink:0">▼'+Math.abs(d)+'</span>':'<span style="font-size:10px;color:#6B7280;flex-shrink:0">—</span>';
     const arts=(t.articles||[]).map(a=>{
@@ -616,16 +780,31 @@ function rT(topics){
       const age=a.pub_ts?'<span style="color:var(--ink-l);font-size:10px;margin-left:6px;font-style:normal">'+ta(a.pub_ts)+'</span>':'';
       return '<div class="tar'+(isHeroArt||isScrapeConfirmed?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+heroMark+age+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
     }).join('');
-    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
+    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+brkBadge+ageBadge+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
   }).join('');
 }
 function tg(i){document.getElementById('ta'+i).classList.toggle('o');const ic=document.getElementById('ei'+i);ic.textContent=ic.textContent==='▸'?'▾':'▸'}
+let _activeTab='gt';
+function switchTab(tab){
+  _activeTab=tab;
+  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['gt','tw','dr'][i]===tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-gt','sp-tw','sp-dr'][i]==='sp-'+tab)});
+}
 function rG(gt,fetchedAt){
   const el=document.getElementById('gl');
-  const hdr=document.querySelector('#gcard .chr');
-  if(fetchedAt){const age=Math.round((Date.now()/1000-fetchedAt)/60);hdr.textContent=age<5?'Right now':age<60?age+'m ago':Math.floor(age/60)+'h ago';}
-  if(!gt||!gt.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Google Trends unavailable<br><i style="font-size:11px">Cached data shown when available.</i></div>';return}
+  if(fetchedAt){const age=Math.round((Date.now()/1000-fetchedAt)/60);document.getElementById('sig-age').textContent=age<5?'Right now':age<60?age+'m ago':Math.floor(age/60)+'h ago';}
+  if(!gt||!gt.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Google Trends unavailable<br><i style="font-size:11px">Retrying next refresh.</i></div>';return}
   el.innerHTML=gt.slice(0,25).map((t,i)=>'<div class="gi"><span class="grank">'+(i+1)+'</span><span class="gterm">'+e(t)+'</span><div class="gbw"><div class="gbb"><div class="gbf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
+}
+function rTw(trends){
+  const el=document.getElementById('tl2');
+  if(!trends||!trends.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Twitter/X trends unavailable</div>';return}
+  el.innerHTML=trends.slice(0,25).map((t,i)=>'<div class="gi"><span class="grank">'+(i+1)+'</span><span class="gterm">'+e(t)+'</span><div class="gbw"><div class="gbb"><div class="gbf" style="width:'+Math.round(((25-i)/25)*100)+'%;background:#1DA1F2"></div></div></div></div>').join('');
+}
+function rDr(links){
+  const el=document.getElementById('dl');
+  if(!links||!links.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Drudge unavailable</div>';return}
+  el.innerHTML=links.map((l,i)=>'<div class="di"><a href="'+e(l.link)+'" target="_blank">'+e(l.title)+'</a></div>').join('');
 }
 function rS(srcs){
   if(!srcs)return;
@@ -662,7 +841,9 @@ async function ld(){
     // Only re-render if data actually changed
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
-      rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);rS(d.sources);rA(d.alignment_score);
+      rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);
+      rTw(d.twitter_trends);rDr(d.drudge_links);
+      rS(d.sources);rA(d.alignment_score);
     }
   }catch(ex){setTimeout(ld,5000)}
 }
