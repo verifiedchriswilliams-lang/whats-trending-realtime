@@ -19,12 +19,31 @@ except ImportError: pip_install('feedparser'); import feedparser
 try: from flask import Flask, jsonify
 except ImportError: pip_install('flask'); from flask import Flask, jsonify
 
-try:
-    from pytrends.request import TrendReq; HAS_PYTRENDS = True
+try: import requests; from bs4 import BeautifulSoup; HAS_SCRAPE = True
 except ImportError:
-    pip_install('pytrends')
-    try: from pytrends.request import TrendReq; HAS_PYTRENDS = True
-    except: HAS_PYTRENDS = False; print("  pytrends unavailable.")
+    pip_install('requests'); pip_install('beautifulsoup4')
+    try: import requests; from bs4 import BeautifulSoup; HAS_SCRAPE = True
+    except: HAS_SCRAPE = False; print("  requests/bs4 unavailable — scraping disabled.")
+
+# Google Trends via official public RSS (no API key, no rate limits)
+TRENDS_RSS = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US"
+
+# Per-source homepage scraping config: CSS selectors for headline extraction
+SCRAPE_SOURCES = {
+    "foxnews":    "https://www.foxnews.com",
+    "cnn":        "https://www.cnn.com",
+    "nytimes":    "https://www.nytimes.com",
+    "dailymail":  "https://www.dailymail.co.uk",
+    "nypost":     "https://nypost.com",
+    "ap":         "https://apnews.com",
+    "nbcnews":    "https://www.nbcnews.com",
+    "dailywire":  "https://www.dailywire.com",
+    "breitbart":  "https://www.breitbart.com",
+    "thehill":    "https://thehill.com",
+    "washtimes":  "https://www.washingtontimes.com",
+    "townhall":   "https://townhall.com",
+    "skynews":    "https://news.sky.com",
+}
 
 SOURCES = [
     # Tier 1 — editorial homepage / top-story feeds where available
@@ -120,6 +139,7 @@ def fetch_source(source):
     except: return source["id"], []
 
 def fetch_google_trends():
+    """Fetch Google Trends US via official public RSS feed (no API key, no rate limits)."""
     global _gt_cache
     now = time.time()
     # Serve cache if data exists and is fresh (< 2 hours)
@@ -129,18 +149,51 @@ def fetch_google_trends():
     if now < _gt_cache["next_retry"]:
         print(f"  Google Trends: in backoff, next retry in {int((_gt_cache['next_retry']-now)/60)}m")
         return _gt_cache["data"], _gt_cache["fetched_at"]
-    if not HAS_PYTRENDS:
-        return _gt_cache["data"], _gt_cache["fetched_at"]
     try:
-        pt = TrendReq(hl='en-US',tz=300,timeout=(15,30),
-                      requests_args={'headers':{'User-Agent':'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'}})
-        result = pt.trending_searches(pn='united_states')[0].tolist()[:25]
+        feed = feedparser.parse(TRENDS_RSS)
+        if feed.bozo and not feed.entries:
+            raise Exception(f"RSS parse failed: {getattr(feed,'bozo_exception','unknown')}")
+        result = [e.get("title","").strip() for e in feed.entries if e.get("title","").strip()][:25]
+        if not result:
+            raise Exception("RSS returned 0 entries")
         _gt_cache = {"data": result, "fetched_at": now, "next_retry": 0}
+        print(f"  Google Trends RSS: {len(result)} trends fetched")
         return result, now
-    except Exception as e:
-        print(f"  Google Trends error: {e} — backing off 4h")
+    except Exception as ex:
+        print(f"  Google Trends RSS error: {ex} — backing off 4h")
         _gt_cache["next_retry"] = now + 14400  # don't retry for 4 hours
         return _gt_cache["data"], _gt_cache["fetched_at"]
+
+
+def scrape_homepage(sid, url):
+    """Scrape a news source homepage to detect which headlines appear above the fold.
+    Returns a frozenset of normalized (lowercased) headline strings, or empty set on failure.
+    Used to cross-verify RSS hero position — if an article appears in BOTH RSS and the
+    scraped homepage, it's a double-confirmed lead story."""
+    if not HAS_SCRAPE:
+        return frozenset()
+    try:
+        r = requests.get(url, timeout=10, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml',
+        })
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
+        headlines = set()
+        # Grab text from h1/h2/h3 tags — main content hierarchy
+        for tag in soup.find_all(['h1','h2','h3']):
+            text = tag.get_text(separator=' ', strip=True)
+            if 20 <= len(text) <= 250:
+                headlines.add(text.lower())
+        # Also grab prominent anchor text (many news sites use <a> for headlines)
+        for tag in soup.find_all('a', href=True):
+            text = tag.get_text(separator=' ', strip=True)
+            if 20 <= len(text) <= 250:
+                headlines.add(text.lower())
+        return frozenset(headlines)
+    except Exception as ex:
+        print(f"  scrape {sid}: {ex}")
+        return frozenset()
 
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
@@ -228,10 +281,23 @@ def cluster_topics(all_arts):
         label = best_label(kw, cl_arts)
         src_count = len(cl_srcs)
         # Hero boost: count how many outlets placed this as their #1 or #2 story
-        hero_sources = [a["source_id"] for a in cl_arts if a.get("feed_position", 99) <= 1]
-        hero_count = len(set(hero_sources))
-        # Each hero placement = +20 bonus on top of base heat score
-        heat = src_count * 12 + len(cl_arts) + (hero_count * 20)
+        # Hero: RSS position 0-1, OR scrape-confirmed (appeared on homepage), or BOTH
+        hero_set = set()
+        for a in cl_arts:
+            is_rss_hero    = a.get("feed_position", 99) <= 1
+            is_scrape_hero = a.get("scrape_confirmed", False)
+            if is_rss_hero or is_scrape_hero:
+                hero_set.add(a["source_id"])
+        hero_sources = list(hero_set)
+        hero_count = len(hero_set)
+        # Double-confirmed (both RSS position AND scraped) = extra +10 per outlet
+        double_confirmed = sum(
+            1 for a in cl_arts
+            if a.get("feed_position", 99) <= 1 and a.get("scrape_confirmed", False)
+            and cl_arts.index(a) == next((i for i,x in enumerate(cl_arts) if x is a), 0)
+        )
+        # Each hero placement = +20 bonus; double-confirmed = +10 extra
+        heat = src_count * 12 + len(cl_arts) + (hero_count * 20) + (double_confirmed * 10)
         clusters.append({"keyword": label, "topic": best["title"],
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
@@ -286,12 +352,40 @@ def compute_alignment(all_arts, topics):
 
 def refresh_data():
     ts = datetime.now().strftime('%H:%M:%S')
-    print(f"\n[{ts}] Fetching {len(SOURCES)} sources + Google Trends...")
+    print(f"\n[{ts}] Fetching {len(SOURCES)} sources + Google Trends + homepage scrapes...")
     all_arts = {}
-    with ThreadPoolExecutor(max_workers=12) as ex:
-        for sid, arts in [f.result() for f in as_completed({ex.submit(fetch_source,s):s for s in SOURCES})]:
+    # Run RSS fetch + homepage scraping concurrently
+    with ThreadPoolExecutor(max_workers=20) as ex:
+        rss_futures  = {ex.submit(fetch_source, s): s for s in SOURCES}
+        scrape_futures = {ex.submit(scrape_homepage, sid, url): sid
+                         for sid, url in SCRAPE_SOURCES.items()} if HAS_SCRAPE else {}
+        for f in as_completed(rss_futures):
+            sid, arts = f.result()
             if arts: all_arts[sid]=arts; print(f"  ✓ {sid}: {len(arts)}")
             else: print(f"  ✗ {sid}: no data")
+        scraped_headlines = {}  # sid → frozenset of normalized headline strings
+        for f in as_completed(scrape_futures):
+            sid = scrape_futures[f]
+            scraped_headlines[sid] = f.result()
+            if scraped_headlines[sid]:
+                print(f"  🔎 scraped {sid}: {len(scraped_headlines[sid])} headlines")
+
+    # Cross-verify: mark articles that appear on the scraped homepage (double-confirmed heroes)
+    if scraped_headlines:
+        for sid, arts in all_arts.items():
+            sc_set = scraped_headlines.get(sid, frozenset())
+            if not sc_set: continue
+            for art in arts:
+                norm = art["title"].lower()
+                # Fuzzy: check if any scraped headline contains or is contained in the title
+                art["scrape_confirmed"] = any(
+                    norm in h or h in norm or
+                    # word-overlap ≥ 60% as a looser match
+                    (len(norm.split()) >= 4 and
+                     len(set(norm.split()) & set(h.split())) / max(len(norm.split()),1) >= 0.6)
+                    for h in sc_set
+                )
+
     print("  Fetching Google Trends...")
     gt, gt_fetched_at = fetch_google_trends()
     print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable (serving cache)'}")
@@ -464,7 +558,10 @@ function rT(topics){
     const deltaBadge=d===null||d===undefined?'':d>0?'<span style="font-size:10px;font-weight:700;color:#15803D;flex-shrink:0">▲'+d+'</span>':d<0?'<span style="font-size:10px;font-weight:700;color:#C41230;flex-shrink:0">▼'+Math.abs(d)+'</span>':'<span style="font-size:10px;color:#6B7280;flex-shrink:0">—</span>';
     const arts=(t.articles||[]).map(a=>{
       const isHeroArt=a.feed_position===0||a.feed_position===1;
-      return '<div class="tar'+(isHeroArt?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+(isHeroArt?' ★':'')+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
+      const isScrapeConfirmed=a.scrape_confirmed===true;
+      const heroMark=isHeroArt&&isScrapeConfirmed?' ★✓':isHeroArt?' ★':isScrapeConfirmed?' ✓':'';
+      const age=a.pub_ts?'<span style="color:var(--ink-l);font-size:10px;margin-left:6px;font-style:normal">'+ta(a.pub_ts)+'</span>':'';
+      return '<div class="tar'+(isHeroArt||isScrapeConfirmed?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+heroMark+age+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
     }).join('');
     return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
   }).join('');

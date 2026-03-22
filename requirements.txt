@@ -1,4 +1,5 @@
 feedparser>=6.0.0
 flask>=3.0.0
-pytrends>=4.9.2
+requests>=2.31.0
+beautifulsoup4>=4.12.0
 gunicorn>=21.0.0
