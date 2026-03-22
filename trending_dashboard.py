@@ -48,14 +48,14 @@ SCRAPE_SOURCES = {
 SOURCES = [
     # Tier 1 — editorial homepage / top-story feeds where available
     {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/national",               "lean":"right",        "tier":1},
-    {"id":"cnn",        "name":"CNN",               "rss":"https://rss.cnn.com/rss/cnn_topstories.rss",               "lean":"left",         "tier":1},
+    {"id":"cnn",        "name":"CNN",               "rss":"https://rss.cnn.com/rss/edition.rss",                      "lean":"left",         "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
     {"id":"nypost",     "name":"NY Post",           "rss":"https://nypost.com/feed/",                                 "lean":"right",        "tier":1},
-    {"id":"ap",         "name":"AP News",           "rss":"https://apnews.com/hub/ap-top-news?format=feed",           "lean":"center",       "tier":1},
-    {"id":"reuters",    "name":"Reuters",           "rss":"https://feeds.reuters.com/reuters/topNews",                "lean":"center",       "tier":1},
+    {"id":"ap",         "name":"AP News",           "rss":"https://feeds.apnews.com/apnews/topnews",                  "lean":"center",       "tier":1},
+    {"id":"reuters",    "name":"Reuters",           "rss":"https://www.reutersagency.com/feed/?best-topics=top-news&post_type=best", "lean":"center", "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
-    {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/feeds/rss.xml",                  "lean":"right",        "tier":1},
+    {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/rss.xml",                        "lean":"right",        "tier":1},
     # Tier 2 — strong opinion/political feeds
     {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
     {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
@@ -486,14 +486,15 @@ def cluster_topics(all_arts):
 
 def compute_alignment(all_arts, topics):
     dw_all = all_arts.get("dailywire", [])
-    # Only count DW articles published in the last 6 hours as "covering" a topic.
-    # Older DW articles produce false negatives — yesterday's Gaza story suppresses
-    # today's DW Gap badge, hiding a real same-day assignment opportunity.
-    six_hours_ago = datetime.now(timezone.utc) - timedelta(hours=6)
+    # Only count DW articles published in the last 12 hours as "covering" a topic.
+    # 6 hours was too tight — a 7h-old story is still same-day news for a daily
+    # editorial cycle. 12 hours prevents yesterday's coverage from suppressing today's
+    # DW Gap badge while still catching genuine same-day assignment opportunities.
+    twelve_hours_ago = datetime.now(timezone.utc) - timedelta(hours=12)
     dw = [a for a in dw_all if a.get("pub_ts") and
-          datetime.fromisoformat(a["pub_ts"]) > six_hours_ago]
+          datetime.fromisoformat(a["pub_ts"]) > twelve_hours_ago]
     if not dw:
-        dw = dw_all  # fall back to all articles if none are recent (e.g. weekend lull)
+        dw = dw_all  # fall back to all articles if feed has no timestamps (weekend lull)
     dw_kws = set()
     if dw:
         for a in dw: dw_kws.update(extract_keywords(a["title"]))
