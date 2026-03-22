@@ -77,6 +77,7 @@ SOURCE_ORDER = ["foxnews","nypost","dailywire","breitbart","washtimes","townhall
                 "ap","reuters","thehill","skynews","cnn","nytimes","nbcnews","dailymail","foxbusiness"]
 
 STOP_WORDS = {
+    # --- Function words ---
     'the','a','an','and','or','but','in','on','at','to','for','of','with','by','from','up',
     'about','into','this','that','these','those','it','its','as','what','which','who','when',
     'where','why','how','all','both','each','say','says','said','new','more','after','before',
@@ -90,6 +91,7 @@ STOP_WORDS = {
     'back','going','come','make','made','take','taken','give','given','know','think','look',
     'need','want','away','down','long','little','very','much','many','such','only','same',
     'well','even','like',
+    # --- Crime/emergency generics ---
     'death','dead','died','dies','kill','kills','killed','killing','killer',
     'shot','shots','shooting','crash','crashes','fire','fires','blast','explosion',
     'bomb','bombing','attack','attacks','murder','murders','murdered',
@@ -98,6 +100,41 @@ STOP_WORDS = {
     'body','bodies','hospital','victim','victims','suspect','suspects',
     'found','missing','search','rescue','emergency','tragedy','tragic',
     'recall','accident','incident',
+    # --- Generic political/institutional nouns ---
+    # These words span many unrelated stories and produce false clusters.
+    # A good cluster seed must point to ONE specific story, not a category.
+    'security','government','governments','national','federal','state','states',
+    'official','officials','administration','department','departments',
+    'agency','agencies','ministry','committee','commission','office',
+    'organization','organizations','institution','institutions',
+    'community','communities','group','groups','party','parties',
+    'member','members','leader','leaders','staff','team','teams',
+    'force','forces','military','troops','soldiers','army','navy',
+    'service','services','program','programs','project','projects',
+    'policy','policies','plan','plans','planning','strategy',
+    'system','systems','network','networks','operation','operations',
+    'deal','deals','agreement','agreements','talks','negotiations',
+    'bill','bills','legislation','regulation','regulations','ruling',
+    'case','cases','issue','issues','matter','matters','question',
+    'move','moves','step','steps','measure','measures','decision',
+    'fight','battle','battles','conflict','conflicts','struggle',
+    'effort','efforts','attempt','attempts','push','push',
+    'action','actions','response','responses','reaction','move',
+    'claim','claims','statement','statements','announcement',
+    'call','calls','demand','demands','request','requests',
+    'power','powers','control','authority','rule','rules','order','orders',
+    'right','rights','freedom','freedoms','justice','reform',
+    'role','position','status','level','rate','rates','number',
+    'money','funds','funding','budget','cost','costs','price','prices',
+    'help','support','care','health','crisis','crises',
+    'world','global','international','local','regional',
+    'public','private','personal','political','social','economic',
+    'major','large','small','high','low','long','short','early','late',
+    'country','countries','nation','nations','people','person','home',
+    'thing','things','part','parts','way','ways','place','places','area',
+    'work','working','worker','workers','job','jobs',
+    'company','companies','business','businesses','market','markets',
+    'court','courts','judge','judges','law','laws','legal',
 }
 
 data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"alignment_score":None,"sources_live":0,"loading":True}
@@ -150,12 +187,28 @@ def fetch_google_trends():
         print(f"  Google Trends: in backoff, next retry in {int((_gt_cache['next_retry']-now)/60)}m")
         return _gt_cache["data"], _gt_cache["fetched_at"]
     try:
-        feed = feedparser.parse(TRENDS_RSS)
+        # feedparser alone sends no User-Agent so Google silently blocks it.
+        # Fetch the raw bytes with requests first, then hand to feedparser.
+        raw = None
+        if HAS_SCRAPE:
+            try:
+                resp = requests.get(TRENDS_RSS, timeout=15, headers={
+                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+                })
+                print(f"  Google Trends HTTP {resp.status_code}")
+                if resp.status_code == 200:
+                    raw = resp.content
+                else:
+                    raise Exception(f"HTTP {resp.status_code}")
+            except Exception as he:
+                print(f"  Google Trends requests error: {he}")
+        feed = feedparser.parse(raw or TRENDS_RSS)
         if feed.bozo and not feed.entries:
             raise Exception(f"RSS parse failed: {getattr(feed,'bozo_exception','unknown')}")
         result = [e.get("title","").strip() for e in feed.entries if e.get("title","").strip()][:25]
         if not result:
-            raise Exception("RSS returned 0 entries")
+            raise Exception(f"RSS returned 0 entries (feed.bozo={feed.bozo})")
         _gt_cache = {"data": result, "fetched_at": now, "next_retry": 0}
         print(f"  Google Trends RSS: {len(result)} trends fetched")
         return result, now
@@ -537,7 +590,7 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 </div>
 <script>
 const SO=['foxnews','nypost','dailywire','breitbart','washtimes','townhall','ap','reuters','thehill','skynews','cnn','nytimes','nbcnews','dailymail','foxbusiness'];
-let _n=Date.now()+30*60*1000;
+let _n=Date.now()+30*60*1000,_lastTs=null;
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'—';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
 function fc(ms){if(ms<=0)return'Refreshing...';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);return'Next refresh: '+m+':'+String(s).padStart(2,'0')}
@@ -601,15 +654,27 @@ async function ld(){
     const now=new Date();
     document.getElementById('ed').textContent=now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     document.getElementById('es').textContent=(d.sources_live||0)+' of 15 sources reporting';
-    rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);rS(d.sources);rA(d.alignment_score);
+    // Sync countdown to server's actual refresh schedule
+    if(d.last_updated){
+      const serverNext=new Date(d.last_updated).getTime()+30*60*1000;
+      if(serverNext>Date.now()) _n=serverNext;
+    }
+    // Only re-render if data actually changed
+    if(d.last_updated!==_lastTs){
+      _lastTs=d.last_updated;
+      rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);rS(d.sources);rA(d.alignment_score);
+    }
   }catch(ex){setTimeout(ld,5000)}
 }
 async function fr(){
   document.getElementById('ov').classList.remove('h');
   try{await fetch('/api/refresh',{method:'POST'})}catch(ex){}
-  _n=Date.now()+30*60*1000;setTimeout(ld,3000);
+  _n=Date.now()+30*60*1000;_lastTs=null;setTimeout(ld,3000);
 }
+// Countdown timer + auto-trigger refresh when server schedule fires
 setInterval(()=>{const r=_n-Date.now();document.getElementById('cd').textContent=fc(r);if(r<=0){_n=Date.now()+30*60*1000;ld()}},1000);
+// Poll for new data every 2 minutes so UI picks up server refreshes promptly
+setInterval(ld,2*60*1000);
 ld();
 </script></body></html>"""
 
