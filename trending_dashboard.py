@@ -732,8 +732,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 /* TRENDING TABLE */
 .tbl-wrap{background:var(--surface-top);padding:2px;border-radius:3px;overflow-x:auto;margin-bottom:28px}
-.tbl-inner{background:var(--surface-0);border-radius:3px;overflow:hidden;box-shadow:0 1px 4px var(--sh)}
-.topics-tbl{width:100%;border-collapse:collapse}
+.tbl-inner{background:var(--surface-0);border-radius:3px;overflow:visible;box-shadow:0 1px 4px var(--sh)}
+.topics-tbl{width:100%;border-collapse:collapse;min-width:560px}
 .topics-tbl thead th{padding:10px 16px;font-size:9px;font-weight:800;color:var(--ink-l);text-transform:uppercase;letter-spacing:1.5px;background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Inter',sans-serif}
 .topics-tbl thead th.tc{text-align:center}
 .topics-tbl thead th.tr2{text-align:right}
