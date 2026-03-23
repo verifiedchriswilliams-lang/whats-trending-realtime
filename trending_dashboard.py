@@ -775,13 +775,13 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
   <div class="card" id="gcard">
     <div class="ch"><span>📡</span><h2>Signals</h2><span class="chr">Live social trends</span></div>
     <div class="stabs">
-      <button class="stab active" onclick="switchTab('rd')">📋 Reddit</button>
+      <button class="stab active" onclick="switchTab('dr')">🔦 Drudge</button>
       <button class="stab" onclick="switchTab('tw')">𝕏 Twitter</button>
-      <button class="stab" onclick="switchTab('dr')">🔦 Drudge</button>
+      <button class="stab" onclick="switchTab('rd')">📋 Reddit</button>
     </div>
-    <div id="sp-rd" class="spanel active"><div id="rl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+    <div id="sp-dr" class="spanel active"><div id="dl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
     <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
-    <div id="sp-dr" class="spanel"><div id="dl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+    <div id="sp-rd" class="spanel"><div id="rl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
   </div>
   <div class="card" id="ss"><div class="ch"><span>📰</span><h2>Source Headlines</h2><span class="chr">Fox · NYT · CNN · Daily Mail · NY Post · AP · Reuters · Breitbart · Sky · NBC · Hill · DW · WashTimes · FoxBiz · Townhall</span></div><div class="sg" id="sg"></div></div>
 </div>
@@ -819,11 +819,11 @@ function rT(topics){
   }).join('');
 }
 function tg(i){document.getElementById('ta'+i).classList.toggle('o');const ic=document.getElementById('ei'+i);ic.textContent=ic.textContent==='▸'?'▾':'▸'}
-let _activeTab='rd';
+let _activeTab='dr';
 function switchTab(tab){
   _activeTab=tab;
-  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['rd','tw','dr'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-rd','sp-tw','sp-dr'][i]==='sp-'+tab)});
+  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','rd'][i]===tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-rd'][i]==='sp-'+tab)});
 }
 function rG(posts){
   const el=document.getElementById('rl');
