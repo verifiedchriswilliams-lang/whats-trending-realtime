@@ -137,7 +137,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"google_trends":[],"google_trends_fetched_at":None,"twitter_trends":[],"drudge_links":[],"alignment_score":None,"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"reddit_posts":[],"twitter_trends":[],"drudge_links":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Previous topics for trajectory tracking (heat score deltas)
@@ -255,6 +255,7 @@ def scrape_homepage(sid, url):
 
 _DRUDGE_CACHE   = {"data": [], "fetched_at": 0}
 _TWITTER_CACHE  = {"data": [], "fetched_at": 0}
+_REDDIT_CACHE   = {"data": [], "fetched_at": 0}
 
 def fetch_drudge():
     """Scrape Drudge Report for its top 12 headline links.
@@ -298,9 +299,14 @@ def fetch_drudge():
         return _DRUDGE_CACHE["data"]
 
 
+_SITE_NAV_TERMS = {
+    'about','contact','feedback','terms','privacy','home','search','login','signup',
+    'subscribe','newsletter','advertise','careers','help','faq','sitemap',
+    'gumroad','youtube trending videos','x (twitter)',
+}
+
 def fetch_twitter_trends():
-    """Scrape US Twitter/X trending topics from trends24.in — a public aggregator
-    that mirrors X trending data without requiring API access or payment."""
+    """Scrape US Twitter/X trending topics from trends24.in."""
     global _TWITTER_CACHE
     now = time.time()
     if _TWITTER_CACHE["data"] and now - _TWITTER_CACHE["fetched_at"] < 1800:
@@ -317,22 +323,17 @@ def fetch_twitter_trends():
         soup = BeautifulSoup(r.text, 'html.parser')
         trends = []
         seen = set()
-        # trends24.in structure: trend cards with ordered lists of trend items
+        # Target only the first trend card (most current hour) ordered list
         for card in soup.select('.trend-card'):
             for li in card.select('ol li a, .trend-card__list li a'):
                 text = li.get_text(strip=True)
-                if text and text not in seen:
-                    seen.add(text)
-                    trends.append(text)
+                if not text or len(text) < 2: continue
+                # Filter out site navigation links that bleed into the scrape
+                if text.lower() in _SITE_NAV_TERMS: continue
+                if text.lower() in seen: continue
+                seen.add(text.lower())
+                trends.append(text)
             if len(trends) >= 25: break
-        # Fallback: any link in a list inside a trending section
-        if not trends:
-            for li in soup.select('li a'):
-                text = li.get_text(strip=True)
-                if text and len(text) > 2 and text not in seen:
-                    seen.add(text)
-                    trends.append(text)
-                if len(trends) >= 25: break
         if trends:
             _TWITTER_CACHE = {"data": trends[:25], "fetched_at": now}
             print(f"  Twitter/X trends: {len(trends[:25])} trends scraped")
@@ -340,6 +341,44 @@ def fetch_twitter_trends():
     except Exception as ex:
         print(f"  Twitter trends scrape error: {ex}")
         return _TWITTER_CACHE["data"]
+
+
+def fetch_reddit_trending():
+    """Fetch hot posts from r/Conservative via Reddit's free public JSON API.
+    Strong signal for what the conservative 25-65 audience is actively reading.
+    No API key required — Reddit's public JSON endpoints are open."""
+    global _REDDIT_CACHE
+    now = time.time()
+    if _REDDIT_CACHE["data"] and now - _REDDIT_CACHE["fetched_at"] < 1800:
+        return _REDDIT_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _REDDIT_CACHE["data"]
+    try:
+        r = requests.get(
+            "https://www.reddit.com/r/Conservative/hot.json?limit=25",
+            timeout=15,
+            headers={'User-Agent': 'WhatsTrendingInRealTime/1.0 (editorial dashboard)'},
+        )
+        r.raise_for_status()
+        data = r.json()
+        posts = []
+        for child in data.get("data", {}).get("children", []):
+            p = child.get("data", {})
+            if p.get("stickied"): continue  # skip pinned mod posts
+            title = p.get("title", "").strip()
+            url   = p.get("url", "#")
+            score = p.get("score", 0)
+            num_comments = p.get("num_comments", 0)
+            if title:
+                posts.append({"title": title, "link": url,
+                              "score": score, "comments": num_comments})
+        if posts:
+            _REDDIT_CACHE = {"data": posts[:20], "fetched_at": now}
+            print(f"  Reddit r/Conservative: {len(posts[:20])} posts")
+        return _REDDIT_CACHE["data"]
+    except Exception as ex:
+        print(f"  Reddit fetch error: {ex}")
+        return _REDDIT_CACHE["data"]
 
 
 def extract_keywords(title):
@@ -573,17 +612,15 @@ def refresh_data():
                     for h in sc_set
                 )
 
-    print("  Fetching Google Trends + Drudge + Twitter/X...")
-    gt, gt_fetched_at = fetch_google_trends()
-    drudge_links     = fetch_drudge()
-    twitter_trends   = fetch_twitter_trends()
-    print(f"  {'✓' if gt else '✗'} Google Trends: {len(gt) if gt else 'unavailable'}")
+    print("  Fetching Drudge + Twitter/X + Reddit...")
+    drudge_links   = fetch_drudge()
+    twitter_trends = fetch_twitter_trends()
+    reddit_posts   = fetch_reddit_trending()
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
+    print(f"  {'✓' if reddit_posts else '✗'} Reddit r/Conservative: {len(reddit_posts)} posts")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
-    align = compute_alignment(all_arts, topics)
-    if align: print(f"  → DW alignment: {align['score']}% ({align['grade']})")
 
     # Trajectory: compare heat scores to previous refresh
     global _prev_heat
@@ -598,9 +635,8 @@ def refresh_data():
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":all_arts.get(sid,[])[:8],"status":"ok" if sid in all_arts else "error"}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
-                           "google_trends":gt,"google_trends_fetched_at":gt_fetched_at,
-                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,
-                           "alignment_score":align,"sources_live":len(all_arts),"loading":False})
+                           "reddit_posts":reddit_posts,"twitter_trends":twitter_trends,"drudge_links":drudge_links,
+                           "sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
 def bg_loop(interval=1800):
@@ -650,7 +686,7 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 .rb{background:transparent;border:1px solid rgba(255,255,255,.25);color:rgba(255,255,255,.75);padding:5px 13px;border-radius:3px;cursor:pointer;font-size:11px;font-weight:600;transition:all .15s;white-space:nowrap}
 .rb:hover{background:var(--red);border-color:var(--red);color:#fff}
 .eb{background:var(--linen-d);border-bottom:1px solid var(--border);padding:5px 24px;display:flex;align-items:center;justify-content:space-between;font-family:Georgia,serif;font-style:italic;font-size:12px;color:var(--ink-l)}
-.main{display:grid;grid-template-columns:1fr 264px;grid-template-areas:"topics trends" "sources sources" "align align";max-width:1700px;margin:0 auto;padding:12px 16px}
+.main{display:grid;grid-template-columns:1fr 264px;grid-template-areas:"topics trends" "sources sources";max-width:1700px;margin:0 auto;padding:12px 16px}
 .card{background:var(--white);border:1px solid var(--border);border-radius:2px;box-shadow:0 1px 4px var(--sh);overflow:hidden;margin:8px}
 .ch{padding:10px 16px;border-bottom:2px solid var(--navy);display:flex;align-items:center;gap:8px;background:var(--white)}
 .ch h2{font-family:Georgia,serif;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--navy)}
@@ -737,18 +773,17 @@ body{background:var(--linen);color:var(--ink);font-family:-apple-system,BlinkMac
 <div class="main">
   <div class="card" id="tc"><div class="ch"><span>🔥</span><h2>Top Trending Topics</h2><span class="chr">Ranked by cross-source heat score · Click to expand</span></div><div id="tl"><div style="padding:20px;text-align:center;color:var(--ink-l)">Loading...</div></div></div>
   <div class="card" id="gcard">
-    <div class="ch"><span>📡</span><h2>Signals</h2><span class="chr" id="sig-age">—</span></div>
+    <div class="ch"><span>📡</span><h2>Signals</h2><span class="chr">Live social trends</span></div>
     <div class="stabs">
-      <button class="stab active" onclick="switchTab('gt')">📈 Google</button>
+      <button class="stab active" onclick="switchTab('rd')">📋 Reddit</button>
       <button class="stab" onclick="switchTab('tw')">𝕏 Twitter</button>
       <button class="stab" onclick="switchTab('dr')">🔦 Drudge</button>
     </div>
-    <div id="sp-gt" class="spanel active"><div id="gl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
+    <div id="sp-rd" class="spanel active"><div id="rl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
     <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
     <div id="sp-dr" class="spanel"><div id="dl"><div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Loading...</div></div></div>
   </div>
   <div class="card" id="ss"><div class="ch"><span>📰</span><h2>Source Headlines</h2><span class="chr">Fox · NYT · CNN · Daily Mail · NY Post · AP · Reuters · Breitbart · Sky · NBC · Hill · DW · WashTimes · FoxBiz · Townhall</span></div><div class="sg" id="sg"></div></div>
-  <div class="card" id="ac"><div class="ch"><span>🎯</span><h2>Daily Wire Coverage Alignment</h2><span class="chr">Are you covering what's trending?</span></div><div id="al"><div style="padding:20px;text-align:center;color:var(--ink-l)">Loading...</div></div></div>
 </div>
 <script>
 const SO=['foxnews','nypost','dailywire','breitbart','washtimes','townhall','ap','reuters','thehill','skynews','cnn','nytimes','nbcnews','dailymail','foxbusiness'];
@@ -768,7 +803,6 @@ function rT(topics){
       return '<span class="sd" style="background:'+((window._L||{})[s]||'#6B7280')+';'+(isHero?'width:11px;height:11px;outline:2px solid var(--navy);outline-offset:1px;':'')+'" title="'+e(s)+(isHero?' — LEAD STORY':'')+'"></span>';
     }).join('');
     const heroBadge=heroSrcs.size>0?'<span class="hbadge">Lead at '+heroSrcs.size+' outlet'+(heroSrcs.size>1?'s':'')+'</span>':'';
-    const dwBadge=(!t.dw_covered&&i<10)?'<span class="dwgap">● DW Gap</span>':'';
     const brkBadge=t.is_breaking?'<span class="brk">Breaking</span>':'';
     const ageMin=t.age_minutes;
     const ageBadge=(!t.is_breaking&&ageMin!=null)?'<span class="age-badge">'+(ageMin<60?ageMin+'m':Math.floor(ageMin/60)+'h')+'</span>':'';
@@ -781,21 +815,23 @@ function rT(topics){
       const age=a.pub_ts?'<span style="color:var(--ink-l);font-size:10px;margin-left:6px;font-style:normal">'+ta(a.pub_ts)+'</span>':'';
       return '<div class="tar'+(isHeroArt||isScrapeConfirmed?' hero-art':'')+'"><div class="tas">'+e(a.source_id)+heroMark+age+'</div><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>';
     }).join('');
-    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+brkBadge+ageBadge+heroBadge+dwBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
+    return '<div class="tr"><div class="tm" onclick="tg('+i+')"><span class="rk'+(hot?' h':'')+'">'+( i+1)+'</span><div class="tb"><div class="tk" style="display:flex;align-items:center;gap:7px;">'+e(t.keyword)+brkBadge+ageBadge+heroBadge+'</div><div class="th2">'+e(t.topic)+'</div><div class="tmr"><div class="sds">'+dots+'</div><span class="ct">'+t.source_count+' sources · '+t.article_count+' stories</span></div></div><div class="hw">'+deltaBadge+'<div class="hbg"><div class="hfl" style="width:'+pct+'%"></div></div><span class="hn">'+t.heat_score+'</span></div><span class="ei" id="ei'+i+'">▸</span></div><div class="ta" id="ta'+i+'">'+arts+'</div></div>';
   }).join('');
 }
 function tg(i){document.getElementById('ta'+i).classList.toggle('o');const ic=document.getElementById('ei'+i);ic.textContent=ic.textContent==='▸'?'▾':'▸'}
-let _activeTab='gt';
+let _activeTab='rd';
 function switchTab(tab){
   _activeTab=tab;
-  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['gt','tw','dr'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-gt','sp-tw','sp-dr'][i]==='sp-'+tab)});
+  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['rd','tw','dr'][i]===tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-rd','sp-tw','sp-dr'][i]==='sp-'+tab)});
 }
-function rG(gt,fetchedAt){
-  const el=document.getElementById('gl');
-  if(fetchedAt){const age=Math.round((Date.now()/1000-fetchedAt)/60);document.getElementById('sig-age').textContent=age<5?'Right now':age<60?age+'m ago':Math.floor(age/60)+'h ago';}
-  if(!gt||!gt.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">Google Trends unavailable<br><i style="font-size:11px">Retrying next refresh.</i></div>';return}
-  el.innerHTML=gt.slice(0,25).map((t,i)=>'<div class="gi"><span class="grank">'+(i+1)+'</span><span class="gterm">'+e(t)+'</span><div class="gbw"><div class="gbb"><div class="gbf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
+function rG(posts){
+  const el=document.getElementById('rl');
+  if(!posts||!posts.length){el.innerHTML='<div style="padding:14px;text-align:center;color:var(--ink-l);font-size:12px">r/Conservative unavailable</div>';return}
+  el.innerHTML=posts.map((p,i)=>{
+    const score=p.score>999?(p.score/1000).toFixed(1)+'k':p.score;
+    return '<div class="di"><a href="'+e(p.link)+'" target="_blank">'+e(p.title)+'</a><div style="font-size:10px;color:var(--ink-l);margin-top:2px">▲'+score+' · '+p.comments+' comments</div></div>';
+  }).join('');
 }
 function rTw(trends){
   const el=document.getElementById('tl2');
@@ -842,9 +878,9 @@ async function ld(){
     // Only re-render if data actually changed
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
-      rT(d.trending_topics);rG(d.google_trends,d.google_trends_fetched_at);
+      rT(d.trending_topics);rG(d.reddit_posts);
       rTw(d.twitter_trends);rDr(d.drudge_links);
-      rS(d.sources);rA(d.alignment_score);
+      rS(d.sources);
     }
   }catch(ex){setTimeout(ld,5000)}
 }
