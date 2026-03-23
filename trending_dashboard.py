@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WhatsTrendingInRealTime.com — Editorial Intelligence Dashboard  v2
+TrendingInRealTime.com — Editorial Intelligence Dashboard  v2
 Newspaper theme. Clustering fix. 15 sources incl. NYT.
 """
 
@@ -357,7 +357,7 @@ def fetch_reddit_trending():
         r = requests.get(
             "https://www.reddit.com/r/Conservative/hot.json?limit=25",
             timeout=15,
-            headers={'User-Agent': 'WhatsTrendingInRealTime/1.0 (editorial dashboard)'},
+            headers={'User-Agent': 'TrendingInRealTime/1.0 (editorial dashboard)'},
         )
         r.raise_for_status()
         data = r.json()
@@ -662,7 +662,7 @@ def api_refresh():
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Editorial Intelligence — WhatsTrendingInRealTime.com</title>
+<title>Editorial Intelligence — TrendingInRealTime.com</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -721,8 +721,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .sb-meta{padding:5px 12px;font-size:11px;color:var(--ink-l);display:flex;align-items:center;gap:6px}
 
 /* MAIN CANVAS */
-.main{margin-left:256px;margin-top:64px;padding:24px;min-height:calc(100vh - 64px)}
-.cgrid{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+.main{margin-left:256px;margin-top:64px;padding:20px 20px 24px;min-height:calc(100vh - 64px)}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
@@ -731,7 +731,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .bdg{padding:3px 8px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:800;letter-spacing:.5px;font-family:'Inter',sans-serif;color:var(--ink-m)}
 
 /* TRENDING TABLE */
-.tbl-wrap{background:var(--surface-top);padding:2px;border-radius:3px;overflow:hidden;margin-bottom:28px}
+.tbl-wrap{background:var(--surface-top);padding:2px;border-radius:3px;overflow-x:auto;margin-bottom:28px}
 .tbl-inner{background:var(--surface-0);border-radius:3px;overflow:hidden;box-shadow:0 1px 4px var(--sh)}
 .topics-tbl{width:100%;border-collapse:collapse}
 .topics-tbl thead th{padding:10px 16px;font-size:9px;font-weight:800;color:var(--ink-l);text-transform:uppercase;letter-spacing:1.5px;background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Inter',sans-serif}
@@ -812,7 +812,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 @media(max-width:900px){.cgrid{grid-template-columns:1fr}.tb-nav{display:none}}
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">WhatsTrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
 
 <header class="topbar">
   <div class="tb-left">
@@ -871,8 +871,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
                 <th class="th-r tc">Rank</th>
                 <th>Headline Intelligence</th>
                 <th class="th-s">Sources</th>
-                <th class="th-v">Velocity</th>
-                <th class="th-g tr2">Signal</th>
+                <th class="th-v" title="Story trajectory since last refresh. Rising curve = gaining coverage across sources. Flat = no change. Falling = losing momentum.">Velocity</th>
+                <th class="th-g tr2" title="Heat Score = weighted coverage strength. Formula: (sources × 12) + articles + (lead outlets × 20) + (double-confirmed × 10). Higher = more editors are leading with this story.">Signal</th>
               </tr>
             </thead>
             <tbody id="tl"><tr><td colspan="5" style="padding:32px;text-align:center;color:var(--ink-l)">Loading intelligence…</td></tr></tbody>
@@ -914,16 +914,16 @@ function fc(ms){if(ms<=0)return'Refreshing…';const m=Math.floor(ms/60000),s=Ma
 function spark(delta,heat){
   const w=88,h=32;
   if(delta===null||delta===undefined){
-    return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="M0 16 L'+w+' 16" stroke="#c5c6ce" stroke-width="1.5" fill="none"/></svg>';
+    return '<span title="First data point — no previous refresh to compare against yet."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="M0 16 L'+w+' 16" stroke="#c5c6ce" stroke-width="1.5" fill="none"/></svg></span>';
   }
   if(delta>0){
     const rise=Math.min(delta/(heat||1)*160,24);
     const p='M0 '+(h-4)+' L22 '+(h-4-rise*.25)+' L44 '+(h-4-rise*.55)+' L66 '+(h-4-rise*.82)+' L'+w+' '+Math.max(4,h-4-rise);
-    return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#BA032A" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    return '<span title="Gaining momentum — heat score rose +'+delta+' points since last refresh. More sources picked this up or promoted it above the fold."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#BA032A" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   }
   const drop=Math.min(Math.abs(delta)/(heat||1)*160,24);
   const p='M0 4 L22 '+(4+drop*.25)+' L44 '+(4+drop*.55)+' L66 '+(4+drop*.82)+' L'+w+' '+Math.min(h-4,4+drop);
-  return '<svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+  return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh. Sources are moving on or deprioritising this story."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 }
 function rT(topics){
   const tb=document.getElementById('tl');
@@ -939,7 +939,7 @@ function rT(topics){
     const ageBadge=(!t.is_breaking&&am!=null)?'<span class="tag age">'+(am<60?am+'m':Math.floor(am/60)+'h')+'</span>':'';
     const leadBadge=heroSrcs.size>0?'<span class="tag lead">Lead at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+'</span>':'';
     const d=t.delta;
-    const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:#15803D">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:#BA032A">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:#9CA3AF">\u2014</span>';
+    const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:#15803D" title="Heat score rose +'+d+' points since last refresh (30 min ago)">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:#BA032A" title="Heat score fell '+Math.abs(d)+' points since last refresh (30 min ago)">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:#9CA3AF" title="No change since last refresh">\u2014</span>';
     const arts=(t.articles||[]).map(a=>{
       const isH=a.feed_position===0||a.feed_position===1,isS=a.scrape_confirmed===true;
       const mark=isH&&isS?' \u2605\u2713':isH?' \u2605':isS?' \u2713':'';
@@ -952,7 +952,7 @@ function rT(topics){
       +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-st">'+e(t.topic)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
       +'<td>'+spark(t.delta,t.heat_score)+'</td>'
-      +'<td><span class="sig-n">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
+      +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
       +'</tr>'
       +'<tr id="ta'+i+'" class="x-row"><td colspan="5"><div class="x-inner">'+arts+'</div></td></tr>';
   }).join('');
@@ -1030,7 +1030,7 @@ ld();
 if __name__=='__main__':
     PORT=int(os.environ.get('PORT',8080))
     IS_LOCAL=PORT==8080
-    print("\n"+"="*60+"\n  WhatsTrendingInRealTime.com — Editorial Dashboard v2\n"+"="*60)
+    print("\n"+"="*60+"\n  TrendingInRealTime.com — Editorial Dashboard v2\n"+"="*60)
     print(f"\n  URL: http://localhost:{PORT}  |  {len(SOURCES)} sources  |  Ctrl+C to stop\n")
     threading.Thread(target=bg_loop,args=(1800,),daemon=True).start()
     if IS_LOCAL:

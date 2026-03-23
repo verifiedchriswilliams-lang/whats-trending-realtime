@@ -1,4 +1,4 @@
-# WhatsTrendingInRealTime.com — Editorial Intelligence Dashboard
+# TrendingInRealTime.com — Editorial Intelligence Dashboard
 
 ## Project Purpose
 
@@ -155,7 +155,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 
 ### Next Session (Tomorrow)
 - [ ] **Scraped page position boosting** — use the ordinal position of a headline on the scraped homepage (e.g. 1st h2 vs 8th h2) as a continuous signal, not just binary present/absent. Stories in the top 3 scraped positions get a larger heat score boost than stories at position 10.
-- [ ] **Google Stitch design refresh** — user will provide Stitch output; integrate new CSS/HTML design into the embedded template.
+- [x] **Google Stitch design refresh** — completed, full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
 
 ### Backlog
 - [ ] **Drudge Report scraper** — no RSS feed, requires HTML parsing; would be high signal
@@ -170,8 +170,8 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 
 ## Environment
 
-- **Production URL:** whatstrendinginrealtime.com (Cloudflare → web-production-456b3.up.railway.app)
-- **DNS:** GoDaddy nameservers → Cloudflare (lennon + lilith), CNAME proxy to Railway URL
+- **Production URL:** www.trendinginrealtime.com (GoDaddy CNAME → r71aciy2.up.railway.app)
+- **DNS:** GoDaddy CNAME `www` → `r71aciy2.up.railway.app` + apex forward → www. TXT `_railway-verify` for Railway verification. No Cloudflare.
 - **GitHub repo:** github.com/verifiedchriswilliams-lang/whats-trending-realtime
 - **Railway project:** auto-deploys on push to `main`
 - **Python:** 3.13 (Railway auto-detected — do NOT add runtime.txt, it breaks the build)
