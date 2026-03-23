@@ -733,11 +733,12 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 /* TRENDING TABLE */
 .tbl-wrap{background:var(--surface-top);padding:2px;border-radius:3px;overflow-x:auto;margin-bottom:28px}
 .tbl-inner{background:var(--surface-0);border-radius:3px;overflow:visible;box-shadow:0 1px 4px var(--sh)}
-.topics-tbl{width:100%;border-collapse:collapse;min-width:560px}
+.topics-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
 .topics-tbl thead th{padding:10px 16px;font-size:9px;font-weight:800;color:var(--ink-l);text-transform:uppercase;letter-spacing:1.5px;background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Inter',sans-serif}
 .topics-tbl thead th.tc{text-align:center}
 .topics-tbl thead th.tr2{text-align:right}
-.th-r{width:64px}.th-s{width:116px}.th-v{width:120px}.th-g{width:76px}
+.th-r{width:56px}.th-s{width:108px}.th-v{width:112px}.th-g{width:80px}
+.topics-tbl td{overflow:hidden}
 .t-row{cursor:pointer;transition:background .1s}
 .t-row:hover td{background:rgba(0,0,0,.015)}
 .t-row td{padding:16px;border-bottom:1px solid var(--surface-low);vertical-align:top}
