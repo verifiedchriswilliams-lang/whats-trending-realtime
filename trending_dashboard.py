@@ -137,7 +137,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"reddit_posts":[],"twitter_trends":[],"drudge_links":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Previous topics for trajectory tracking (heat score deltas)
@@ -381,6 +381,85 @@ def fetch_reddit_trending():
         return _REDDIT_CACHE["data"]
 
 
+_FB_CACHE = {"data": [], "fetched_at": 0, "backoff_until": 0}
+
+def fetch_facebook_engagement(all_arts):
+    """Fetch Facebook engagement (reactions + shares + comments) for article URLs
+    via the public Facebook Graph API URL endpoint — no API key required.
+    Best signal for which stories are catching fire with the conservative Facebook audience.
+
+    Skips Google News proxy sources (cnn, ap, reuters) since their URLs are redirects.
+    Fetches engagement for direct article URLs from all other sources concurrently.
+    Falls back to cached data on error with a 1-hour backoff."""
+    global _FB_CACHE
+    now = time.time()
+    if now < _FB_CACHE.get("backoff_until", 0):
+        return _FB_CACHE["data"]
+    if _FB_CACHE["data"] and now - _FB_CACHE["fetched_at"] < 1800:
+        return _FB_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _FB_CACHE["data"]
+
+    # Google News RSS sources have proxy URLs — skip them for FB engagement
+    SKIP_SOURCES = {"cnn", "ap", "reuters"}
+    candidates = []
+    for sid, arts in all_arts.items():
+        if sid in SKIP_SOURCES:
+            continue
+        for art in arts[:8]:
+            url = art.get("link", "")
+            if url and url.startswith("http") and "google.com" not in url:
+                candidates.append({
+                    "url":    url,
+                    "title":  art.get("title", ""),
+                    "source": sid,
+                })
+
+    if not candidates:
+        return _FB_CACHE["data"]
+
+    def fetch_one(item):
+        try:
+            r = requests.get(
+                f"https://graph.facebook.com/?id={item['url']}&fields=engagement",
+                timeout=8,
+                headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
+            )
+            if r.status_code == 200:
+                eng = r.json().get("engagement", {})
+                total = (eng.get("reaction_count", 0) +
+                         eng.get("share_count", 0) +
+                         eng.get("comment_count", 0))
+                if total > 0:
+                    return {**item,
+                            "fb_total":     total,
+                            "fb_reactions": eng.get("reaction_count", 0),
+                            "fb_shares":    eng.get("share_count", 0),
+                            "fb_comments":  eng.get("comment_count", 0)}
+        except Exception:
+            pass
+        return None
+
+    try:
+        results = []
+        with ThreadPoolExecutor(max_workers=12) as ex:
+            futures = [ex.submit(fetch_one, item) for item in candidates]
+            for f in as_completed(futures):
+                r = f.result()
+                if r:
+                    results.append(r)
+
+        results.sort(key=lambda x: x["fb_total"], reverse=True)
+        top = results[:20]
+        _FB_CACHE = {"data": top, "fetched_at": now, "backoff_until": 0}
+        print(f"  Facebook: {len(top)} articles with engagement (of {len(candidates)} checked)")
+        return top
+    except Exception as ex:
+        print(f"  Facebook engagement error: {ex}")
+        _FB_CACHE["backoff_until"] = now + 3600  # 1-hour backoff on hard failure
+        return _FB_CACHE.get("data", [])
+
+
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
     filtered = [w for w in words if w not in STOP_WORDS and len(w)>3]
@@ -612,13 +691,13 @@ def refresh_data():
                     for h in sc_set
                 )
 
-    print("  Fetching Drudge + Twitter/X + Reddit...")
-    drudge_links   = fetch_drudge()
-    twitter_trends = fetch_twitter_trends()
-    reddit_posts   = fetch_reddit_trending()
+    print("  Fetching Drudge + Twitter/X + Facebook engagement...")
+    drudge_links    = fetch_drudge()
+    twitter_trends  = fetch_twitter_trends()
+    facebook_posts  = fetch_facebook_engagement(all_arts)
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
-    print(f"  {'✓' if reddit_posts else '✗'} Reddit r/Conservative: {len(reddit_posts)} posts")
+    print(f"  {'✓' if facebook_posts else '✗'} Facebook: {len(facebook_posts)} articles with engagement")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -635,7 +714,7 @@ def refresh_data():
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":all_arts.get(sid,[])[:8],"status":"ok" if sid in all_arts else "error"}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
-                           "reddit_posts":reddit_posts,"twitter_trends":twitter_trends,"drudge_links":drudge_links,
+                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,
                            "sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
@@ -820,9 +899,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <span class="tb-brand">Editorial Intelligence</span>
     <nav class="tb-nav">
       <a href="#" class="tnav act">Dashboard</a>
-      <a href="#" class="tnav">Analytics</a>
-      <a href="#" class="tnav">Reports</a>
-      <a href="#" class="tnav">Archives</a>
     </nav>
   </div>
   <div class="tb-right">
@@ -840,9 +916,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   </div>
   <nav class="sb-nav">
     <a href="#" class="sb-lnk act"><span class="ms">local_fire_department</span><span>Topic Intelligence</span></a>
-    <a href="#" class="sb-lnk"><span class="ms">article</span><span>Source Analysis</span></a>
-    <a href="#" class="sb-lnk"><span class="ms">speed</span><span>Social Velocity</span></a>
-    <a href="#" class="sb-lnk"><span class="ms">settings</span><span>Settings</span></a>
   </nav>
   <div class="sb-footer">
     <button class="sb-btn" onclick="fr()"><span class="ms" style="font-size:16px">refresh</span>Refresh Now</button>
@@ -893,11 +966,11 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
         <div class="stabs">
           <button class="stab active" onclick="switchTab('dr')"><span class="ms" style="font-size:14px">campaign</span>Drudge</button>
           <button class="stab" onclick="switchTab('tw')"><span class="ms" style="font-size:14px">tag</span>Twitter</button>
-          <button class="stab" onclick="switchTab('rd')"><span class="ms" style="font-size:14px">forum</span>Reddit</button>
+          <button class="stab" onclick="switchTab('fb')"><span class="ms" style="font-size:14px">thumb_up</span>Facebook</button>
         </div>
         <div id="sp-dr" class="spanel active"><div id="dl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
-        <div id="sp-rd" class="spanel"><div id="rl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
+        <div id="sp-fb" class="spanel"><div id="fl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
       </div>
     </aside>
   </div>
@@ -965,15 +1038,28 @@ function tg(i){
 let _activeTab='dr';
 function switchTab(tab){
   _activeTab=tab;
-  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','rd'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-rd'][i]==='sp-'+tab)});
+  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','fb'][i]===tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-fb'][i]==='sp-'+tab)});
 }
-function rG(posts){
-  const el=document.getElementById('rl');
-  if(!posts||!posts.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">r/Conservative unavailable</div>';return}
+function fmtFb(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return n}
+function rFb(posts){
+  const el=document.getElementById('fl');
+  if(!posts||!posts.length){
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement data loading…<br><span style="font-size:11px;margin-top:4px;display:block">Checks article URLs against the Facebook Graph API.<br>Available after first full refresh.</span></div>';
+    return;
+  }
+  const SA2={foxnews:'FOX',nypost:'NYP',dailywire:'DW',breitbart:'BB',washtimes:'WT',townhall:'TH',nytimes:'NYT',nbcnews:'NBC',dailymail:'DM',foxbusiness:'FOXB',skynews:'SKY',thehill:'HILL'};
   el.innerHTML=posts.map(p=>{
-    const sc=p.score>999?(p.score/1000).toFixed(1)+'k':p.score;
-    return '<div class="si"><a href="'+e(p.link)+'" target="_blank">'+e(p.title)+'</a><div class="si-m">\u25b2'+sc+' \u00b7 '+p.comments+' comments</div></div>';
+    const src=SA2[p.source]||(p.source||'').slice(0,4).toUpperCase();
+    const tot=fmtFb(p.fb_total||0);
+    const rx=fmtFb(p.fb_reactions||0);
+    const sh=fmtFb(p.fb_shares||0);
+    const cm=fmtFb(p.fb_comments||0);
+    return '<div class="si"><a href="'+e(p.url)+'" target="_blank">'+e(p.title)+'</a>'
+      +'<div class="si-m" title="'+tot+' total \u00b7 '+rx+' reactions \u00b7 '+sh+' shares \u00b7 '+cm+' comments">'
+      +'<span style="background:#1877F2;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">'+e(src)+'</span>'
+      +'\uD83D\uDC4D\uFE0F '+rx+' \u00b7 \u{1F501} '+sh+' \u00b7 \u{1F4AC} '+cm
+      +'</div></div>';
   }).join('');
 }
 function rTw(trends){
@@ -1013,7 +1099,7 @@ async function ld(){
     if(d.last_updated){const sn=new Date(d.last_updated).getTime()+30*60*1000;if(sn>Date.now())_n=sn;}
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
-      rT(d.trending_topics);rG(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
+      rT(d.trending_topics);rFb(d.facebook_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
     }
   }catch(ex){setTimeout(ld,5000)}
 }
