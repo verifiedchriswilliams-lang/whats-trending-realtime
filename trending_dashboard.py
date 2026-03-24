@@ -4,7 +4,7 @@ TrendingInRealTime.com — Editorial Intelligence Dashboard  v2
 Newspaper theme. Clustering fix. 15 sources incl. NYT.
 """
 
-import json, time, threading, re, sys, os, webbrowser
+import json, time, threading, re, sys, os, webbrowser, math
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -572,6 +572,55 @@ def fetch_facebook_engagement(all_arts):
         return _FB_CACHE.get("data", [])
 
 
+# ── TF-IDF COSINE SIMILARITY CLUSTERING ──────────────────────────────────────
+# Replaces the single-keyword seed approach.
+# Each article title is vectorized via TF-IDF (sparse dict, no numpy needed).
+# Articles are greedily assigned to the nearest cluster above SIMILARITY_THRESHOLD.
+# This prevents "congress", "season", "poll" false merges because two articles
+# must share a PATTERN of words — not just one — to exceed the threshold.
+
+SIMILARITY_THRESHOLD = 0.28   # Tune: higher = tighter clusters, fewer false merges
+
+def _tfidf_tokenize(title):
+    """Tokenize a headline for TF-IDF clustering (reuses STOP_WORDS)."""
+    words = re.findall(r"[A-Za-z']+", title.lower())
+    words = [w[:-2] if w.endswith("'s") else w.rstrip("'") for w in words]
+    return [w for w in words if w not in STOP_WORDS and len(w) > 3]
+
+def _build_tfidf(tokenized_docs):
+    """Build L2-normalised TF-IDF sparse vectors (list of dicts) for all docs."""
+    N = len(tokenized_docs)
+    df = defaultdict(int)
+    for tokens in tokenized_docs:
+        for t in set(tokens):
+            df[t] += 1
+    vecs = []
+    for tokens in tokenized_docs:
+        tf = defaultdict(int)
+        for t in tokens:
+            tf[t] += 1
+        vec = {w: cnt * math.log((N + 1) / (df[w] + 1))
+               for w, cnt in tf.items()}
+        norm = math.sqrt(sum(v * v for v in vec.values()))
+        vecs.append({w: v / norm for w, v in vec.items()} if norm > 0 else {})
+    return vecs
+
+def _cosine(v1, v2):
+    """Cosine similarity between two L2-normalised sparse dicts."""
+    if len(v1) > len(v2):
+        v1, v2 = v2, v1
+    return sum(v * v2.get(w, 0.0) for w, v in v1.items())
+
+def _update_centroid(centroid, new_vec, n):
+    """Online centroid update: running mean, re-normalised."""
+    merged = {}
+    for w in set(list(centroid.keys()) + list(new_vec.keys())):
+        merged[w] = centroid.get(w, 0.0) * (n - 1) / n + new_vec.get(w, 0.0) / n
+    norm = math.sqrt(sum(v * v for v in merged.values()))
+    return {w: v / norm for w, v in merged.items()} if norm > 0 else merged
+
+# ─────────────────────────────────────────────────────────────────────────────
+
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
     # Strip possessives: "trump's" → "trump", "iran's" → "iran"
@@ -632,105 +681,46 @@ def cluster_topics(all_arts):
     if not flat:
         return []
 
-    # Extract keywords per article
-    art_kws = [(art, set(extract_keywords(art["title"]))) for art in flat]
+    # ── TF-IDF cosine similarity clustering ──────────────────────────────────
+    # Build sparse TF-IDF vectors for every article title, then greedily assign
+    # each article to the nearest existing cluster (if cosine ≥ threshold) or
+    # start a new cluster.  Each article belongs to exactly one cluster.
+    tokenized = [_tfidf_tokenize(art["title"]) for art in flat]
+    tfidf_vecs = _build_tfidf(tokenized)
 
-    # Count how many articles mention each keyword
-    kw_freq = defaultdict(int)
-    for _, kws in art_kws:
-        for kw in kws:
-            kw_freq[kw] += 1
+    raw_clusters = []   # list of lists of indices into flat[]
+    centroids    = []   # centroid vec (sparse dict) per cluster
 
-    # KEY FIX: words appearing in >10% of all articles are "generic connective
-    # tissue" (trump, biden, president, american) — not story anchors.
-    # Filter them out so each cluster represents ONE specific story, not
-    # "everything that mentions Trump."
-    max_freq = max(4, len(flat) * 0.10)
+    for i, vec in enumerate(tfidf_vecs):
+        if not vec:
+            continue
+        best_ci, best_sim = -1, SIMILARITY_THRESHOLD
+        for ci, centroid in enumerate(centroids):
+            sim = _cosine(vec, centroid)
+            if sim > best_sim:
+                best_sim = sim
+                best_ci = ci
+        if best_ci >= 0:
+            raw_clusters[best_ci].append(i)
+            centroids[best_ci] = _update_centroid(
+                centroids[best_ci], vec, len(raw_clusters[best_ci]))
+        else:
+            raw_clusters.append([i])
+            centroids.append(dict(vec))
 
-    # Build index of specific keywords only
-    spec_idx = defaultdict(list)
-    for art, kws in art_kws:
-        for kw in kws:
-            if kw_freq[kw] <= max_freq:
-                spec_idx[kw].append(art)
-
-    # Source diversity per keyword
-    kw_srcs = {kw: set(a["source_id"] for a in arts) for kw, arts in spec_idx.items()}
-
-    # Require 2+ sources OR 3+ articles to surface a cluster
-    hot = {kw for kw, srcs in kw_srcs.items()
-           if len(srcs) >= 2 or len(spec_idx[kw]) >= 3}
-
-    sorted_kws = sorted(hot, key=lambda kw: (-len(kw_srcs[kw]), -len(spec_idx[kw])))
-
-    used, clusters = set(), []
+    clusters = []
     tier1 = {s["id"] for s in SOURCES if s["tier"]==1}
 
-    for kw in sorted_kws[:60]:
-        cl_arts, cl_srcs = [], set()
-        for art in spec_idx[kw]:
-            k = (art["source_id"], art["title"])
-            if k not in used:
-                cl_arts.append(art); cl_srcs.add(art["source_id"]); used.add(k)
-        if len(cl_arts) < 2:
-            continue
+    for idxs in raw_clusters:
+        cl_arts = [flat[i] for i in idxs]
+        cl_srcs = set(a["source_id"] for a in cl_arts)
 
-        # --- Cluster coherence check ---
-        # Articles should share more than just the seed keyword.
-        # Build a frequency map of all keywords across cluster articles.
-        cl_kw_freq = defaultdict(int)
-        for a in cl_arts:
-            for w in extract_keywords(a["title"]):
-                if w != kw: cl_kw_freq[w] += 1
-        # Count secondary keywords shared by 2+ articles (beyond the seed)
-        secondary_shared = sum(1 for w, cnt in cl_kw_freq.items() if cnt >= 2)
-        # Weak cluster: only 1 source and no secondary shared keywords
-        # → require 3+ articles before surfacing (stricter threshold)
-        if secondary_shared == 0 and len(cl_srcs) < 2:
+        # Require at least 2 distinct sources
+        if len(cl_srcs) < 2:
             continue
-        # Ambient reference filter: a keyword that spans 5+ distinct sources
-        # but has ZERO secondary shared keywords is a geopolitical/celebrity
-        # reference that everyone mentions in passing (e.g. "israel" during a
-        # war, "trump" slipping past the frequency filter) — not a specific story.
-        # Require at least 1 secondary shared keyword in that case.
-        seed_src_count = len(kw_srcs.get(kw, set()))
-        # Ambient reference filter: keyword spans 3+ distinct sources with zero
-        # secondary overlap → generic word (family, iran, senate) everyone mentions
-        # in passing, not a specific shared story. Reject it.
-        if secondary_shared == 0 and seed_src_count >= 3:
-            continue
-        # Very weak cluster: multiple sources but ZERO secondary shared keywords
-        # → likely a false cluster; require 3+ sources
-        if secondary_shared == 0 and len(cl_srcs) < 3:
-            continue
-
-        # --- Cluster trimming ---
-        # A cluster seeded by a broad word (e.g. "senate", "shutdown") may
-        # collect several DIFFERENT stories that each mention that word.
-        # Find the dominant secondary keyword — the one shared by the most
-        # articles. If it covers < 50% of articles, the cluster has multiple
-        # sub-stories daisy-chained together. Trim to just the dominant core.
-        if cl_kw_freq and len(cl_arts) >= 4:
-            dominant_kw, dominant_cnt = max(cl_kw_freq.items(), key=lambda x: x[1])
-            coverage = dominant_cnt / len(cl_arts)
-            if coverage < 0.50:
-                # Trim to only articles that contain the dominant secondary keyword
-                trimmed = [a for a in cl_arts
-                           if dominant_kw in extract_keywords(a["title"])]
-                if len(trimmed) >= 2:
-                    cl_arts = trimmed
-                    cl_srcs = set(a["source_id"] for a in cl_arts)
-                    # Recompute secondary keywords for trimmed cluster
-                    cl_kw_freq = defaultdict(int)
-                else:
-                    continue  # Can't trim to a coherent core — reject cluster
-                    for a in cl_arts:
-                        for w in extract_keywords(a["title"]):
-                            if w != kw: cl_kw_freq[w] += 1
 
         t1 = [a for a in cl_arts if a["source_id"] in tier1]
-        best = (t1 or cl_arts)[0]
-        label = best_label(kw, cl_arts)
+        label = best_label("", cl_arts)
         src_count = len(cl_srcs)
 
         # --- Position-weighted hero scoring ---
