@@ -774,7 +774,7 @@ def cluster_topics(all_arts):
             age_minutes = None
         is_breaking = age_minutes is not None and age_minutes < 90
 
-        clusters.append({"keyword": label, "topic": best["title"],
+        clusters.append({"keyword": label, "topic": label,
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
                          "heat_score": heat, "hero_sources": hero_sources,
