@@ -153,6 +153,9 @@ STOP_WORDS = {
     'public','private','personal','political','social','economic',
     'major','large','small','high','low','long','short','early','late',
     'country','countries','nation','nations','people','person','home',
+    # --- US political bodies — too broad, appear in unrelated stories ---
+    'congress','senate','house','parliament','legislature','lawmakers','lawmaker',
+    'republican','republicans','democrat','democrats','gop','bipartisan',
     # --- Generic human/social nouns — appear in every story type, never a useful seed ---
     'family','families','woman','women','man','men','child','children','kid','kids',
     'couple','couples','life','lives','girl','girls','boy','boys','teen','teens',
