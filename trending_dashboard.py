@@ -717,11 +717,32 @@ def cluster_topics(all_arts):
     clusters = []
     tier1 = {s["id"] for s in SOURCES if s["tier"]==1}
 
+    now_utc = datetime.now(timezone.utc)
+
     for idxs in raw_clusters:
         cl_arts = [flat[i] for i in idxs]
-        cl_srcs = set(a["source_id"] for a in cl_arts)
 
-        # Require at least 2 distinct sources
+        # Only count a source if its article is either:
+        #   (a) published within the last 4 hours — still actively in the news cycle, OR
+        #   (b) scrape-confirmed — verified on the source's live homepage right now
+        # This prevents stale Google News RSS articles (e.g. a 6h-old CNN piece that
+        # Google still surfaces) from making it look like a source is currently covering
+        # a story it has already moved on from.
+        def is_credible(a):
+            if a.get("scrape_confirmed"):
+                return True
+            pts = a.get("pub_ts")
+            if pts:
+                try:
+                    age = (now_utc - datetime.fromisoformat(pts)).total_seconds() / 60
+                    return age <= 240  # 4 hours
+                except Exception:
+                    pass
+            return True  # no timestamp — give benefit of the doubt
+
+        cl_srcs = set(a["source_id"] for a in cl_arts if is_credible(a))
+
+        # Require at least 2 credible sources
         if len(cl_srcs) < 2:
             continue
 
@@ -771,7 +792,6 @@ def cluster_topics(all_arts):
                 + (editorial_spotlight * 15))
 
         # Story age: derived from the most recently published article in the cluster
-        now_utc = datetime.now(timezone.utc)
         pub_times = [datetime.fromisoformat(a["pub_ts"]) for a in cl_arts if a.get("pub_ts")]
         if pub_times:
             newest = max(pub_times)
