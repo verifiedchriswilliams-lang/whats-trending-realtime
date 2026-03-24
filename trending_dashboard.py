@@ -485,7 +485,7 @@ def fetch_facebook_engagement(all_arts):
     now = time.time()
     if now < _FB_CACHE.get("backoff_until", 0):
         return _FB_CACHE["data"]
-    if _FB_CACHE["data"] and now - _FB_CACHE["fetched_at"] < 1800:
+    if _FB_CACHE["data"] and now - _FB_CACHE["fetched_at"] < 3600:
         return _FB_CACHE["data"]
     if not HAS_SCRAPE:
         return _FB_CACHE["data"]
@@ -541,7 +541,7 @@ def fetch_facebook_engagement(all_arts):
 
     try:
         results = []
-        sample = candidates[:40]
+        sample = candidates[:15]
         with ThreadPoolExecutor(max_workers=12) as ex:
             futures = [ex.submit(fetch_one, item) for item in sample]
             for f in as_completed(futures):
@@ -553,12 +553,18 @@ def fetch_facebook_engagement(all_arts):
             print(f"  Facebook API error: {first_error[0]}")
 
         if not results and first_error:
+            err_code = first_error[0].get("code", 0)
             err_type = first_error[0].get("type", "")
             err_msg  = first_error[0].get("message", "")
             print(f"  Facebook: no results — {err_type}: {err_msg}")
-            _FB_CACHE["data"] = [{"__unavailable": True,
-                                  "reason": f"{err_type}: {err_msg}"}]
-            # Do NOT set fetched_at — retry on next refresh cycle
+            # Rate limit (#4): back off 2 hours instead of retrying every cycle
+            if err_code == 4:
+                display = "App rate limit reached. Your Facebook app may be in Development mode — switch it to Live mode at developers.facebook.com to increase limits."
+                _FB_CACHE["backoff_until"] = now + 7200
+            else:
+                display = f"{err_type}: {err_msg}"
+            _FB_CACHE["data"] = [{"__unavailable": True, "reason": display}]
+            _FB_CACHE["fetched_at"] = now
             return _FB_CACHE["data"]
 
         results.sort(key=lambda x: x["fb_total"], reverse=True)
@@ -1244,7 +1250,7 @@ function renderSBS(d){
   const rk=i=>(i<9?'0':'')+(i+1);
   document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
     const dwOn=(t.sources||[]).includes('dailywire')||t.dw_covered;
-    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes">\u2713 DW</span>':'';
+    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes" title="Daily Wire is covering this story">\u2713 DW</span>':'';
     return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
   }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
   document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
@@ -1279,15 +1285,17 @@ function rT(topics){
       const isH=heroSrcs.has(s),col=(window._L||{})[s]||'#6B7280',abbr=SA[s]||(s.slice(0,3).toUpperCase());
       return '<div class="chip'+(isH?' hero':'')+'" style="background:'+col+'" title="'+e(s)+(isH?' \u2014 Lead':'')+'">'+e(abbr)+'</div>';
     }).join('');
-    const brkBadge=t.is_breaking?'<span class="tag brk">Breaking</span>':'';
+    const brkBadge=t.is_breaking?'<span class="tag brk" title="Published within the last 90 minutes">Breaking</span>':'';
     const am=t.age_minutes;
-    const ageBadge=(!t.is_breaking&&am!=null)?'<span class="tag age">'+(am<60?am+'m':Math.floor(am/60)+'h')+'</span>':'';
-    const leadBadge=heroSrcs.size>0?'<span class="tag lead">Lead at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+'</span>':'';
+    const ageBadge=(!t.is_breaking&&am!=null)?'<span class="tag age" title="Most recent article in this cluster was published '+(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago">'+(am<60?am+'m':Math.floor(am/60)+'h')+'</span>':'';
+    const leadSrcs=(t.hero_sources||[]).join(', ');
+    const leadBadge=heroSrcs.size>0?'<span class="tag lead" title="This story is the top headline at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+(leadSrcs?': '+leadSrcs:'')+'">Lead at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+'</span>':'';
     const d=t.delta;
     const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:#15803D" title="Heat score rose +'+d+' points since last refresh (30 min ago)">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:#BA032A" title="Heat score fell '+Math.abs(d)+' points since last refresh (30 min ago)">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:#9CA3AF" title="No change since last refresh">\u2014</span>';
     const arts=(t.articles||[]).map(a=>{
       const isH=a.feed_position===0||a.feed_position===1,isS=a.scrape_confirmed===true;
-      const mark=isH&&isS?' \u2605\u2713':isH?' \u2605':isS?' \u2713':'';
+      const markTitle=isH&&isS?' title="\u2605\u2713 Double-confirmed: top 2 in RSS feed AND found on homepage"':isH?' title="\u2605 RSS hero: appeared in top 2 positions in this outlet\'s feed"':isS?' title="\u2713 Scrape confirmed: found on outlet\'s live homepage"':'';
+      const mark=isH&&isS?' <span'+markTitle+'>\u2605\u2713</span>':isH?' <span'+markTitle+'>\u2605</span>':isS?' <span'+markTitle+'>\u2713</span>':'';
       const age=a.pub_ts?' <span style="color:var(--ink-l);font-size:10px">'+ta(a.pub_ts)+'</span>':'';
       return '<div class="a-row'+(isH||isS?' a-hero':'')+'"><div class="a-src">'+e(a.source_id)+mark+age+'</div><a href="'+e(a.link)+'" target="_blank" onclick="event.stopPropagation()">'+e(a.title)+'</a></div>';
     }).join('');
