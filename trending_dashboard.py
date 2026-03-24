@@ -91,6 +91,28 @@ STOP_WORDS = {
     'back','going','come','make','made','take','taken','give','given','know','think','look',
     'need','want','away','down','long','little','very','much','many','such','only','same',
     'well','even','like',
+    # --- Quantity/degree adverbs — appear in unrelated headlines, make garbage seeds ---
+    'nearly','roughly','almost','barely','about','approximately','least','most',
+    'more','less','once','twice','again','ever','never','always','often',
+    # --- Common headline verbs/adjectives that bleed across unrelated stories ---
+    'says','said','told','tell','tells','calls','called','warn','warns','warned',
+    'claim','claims','claimed','deny','denies','denied','admit','admits','admitted',
+    'open','opens','opened','close','closes','closed','hold','holds','held',
+    'face','faces','faced','push','pushes','pushed','pull','pulls','pulled',
+    'cut','cuts','raise','raises','raised','drop','drops','dropped',
+    'win','wins','won','lose','loses','lost','lead','leads','led',
+    'start','starts','started','stop','stops','stopped','end','ends','ended',
+    'start','begin','begins','began','continue','continues','continued',
+    'grow','grows','grew','rise','rises','rose','fall','falls','fell',
+    'sign','signs','signed','launch','launches','launched','pass','passes','passed',
+    'block','blocks','blocked','reject','rejects','rejected','approve','approves',
+    'leave','leaves','left','return','returns','returned','move','moves','moved',
+    'bring','brings','brought','send','sends','sent','show','shows','showed',
+    'report','reports','reported','reveal','reveals','revealed','confirm','confirms',
+    'hit','hits','strike','strikes','struck','target','targets','targeted',
+    'top','major','key','big','huge','massive','large','giant','record','historic',
+    'former','future','potential','possible','likely','unlikely','expected',
+    'second','third','fourth','fifth','sixth','seventh','eighth','ninth','tenth',
     # --- Crime/emergency generics ---
     'death','dead','died','dies','kill','kills','killed','killing','killer',
     'shot','shots','shooting','crash','crashes','fire','fires','blast','explosion',
@@ -553,26 +575,45 @@ def extract_keywords(title):
         if w not in seen: seen.add(w); result.append(w)
     return result
 
+# Preferred source order for choosing the most readable cluster headline label.
+# AP/Reuters/NYT give clean, neutral, descriptive headlines.
+_LABEL_SRC_PREF = ["ap","reuters","nytimes","nbcnews","cnn","foxnews","thehill",
+                   "skynews","washtimes","nypost","foxbusiness","dailywire",
+                   "breitbart","townhall","dailymail"]
+
 def best_label(kw, articles):
-    """Find the best 2-3 word proper noun label for a cluster keyword."""
-    phrases = defaultdict(int)
-    for art in articles:
-        words = re.findall(r'\b[A-Z][a-z]{1,}\b', art["title"])
-        lowers = [w.lower() for w in words]
-        for i, lw in enumerate(lowers):
-            if lw == kw:
-                if i > 0:
-                    two = f"{words[i-1]} {words[i]}"
-                    phrases[two] += 1
-                if i < len(words)-1:
-                    two = f"{words[i]} {words[i+1]}"
-                    phrases[two] += 1
-                if i > 0 and i < len(words)-1:
-                    three = f"{words[i-1]} {words[i]} {words[i+1]}"
-                    phrases[three] += 1
-    if phrases:
-        return max(phrases.items(), key=lambda x: (x[1], len(x[0])))[0]
-    return kw.title()
+    """Return the most representative real headline from the cluster.
+
+    Picks the article with the highest keyword overlap with other cluster
+    articles, breaking ties by preferring authoritative sources (AP, Reuters,
+    NYT) that tend to write clean, descriptive headlines.  Strips common
+    Google News source suffixes like '- Reuters' or '- CNN'.
+    """
+    if not articles:
+        return kw.title()
+
+    art_kws = [(a, set(extract_keywords(a["title"])) - {kw}) for a in articles]
+
+    best_art, best_score = None, -1
+    for i, (art, kws) in enumerate(art_kws):
+        # How many OTHER articles share at least one secondary keyword with this one?
+        overlap = sum(1 for j, (_, okws) in enumerate(art_kws)
+                      if i != j and kws & okws)
+        # Break ties by source preference (lower index = better)
+        src = art.get("source_id", "")
+        src_rank = _LABEL_SRC_PREF.index(src) if src in _LABEL_SRC_PREF else 99
+        score = overlap * 100 - src_rank
+        if score > best_score:
+            best_score = score
+            best_art = art
+
+    title = (best_art or articles[0])["title"]
+    # Strip trailing "- Source Name" appended by Google News RSS
+    title = re.sub(r'\s*[-–]\s*(Reuters|AP News|CNN|Fox News|NBC News|The Hill'
+                   r'|Washington Times|Breitbart|Townhall|Sky News'
+                   r'|Daily Wire|NY Post|Daily Mail|Fox Business)\s*$',
+                   '', title, flags=re.IGNORECASE).strip()
+    return title
 
 def cluster_topics(all_arts):
     # Flatten articles
@@ -651,6 +692,28 @@ def cluster_topics(all_arts):
         # → likely a false cluster like the old "Security" bug; require 3+ sources
         if secondary_shared == 0 and len(cl_srcs) < 3:
             continue
+
+        # --- Cluster trimming ---
+        # A cluster seeded by a broad word (e.g. "senate", "shutdown") may
+        # collect several DIFFERENT stories that each mention that word.
+        # Find the dominant secondary keyword — the one shared by the most
+        # articles. If it covers < 50% of articles, the cluster has multiple
+        # sub-stories daisy-chained together. Trim to just the dominant core.
+        if cl_kw_freq and len(cl_arts) >= 4:
+            dominant_kw, dominant_cnt = max(cl_kw_freq.items(), key=lambda x: x[1])
+            coverage = dominant_cnt / len(cl_arts)
+            if coverage < 0.50:
+                # Trim to only articles that contain the dominant secondary keyword
+                trimmed = [a for a in cl_arts
+                           if dominant_kw in extract_keywords(a["title"])]
+                if len(trimmed) >= 2:
+                    cl_arts = trimmed
+                    cl_srcs = set(a["source_id"] for a in cl_arts)
+                    # Recompute secondary keywords for trimmed cluster
+                    cl_kw_freq = defaultdict(int)
+                    for a in cl_arts:
+                        for w in extract_keywords(a["title"]):
+                            if w != kw: cl_kw_freq[w] += 1
 
         t1 = [a for a in cl_arts if a["source_id"] in tier1]
         best = (t1 or cl_arts)[0]
