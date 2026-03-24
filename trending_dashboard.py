@@ -460,13 +460,13 @@ def fetch_facebook_engagement(all_arts):
     if not HAS_SCRAPE:
         return _FB_CACHE["data"]
 
-    # Google News RSS sources have proxy URLs — skip them for FB engagement
-    SKIP_SOURCES = {"cnn", "ap", "reuters"}
+    # Skip Google News proxy sources — their URLs are google.com redirects
+    SKIP_SOURCES = {"cnn", "ap", "reuters", "foxnews"}
     candidates = []
     for sid, arts in all_arts.items():
         if sid in SKIP_SOURCES:
             continue
-        for art in arts[:8]:
+        for art in arts[:10]:
             url = art.get("link", "")
             if url and url.startswith("http") and "google.com" not in url:
                 candidates.append({
@@ -476,65 +476,69 @@ def fetch_facebook_engagement(all_arts):
                 })
 
     if not candidates:
-        return _FB_CACHE["data"]
-
-    auth_failures = []
+        print("  Facebook: no candidates (all sources skipped or no URLs)")
+        return _FB_CACHE.get("data", [])
 
     FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
+    first_error = []  # capture first error message for diagnostics
 
     def fetch_one(item):
         try:
             r = requests.get(
-                f"https://graph.facebook.com/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
+                f"https://graph.facebook.com/v19.0/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
                 timeout=8,
                 headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
             )
             data = r.json()
-            # Detect OAuth/auth errors — API now requires a token
             if "error" in data:
-                err_type = data["error"].get("type", "")
-                if err_type in ("OAuthException", "GraphMethodException"):
-                    auth_failures.append(True)
+                if not first_error:
+                    first_error.append(data["error"])
                 return None
-            if r.status_code == 200:
-                eng = data.get("engagement", {})
-                total = (eng.get("reaction_count", 0) +
-                         eng.get("share_count", 0) +
-                         eng.get("comment_count", 0))
-                if total > 0:
-                    return {**item,
-                            "fb_total":     total,
-                            "fb_reactions": eng.get("reaction_count", 0),
-                            "fb_shares":    eng.get("share_count", 0),
-                            "fb_comments":  eng.get("comment_count", 0)}
-        except Exception:
-            pass
+            eng = data.get("engagement", {})
+            total = (eng.get("reaction_count", 0) +
+                     eng.get("share_count", 0) +
+                     eng.get("comment_count", 0))
+            if total > 0:
+                return {**item,
+                        "fb_total":     total,
+                        "fb_reactions": eng.get("reaction_count", 0),
+                        "fb_shares":    eng.get("share_count", 0),
+                        "fb_comments":  eng.get("comment_count", 0)}
+        except Exception as ex:
+            if not first_error:
+                first_error.append({"message": str(ex)})
         return None
 
     try:
         results = []
+        sample = candidates[:40]
         with ThreadPoolExecutor(max_workers=12) as ex:
-            futures = [ex.submit(fetch_one, item) for item in candidates[:20]]
+            futures = [ex.submit(fetch_one, item) for item in sample]
             for f in as_completed(futures):
                 r = f.result()
                 if r:
                     results.append(r)
 
-        # If >half the probes returned auth errors, API requires a token — mark unavailable
-        if len(auth_failures) > len(candidates[:20]) * 0.4:
-            print(f"  Facebook: Graph API requires auth token — engagement unavailable")
-            _FB_CACHE["data"] = [{"__unavailable": True}]
-            _FB_CACHE["fetched_at"] = now
+        if first_error:
+            print(f"  Facebook API error: {first_error[0]}")
+
+        if not results and first_error:
+            err_type = first_error[0].get("type", "")
+            err_msg  = first_error[0].get("message", "")
+            print(f"  Facebook: no results — {err_type}: {err_msg}")
+            _FB_CACHE["data"] = [{"__unavailable": True,
+                                  "reason": f"{err_type}: {err_msg}"}]
+            # Do NOT set fetched_at — retry on next refresh cycle
             return _FB_CACHE["data"]
 
         results.sort(key=lambda x: x["fb_total"], reverse=True)
         top = results[:20]
         _FB_CACHE = {"data": top, "fetched_at": now, "backoff_until": 0}
-        print(f"  Facebook: {len(top)} articles with engagement (of {len(candidates[:20])} checked)")
+        print(f"  Facebook: {len(top)} articles with engagement (checked {len(sample)}, {len(candidates)} candidates)")
         return top
     except Exception as ex:
         print(f"  Facebook engagement error: {ex}")
-        _FB_CACHE["backoff_until"] = now + 3600  # 1-hour backoff on hard failure
+        _FB_CACHE["backoff_until"] = now + 3600
         return _FB_CACHE.get("data", [])
 
 
@@ -1249,7 +1253,8 @@ function rFb(posts){
     return;
   }
   if(posts.length===1&&posts[0].__unavailable){
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">The Graph API now requires an access token.<br>This feature is pending configuration.</span></div>';
+    const reason=posts[0].reason?'<br><span style="font-size:10px;opacity:.7">'+e(posts[0].reason)+'</span>':'';
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.'+reason+'</div>';
     return;
   }
   const SA2={foxnews:'FOX',nypost:'NYP',dailywire:'DW',breitbart:'BB',washtimes:'WT',townhall:'TH',nytimes:'NYT',nbcnews:'NBC',dailymail:'DM',foxbusiness:'FOXB',skynews:'SKY',thehill:'HILL'};
