@@ -956,6 +956,30 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 @media(max-width:1024px){.sidebar{display:none}.main{margin-left:0}}
 @media(max-width:900px){.cgrid{grid-template-columns:1fr}.tb-nav{display:none}}
+
+/* SIDE BY SIDE PAGE */
+.sbs-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none}
+.sbs-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
+.sbs-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
+.sbs-hdr p{font-size:12px;color:var(--ink-l);margin:0}
+.sbs-grid{display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start}
+.sbs-divider{background:var(--surface-top);align-self:stretch;margin:0 28px}
+.sbs-col-hd{padding-bottom:10px;border-bottom:2px solid var(--navy);margin-bottom:2px}
+.sbs-col-title{font-family:'Newsreader',Georgia,serif;font-size:17px;font-weight:700;color:var(--navy-d);display:block}
+.sbs-col-sub{font-size:10px;color:var(--ink-l);text-transform:uppercase;letter-spacing:.6px;display:block;margin-top:3px}
+.sbs-row{display:flex;align-items:flex-start;gap:14px;padding:11px 0;border-bottom:1px solid var(--surface-low)}
+.sbs-row:last-child{border-bottom:none}
+.sbs-rank{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;color:var(--red);min-width:30px;line-height:1.1;flex-shrink:0}
+.sbs-body{}
+.sbs-hl{font-family:'Newsreader',Georgia,serif;font-size:14px;color:var(--ink);line-height:1.45}
+.sbs-hl a{color:var(--ink);text-decoration:none}
+.sbs-hl a:hover{color:var(--red);text-decoration:underline}
+.sbs-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.sbs-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px}
+.sbs-dw-yes{background:rgba(21,128,61,.1);color:#15803D}
+.sbs-dw-gap{background:rgba(186,3,42,.08);color:var(--red);animation:gp 2s infinite}
+@keyframes gp{0%,100%{opacity:1}50%{opacity:.5}}
+.sbs-top{background:var(--surface-top);color:var(--navy-d)}
 </style></head><body>
 
 <div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
@@ -964,7 +988,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   <div class="tb-left">
     <span class="tb-brand">Editorial Intelligence</span>
     <nav class="tb-nav">
-      <a href="#" class="tnav act">Dashboard</a>
+      <a href="#" class="tnav act" onclick="switchPage('dash');return false">Dashboard</a>
+      <a href="#" class="tnav" onclick="switchPage('sbs');return false">Side by Side</a>
     </nav>
   </div>
   <div class="tb-right">
@@ -1042,12 +1067,59 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   </div>
 </main>
 
+<div class="sbs-page" id="sbs-page">
+  <div class="sbs-hdr">
+    <h2>Side by Side</h2>
+    <p>Cross-source trending vs. Daily Wire editorial picks</p>
+  </div>
+  <div class="sbs-grid">
+    <div>
+      <div class="sbs-col-hd">
+        <span class="sbs-col-title">What's Trending</span>
+        <span class="sbs-col-sub">Top 10 by cross-source heat score</span>
+      </div>
+      <div id="sbs-left"><div style="padding:20px;color:var(--ink-l);font-size:13px">Loading…</div></div>
+    </div>
+    <div class="sbs-divider"></div>
+    <div>
+      <div class="sbs-col-hd">
+        <span class="sbs-col-title">Daily Wire Top Stories</span>
+        <span class="sbs-col-sub">Editorial picks · refreshed each cycle</span>
+      </div>
+      <div id="sbs-right"><div style="padding:20px;color:var(--ink-l);font-size:13px">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
 const SO=['foxnews','nypost','dailywire','breitbart','washtimes','townhall','ap','reuters','thehill','skynews','cnn','nytimes','nbcnews','dailymail','foxbusiness'];
 const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH'};
-let _n=Date.now()+30*60*1000,_lastTs=null;
+let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
+function switchPage(pg){
+  _page=pg;
+  const isDash=pg==='dash';
+  document.querySelector('.main').style.display=isDash?'':'none';
+  document.getElementById('sbs-page').style.display=isDash?'none':'';
+  document.querySelectorAll('.tnav').forEach((a,i)=>a.classList.toggle('act',['dash','sbs'][i]===pg));
+  if(pg==='sbs'&&_lastData)renderSBS(_lastData);
+}
+function renderSBS(d){
+  const topics=(d.trending_topics||[]).slice(0,10);
+  const dwArts=((d.sources||{}).dailywire||{}).articles||[];
+  const rk=i=>(i<9?'0':'')+(i+1);
+  document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
+    const dwOn=(t.sources||[]).includes('dailywire');
+    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes">\u2713 DW</span>':'<span class="sbs-badge sbs-dw-gap">\u25cf Gap</span>';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
+  }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
+  document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
+    const isTop=a.scrape_position&&a.scrape_position<=5;
+    const age=a.pub_ts?'<span>'+ta(a.pub_ts)+'</span>':'';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div><div class="sbs-meta">'+(isTop?'<span class="sbs-badge sbs-top">Top Story</span>':'')+age+'</div></div></div>';
+  }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">Daily Wire articles loading…</div>';
+}
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
 function fc(ms){if(ms<=0)return'Refreshing…';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);return m+':'+String(s).padStart(2,'0')+' Refresh'}
@@ -1163,9 +1235,11 @@ async function ld(){
     document.getElementById('ed').textContent=now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
     document.getElementById('es').textContent=(d.sources_live||0)+' of 15 reporting';
     if(d.last_updated){const sn=new Date(d.last_updated).getTime()+30*60*1000;if(sn>Date.now())_n=sn;}
+    _lastData=d;
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
       rT(d.trending_topics);rFb(d.facebook_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
+      if(_page==='sbs')renderSBS(d);
     }
   }catch(ex){setTimeout(ld,5000)}
 }
