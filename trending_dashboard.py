@@ -1100,8 +1100,8 @@ let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg){
   _page=pg;
   const isDash=pg==='dash';
-  document.querySelector('.main').style.display=isDash?'':'none';
-  document.getElementById('sbs-page').style.display=isDash?'none':'';
+  document.querySelector('.main').style.display=isDash?'block':'none';
+  document.getElementById('sbs-page').style.display=isDash?'none':'block';
   document.querySelectorAll('.tnav').forEach((a,i)=>a.classList.toggle('act',['dash','sbs'][i]===pg));
   if(pg==='sbs'&&_lastData)renderSBS(_lastData);
 }
