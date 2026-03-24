@@ -1294,7 +1294,7 @@ function rT(topics){
     const rn=(i<9?'0':'')+(i+1);
     return '<tr class="t-row" onclick="tg('+i+')">'
       +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
-      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-st">'+e(t.topic)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
+      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
       +'<td>'+spark(t.delta,t.heat_score)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
