@@ -937,7 +937,8 @@ def refresh_data():
         editorial = sorted([a for a in raw if a.get("scrape_position")], key=lambda a: a["scrape_position"])
         rss_only  = [a for a in raw if not a.get("scrape_position")]
         display   = (editorial + rss_only)[:10]
-        srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error"}
+        homepage = SCRAPE_SOURCES.get(sid, "")
+        srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error","homepage":homepage}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,
@@ -1384,7 +1385,7 @@ function rS(srcs){
     const s=srcs[sid];if(!s)return'';
     const arts=s.articles||[];
     return '<div class="sc" style="border-top-color:'+e(s.lean_color)+'">'
-      +'<div class="sc-hd"><span class="sc-nm">'+e(s.name)+'</span>'
+      +'<div class="sc-hd"><span class="sc-nm">'+(s.homepage?'<a href="'+e(s.homepage)+'" target="_blank" style="color:inherit;text-decoration:none;border-bottom:1px solid currentColor;padding-bottom:1px">'+e(s.name)+'</a>':e(s.name))+'</span>'
       +'<span class="sc-ln" style="background:'+e(s.lean_color)+'18;color:'+e(s.lean_color)+'">'+e(s.lean_label)+'</span></div>'
       +(arts.length?arts.map(a=>'<div class="sc-art"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>').join(''):'<div class="sc-empty">Feed unavailable</div>')
       +'</div>';
