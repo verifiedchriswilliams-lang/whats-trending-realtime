@@ -170,8 +170,8 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 
 ## Environment
 
-- **Production URL:** www.trendinginrealtime.com (GoDaddy CNAME → r71aciy2.up.railway.app)
-- **DNS:** GoDaddy CNAME `www` → `r71aciy2.up.railway.app` + apex forward → www. TXT `_railway-verify` for Railway verification. No Cloudflare.
+- **Production URL:** www.trendinginrealtime.com (GoDaddy CNAME → fl8w2a92.up.railway.app)
+- **DNS:** GoDaddy CNAME `www` → `fl8w2a92.up.railway.app` + apex forward → www. TXT `_railway` → `railway-verify=c920a03...` for Railway verification. No Cloudflare.
 - **GitHub repo:** github.com/verifiedchriswilliams-lang/whats-trending-realtime
 - **Railway project:** auto-deploys on push to `main`
 - **Python:** 3.13 (Railway auto-detected — do NOT add runtime.txt, it breaks the build)
