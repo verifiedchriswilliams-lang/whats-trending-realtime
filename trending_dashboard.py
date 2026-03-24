@@ -633,6 +633,14 @@ def cluster_topics(all_arts):
         # → require 3+ articles before surfacing (stricter threshold)
         if secondary_shared == 0 and len(cl_srcs) < 2:
             continue
+        # Ambient reference filter: a keyword that spans 5+ distinct sources
+        # but has ZERO secondary shared keywords is a geopolitical/celebrity
+        # reference that everyone mentions in passing (e.g. "israel" during a
+        # war, "trump" slipping past the frequency filter) — not a specific story.
+        # Require at least 1 secondary shared keyword in that case.
+        seed_src_count = len(kw_srcs.get(kw, set()))
+        if secondary_shared == 0 and seed_src_count >= 5:
+            continue
         # Very weak cluster: multiple sources but ZERO secondary shared keywords
         # → likely a false cluster like the old "Security" bug; require 3+ sources
         if secondary_shared == 0 and len(cl_srcs) < 3:
