@@ -153,6 +153,11 @@ STOP_WORDS = {
     'public','private','personal','political','social','economic',
     'major','large','small','high','low','long','short','early','late',
     'country','countries','nation','nations','people','person','home',
+    # --- Generic human/social nouns — appear in every story type, never a useful seed ---
+    'family','families','woman','women','man','men','child','children','kid','kids',
+    'couple','couples','life','lives','girl','girls','boy','boys','teen','teens',
+    'student','students','parent','parents','friend','friends','neighbor','neighbors',
+    'victim','victims','survivor','survivors','resident','residents','citizen','citizens',
     'thing','things','part','parts','way','ways','place','places','area',
     'work','working','worker','workers','job','jobs',
     'company','companies','business','businesses','market','markets',
@@ -686,10 +691,13 @@ def cluster_topics(all_arts):
         # war, "trump" slipping past the frequency filter) — not a specific story.
         # Require at least 1 secondary shared keyword in that case.
         seed_src_count = len(kw_srcs.get(kw, set()))
-        if secondary_shared == 0 and seed_src_count >= 5:
+        # Ambient reference filter: keyword spans 3+ distinct sources with zero
+        # secondary overlap → generic word (family, iran, senate) everyone mentions
+        # in passing, not a specific shared story. Reject it.
+        if secondary_shared == 0 and seed_src_count >= 3:
             continue
         # Very weak cluster: multiple sources but ZERO secondary shared keywords
-        # → likely a false cluster like the old "Security" bug; require 3+ sources
+        # → likely a false cluster; require 3+ sources
         if secondary_shared == 0 and len(cl_srcs) < 3:
             continue
 
@@ -711,6 +719,8 @@ def cluster_topics(all_arts):
                     cl_srcs = set(a["source_id"] for a in cl_arts)
                     # Recompute secondary keywords for trimmed cluster
                     cl_kw_freq = defaultdict(int)
+                else:
+                    continue  # Can't trim to a coherent core — reject cluster
                     for a in cl_arts:
                         for w in extract_keywords(a["title"]):
                             if w != kw: cl_kw_freq[w] += 1
