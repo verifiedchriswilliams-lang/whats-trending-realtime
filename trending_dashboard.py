@@ -1155,8 +1155,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   <div class="tb-right">
     <div class="live-pill"><span class="live-dot"></span><span class="live-txt">Live</span></div>
     <span class="tb-time" id="cd"></span>
-    <button class="icon-btn" title="Notifications"><span class="ms">notifications</span></button>
-    <button class="icon-btn" title="Account"><span class="ms">account_circle</span></button>
   </div>
 </header>
 
