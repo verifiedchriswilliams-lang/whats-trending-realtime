@@ -33,12 +33,13 @@ CLAUDE.md               ← this file
 ## Key Algorithms
 
 ### Heat Score
-`heat_score = (source_count × 12) + article_count + (hero_count × 20) + (double_confirmed × 10)`
+`heat_score = (source_count × 12) + article_count + (hero_count × 20) + (double_confirmed × 10) + (editorial_spotlight × 15)`
 
 - `source_count` = number of distinct outlets covering this story
 - `article_count` = total articles in the cluster
-- `hero_count` = outlets where this story was RSS position 0–1 OR appeared on scraped homepage
-- `double_confirmed` = outlets where story is BOTH RSS position 0–1 AND scraped from homepage (strongest signal)
+- `hero_count` = outlets where this story was RSS position 0–1 OR appeared on scraped homepage (pos ≤ 8)
+- `double_confirmed` = outlets where story is BOTH RSS position 0–1 AND scraped from homepage
+- `editorial_spotlight` = outlets where scraped homepage position is 1–3 (editors are actively leading with this story; for Daily Wire this maps to their "Top Stories" section)
 
 ### Story Clustering (IMPORTANT — do not revert this logic)
 Stories are clustered by **specific keywords only** — words appearing in more than 10% of all articles are filtered out as "generic connective tissue" (e.g. "trump", "president", "american"). This is intentional. Without this filter, a single mega-cluster forms around common words, making the tool useless for editorial signal.
@@ -154,7 +155,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 ## Phase 2 Roadmap
 
 ### Next Session (Tomorrow)
-- [ ] **Scraped page position boosting** — use the ordinal position of a headline on the scraped homepage (e.g. 1st h2 vs 8th h2) as a continuous signal, not just binary present/absent. Stories in the top 3 scraped positions get a larger heat score boost than stories at position 10.
+- [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet), 9+ = present but below fold. Daily Wire specifically targets `topStoryTextContainer` h3s so editorial "Top Stories" picks (positions 1–5) are captured before generic h2/h3 scan.
 - [x] **Google Stitch design refresh** — completed, full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
 
 ### Backlog

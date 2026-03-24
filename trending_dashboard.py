@@ -224,12 +224,19 @@ def fetch_google_trends():
 
 
 def scrape_homepage(sid, url):
-    """Scrape a news source homepage to detect which headlines appear above the fold.
-    Returns a frozenset of normalized (lowercased) headline strings, or empty set on failure.
-    Used to cross-verify RSS hero position — if an article appears in BOTH RSS and the
-    scraped homepage, it's a double-confirmed lead story."""
+    """Scrape a news source homepage and return headlines in editorial order.
+    Returns a list of (normalized_headline, page_position) tuples (1-based).
+    Position 1 = highest editorial placement on the page.
+
+    For Daily Wire: explicitly targets the editorial 'Top Stories' section
+    (div[class*=topStoryTextContainer] h3) so those 5 curated picks come first
+    (positions 1-5), before the generic h2/h3 scan fills in the rest.
+    This fixes the RSS-vs-editorial mismatch where old stories can stay #1
+    on the site even after newer articles have pushed them down the feed.
+
+    Empty list returned on failure — scraping degrades gracefully."""
     if not HAS_SCRAPE:
-        return frozenset()
+        return []
     try:
         r = requests.get(url, timeout=10, headers={
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -237,21 +244,38 @@ def scrape_homepage(sid, url):
         })
         r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
-        headlines = set()
-        # Grab text from h1/h2/h3 tags — main content hierarchy
-        for tag in soup.find_all(['h1','h2','h3']):
-            text = tag.get_text(separator=' ', strip=True)
-            if 20 <= len(text) <= 250:
-                headlines.add(text.lower())
-        # Also grab prominent anchor text (many news sites use <a> for headlines)
+        ordered = []  # ordered list of normalized headline strings (de-duped)
+        seen = set()
+
+        def add(text):
+            norm = text.strip().lower()
+            if 20 <= len(norm) <= 250 and norm not in seen:
+                seen.add(norm)
+                ordered.append(norm)
+
+        # --- Daily Wire: target editorial Top Stories section FIRST ---
+        # The Top Stories widget uses divs with class containing 'topStoryTextContainer'
+        # containing h3 elements — these are editor-curated picks, not RSS chronology.
+        if sid == 'dailywire':
+            for div in soup.find_all('div', class_=lambda c: c and 'topStoryTextContainer' in c):
+                h3 = div.find('h3')
+                if h3:
+                    add(h3.get_text(separator=' ', strip=True))
+
+        # --- All sources: h1/h2/h3 in document order ---
+        for tag in soup.find_all(['h1', 'h2', 'h3']):
+            add(tag.get_text(separator=' ', strip=True))
+
+        # --- Prominent anchor text (fallback for JS-heavy or non-semantic sites) ---
         for tag in soup.find_all('a', href=True):
-            text = tag.get_text(separator=' ', strip=True)
-            if 20 <= len(text) <= 250:
-                headlines.add(text.lower())
-        return frozenset(headlines)
+            add(tag.get_text(separator=' ', strip=True))
+
+        # Return as (text, position) — position is 1-based editorial rank
+        return [(text, pos + 1) for pos, text in enumerate(ordered)]
+
     except Exception as ex:
         print(f"  scrape {sid}: {ex}")
-        return frozenset()
+        return []
 
 _DRUDGE_CACHE   = {"data": [], "fetched_at": 0}
 _TWITTER_CACHE  = {"data": [], "fetched_at": 0}
@@ -564,24 +588,47 @@ def cluster_topics(all_arts):
         best = (t1 or cl_arts)[0]
         label = best_label(kw, cl_arts)
         src_count = len(cl_srcs)
-        # Hero boost: count how many outlets placed this as their #1 or #2 story
-        # Hero: RSS position 0-1, OR scrape-confirmed (appeared on homepage), or BOTH
+
+        # --- Position-weighted hero scoring ---
+        # RSS hero: feed position 0 or 1 (top of feed)
+        # Scrape hero: article confirmed on homepage at position ≤ 8
+        # Editorial spotlight: scrape position ≤ 3 (top of page / editorial "Top Stories" section)
+        # Double-confirmed: RSS hero AND scraped (both signals agree)
         hero_set = set()
+        double_confirmed = 0
+        editorial_spotlight_set = set()  # scrape position 1-3 = editors are actively leading with this
+
+        seen_double = set()
         for a in cl_arts:
+            sid_a = a["source_id"]
             is_rss_hero    = a.get("feed_position", 99) <= 1
-            is_scrape_hero = a.get("scrape_confirmed", False)
+            scrape_pos     = a.get("scrape_position")          # None if not matched
+            is_scrape_hero = scrape_pos is not None and scrape_pos <= 8
+            is_editorial   = scrape_pos is not None and scrape_pos <= 3
+
             if is_rss_hero or is_scrape_hero:
-                hero_set.add(a["source_id"])
-        hero_sources = list(hero_set)
-        hero_count = len(hero_set)
-        # Double-confirmed (both RSS position AND scraped) = extra +10 per outlet
-        double_confirmed = sum(
-            1 for a in cl_arts
-            if a.get("feed_position", 99) <= 1 and a.get("scrape_confirmed", False)
-            and cl_arts.index(a) == next((i for i,x in enumerate(cl_arts) if x is a), 0)
-        )
-        # Each hero placement = +20 bonus; double-confirmed = +10 extra
-        heat = src_count * 12 + len(cl_arts) + (hero_count * 20) + (double_confirmed * 10)
+                hero_set.add(sid_a)
+            if is_editorial:
+                editorial_spotlight_set.add(sid_a)
+            # Double-confirmed: RSS hero + any scrape hit (count once per source)
+            if is_rss_hero and a.get("scrape_confirmed") and sid_a not in seen_double:
+                double_confirmed += 1
+                seen_double.add(sid_a)
+
+        hero_sources = list(hero_set | editorial_spotlight_set)
+        hero_count   = len(hero_set)
+        editorial_spotlight = len(editorial_spotlight_set)
+
+        # Heat formula:
+        #   base:               source_count × 12
+        #   breadth:            + article_count
+        #   hero placement:     + hero_count × 20   (RSS top-2 OR scrape pos 1-8)
+        #   double-confirmed:   + double_confirmed × 10  (RSS hero AND scraped)
+        #   editorial spotlight:+ editorial_spotlight × 15  (scrape pos 1-3; editors chose it)
+        heat = (src_count * 12 + len(cl_arts)
+                + (hero_count * 20)
+                + (double_confirmed * 10)
+                + (editorial_spotlight * 15))
 
         # Story age: derived from the most recently published article in the cluster
         now_utc = datetime.now(timezone.utc)
@@ -668,28 +715,39 @@ def refresh_data():
             sid, arts = f.result()
             if arts: all_arts[sid]=arts; print(f"  ✓ {sid}: {len(arts)}")
             else: print(f"  ✗ {sid}: no data")
-        scraped_headlines = {}  # sid → frozenset of normalized headline strings
+        scraped_pages = {}  # sid → list of (normalized_headline, position) tuples
         for f in as_completed(scrape_futures):
             sid = scrape_futures[f]
-            scraped_headlines[sid] = f.result()
-            if scraped_headlines[sid]:
-                print(f"  🔎 scraped {sid}: {len(scraped_headlines[sid])} headlines")
+            scraped_pages[sid] = f.result()
+            if scraped_pages[sid]:
+                print(f"  🔎 scraped {sid}: {len(scraped_pages[sid])} headlines (top: {scraped_pages[sid][0][0][:50] if scraped_pages[sid] else '—'})")
 
-    # Cross-verify: mark articles that appear on the scraped homepage (double-confirmed heroes)
-    if scraped_headlines:
+    # Cross-verify: match articles against scraped homepage, recording editorial position.
+    # scrape_position 1–3 = editorial spotlight (top of page / Top Stories section)
+    # scrape_position 4–8 = standard hero placement
+    # scrape_position 9+  = present on page but below the fold
+    if scraped_pages:
         for sid, arts in all_arts.items():
-            sc_set = scraped_headlines.get(sid, frozenset())
-            if not sc_set: continue
+            sc_list = scraped_pages.get(sid, [])
+            if not sc_list:
+                continue
+            # Build position lookup: normalized_text → page_position
+            sc_pos = {text: pos for text, pos in sc_list}
+            sc_texts = list(sc_pos.keys())
             for art in arts:
                 norm = art["title"].lower()
-                # Fuzzy: check if any scraped headline contains or is contained in the title
-                art["scrape_confirmed"] = any(
-                    norm in h or h in norm or
-                    # word-overlap ≥ 60% as a looser match
-                    (len(norm.split()) >= 4 and
-                     len(set(norm.split()) & set(h.split())) / max(len(norm.split()),1) >= 0.6)
-                    for h in sc_set
-                )
+                matched_pos = None
+                for h in sc_texts:
+                    if (norm in h or h in norm or
+                            (len(norm.split()) >= 4 and
+                             len(set(norm.split()) & set(h.split())) / max(len(norm.split()), 1) >= 0.6)):
+                        matched_pos = sc_pos[h]
+                        break
+                if matched_pos is not None:
+                    art["scrape_confirmed"] = True
+                    art["scrape_position"] = matched_pos
+                else:
+                    art["scrape_confirmed"] = False
 
     print("  Fetching Drudge + Twitter/X + Facebook engagement...")
     drudge_links    = fetch_drudge()
