@@ -47,7 +47,7 @@ SCRAPE_SOURCES = {
 
 SOURCES = [
     # Tier 1 — editorial homepage / top-story feeds where available
-    {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/national",               "lean":"right",        "tier":1},
+    {"id":"foxnews",    "name":"Fox News",          "rss":"https://news.google.com/rss/search?q=site:foxnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":1},
     {"id":"cnn",        "name":"CNN",               "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
@@ -330,41 +330,77 @@ _SITE_NAV_TERMS = {
 }
 
 def fetch_twitter_trends():
-    """Scrape US Twitter/X trending topics from trends24.in."""
+    """Scrape US Twitter/X trending topics.
+    Primary: getdaytrends.com (server-side rendered, reliable on cloud IPs)
+    Fallback: trends24.in
+    """
     global _TWITTER_CACHE
     now = time.time()
     if _TWITTER_CACHE["data"] and now - _TWITTER_CACHE["fetched_at"] < 1800:
         return _TWITTER_CACHE["data"]
     if not HAS_SCRAPE:
         return _TWITTER_CACHE["data"]
-    try:
-        r = requests.get("https://trends24.in/united-states/", timeout=15, headers={
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml',
-            'Accept-Language': 'en-US,en;q=0.9',
-        })
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, 'html.parser')
-        trends = []
-        seen = set()
-        # Target only the first trend card (most current hour) ordered list
-        for card in soup.select('.trend-card'):
-            for li in card.select('ol li a, .trend-card__list li a'):
+
+    hdrs = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
+    def _parse_getdaytrends(html):
+        soup = BeautifulSoup(html, 'html.parser')
+        trends, seen = [], set()
+        # getdaytrends.com: trend names are in <p class="trend-name"> or <span class="trend-name">
+        for el in soup.select('.trend-name, [class*="trend"] p, [class*="trending"] span'):
+            text = el.get_text(strip=True)
+            if not text or len(text) < 2 or len(text) > 80: continue
+            if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
+            seen.add(text.lower())
+            trends.append(text)
+        return trends[:25]
+
+    def _parse_trends24(html):
+        soup = BeautifulSoup(html, 'html.parser')
+        trends, seen = [], set()
+        for card in soup.select('.trend-card, [class*="trend-card"]'):
+            for li in card.select('ol li a, li a'):
                 text = li.get_text(strip=True)
-                if not text or len(text) < 2: continue
-                # Filter out site navigation links that bleed into the scrape
-                if text.lower() in _SITE_NAV_TERMS: continue
-                if text.lower() in seen: continue
+                if not text or len(text) < 2 or len(text) > 80: continue
+                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
                 seen.add(text.lower())
                 trends.append(text)
             if len(trends) >= 25: break
-        if trends:
-            _TWITTER_CACHE = {"data": trends[:25], "fetched_at": now}
-            print(f"  Twitter/X trends: {len(trends[:25])} trends scraped")
-        return _TWITTER_CACHE["data"]
-    except Exception as ex:
-        print(f"  Twitter trends scrape error: {ex}")
-        return _TWITTER_CACHE["data"]
+        # Fallback: any <a> with a hash-like short label inside a list
+        if not trends:
+            for a in soup.select('li a'):
+                text = a.get_text(strip=True)
+                if not text or len(text) < 2 or len(text) > 80: continue
+                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
+                seen.add(text.lower())
+                trends.append(text)
+                if len(trends) >= 25: break
+        return trends[:25]
+
+    sources = [
+        ("https://getdaytrends.com/united-states/", _parse_getdaytrends),
+        ("https://trends24.in/united-states/",      _parse_trends24),
+    ]
+    for url, parser in sources:
+        try:
+            r = requests.get(url, timeout=15, headers=hdrs)
+            r.raise_for_status()
+            trends = parser(r.text)
+            if trends:
+                _TWITTER_CACHE = {"data": trends, "fetched_at": now}
+                print(f"  Twitter/X trends: {len(trends)} trends from {url}")
+                return trends
+            else:
+                print(f"  Twitter/X: 0 trends parsed from {url}, trying next source")
+        except Exception as ex:
+            print(f"  Twitter trends error ({url}): {ex}")
+
+    print("  Twitter/X: all sources failed")
+    return _TWITTER_CACHE["data"]
 
 
 def fetch_reddit_trending():
@@ -442,6 +478,8 @@ def fetch_facebook_engagement(all_arts):
     if not candidates:
         return _FB_CACHE["data"]
 
+    auth_failures = []
+
     def fetch_one(item):
         try:
             r = requests.get(
@@ -449,8 +487,15 @@ def fetch_facebook_engagement(all_arts):
                 timeout=8,
                 headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
             )
+            data = r.json()
+            # Detect OAuth/auth errors — API now requires a token
+            if "error" in data:
+                err_type = data["error"].get("type", "")
+                if err_type in ("OAuthException", "GraphMethodException"):
+                    auth_failures.append(True)
+                return None
             if r.status_code == 200:
-                eng = r.json().get("engagement", {})
+                eng = data.get("engagement", {})
                 total = (eng.get("reaction_count", 0) +
                          eng.get("share_count", 0) +
                          eng.get("comment_count", 0))
@@ -467,16 +512,23 @@ def fetch_facebook_engagement(all_arts):
     try:
         results = []
         with ThreadPoolExecutor(max_workers=12) as ex:
-            futures = [ex.submit(fetch_one, item) for item in candidates]
+            futures = [ex.submit(fetch_one, item) for item in candidates[:20]]
             for f in as_completed(futures):
                 r = f.result()
                 if r:
                     results.append(r)
 
+        # If >half the probes returned auth errors, API requires a token — mark unavailable
+        if len(auth_failures) > len(candidates[:20]) * 0.4:
+            print(f"  Facebook: Graph API requires auth token — engagement unavailable")
+            _FB_CACHE["data"] = [{"__unavailable": True}]
+            _FB_CACHE["fetched_at"] = now
+            return _FB_CACHE["data"]
+
         results.sort(key=lambda x: x["fb_total"], reverse=True)
         top = results[:20]
         _FB_CACHE = {"data": top, "fetched_at": now, "backoff_until": 0}
-        print(f"  Facebook: {len(top)} articles with engagement (of {len(candidates)} checked)")
+        print(f"  Facebook: {len(top)} articles with engagement (of {len(candidates[:20])} checked)")
         return top
     except Exception as ex:
         print(f"  Facebook engagement error: {ex}")
@@ -486,6 +538,8 @@ def fetch_facebook_engagement(all_arts):
 
 def extract_keywords(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
+    # Strip possessives: "trump's" → "trump", "iran's" → "iran"
+    words = [w[:-2] if w.endswith("'s") else w.rstrip("'") for w in words]
     filtered = [w for w in words if w not in STOP_WORDS and len(w)>3]
     proper = [p.lower() for p in re.findall(r'\b[A-Z][a-z]{2,}\b', title) if p.lower() not in STOP_WORDS and len(p)>3]
     seen,result = set(),[]
@@ -1181,7 +1235,11 @@ function fmtFb(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)retu
 function rFb(posts){
   const el=document.getElementById('fl');
   if(!posts||!posts.length){
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement data loading…<br><span style="font-size:11px;margin-top:4px;display:block">Checks article URLs against the Facebook Graph API.<br>Available after first full refresh.</span></div>';
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">No Facebook engagement data yet.<br><span style="font-size:11px;margin-top:4px;display:block">Checking article URLs against the Facebook Graph API.</span></div>';
+    return;
+  }
+  if(posts.length===1&&posts[0].__unavailable){
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">The Graph API now requires an access token.<br>This feature is pending configuration.</span></div>';
     return;
   }
   const SA2={foxnews:'FOX',nypost:'NYP',dailywire:'DW',breitbart:'BB',washtimes:'WT',townhall:'TH',nytimes:'NYT',nbcnews:'NBC',dailymail:'DM',foxbusiness:'FOXB',skynews:'SKY',thehill:'HILL'};
