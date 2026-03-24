@@ -165,7 +165,7 @@ def fetch_source(source):
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-        for i, e in enumerate(feed.entries[:12]):
+        for i, e in enumerate(feed.entries[:20]):
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
             # Reject articles older than 48 hours — stale stories pollute clustering
@@ -769,7 +769,15 @@ def refresh_data():
     srcs = {}
     for s in SOURCES:
         sid = s["id"]; li = LEAN.get(s["lean"],{"label":s["lean"],"color":"#374151"})
-        srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":all_arts.get(sid,[])[:8],"status":"ok" if sid in all_arts else "error"}
+        raw = all_arts.get(sid, [])
+        # Sort so editorially-prominent articles (scrape_position set) float to the top,
+        # ordered by their homepage position. Unmatched RSS articles follow in feed order.
+        # This ensures the source card matches what editors are actually leading with on their
+        # homepage, not just the newest-published articles from the RSS feed.
+        editorial = sorted([a for a in raw if a.get("scrape_position")], key=lambda a: a["scrape_position"])
+        rss_only  = [a for a in raw if not a.get("scrape_position")]
+        display   = (editorial + rss_only)[:8]
+        srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error"}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,
