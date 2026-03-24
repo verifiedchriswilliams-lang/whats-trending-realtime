@@ -776,7 +776,7 @@ def refresh_data():
         # homepage, not just the newest-published articles from the RSS feed.
         editorial = sorted([a for a in raw if a.get("scrape_position")], key=lambda a: a["scrape_position"])
         rss_only  = [a for a in raw if not a.get("scrape_position")]
-        display   = (editorial + rss_only)[:8]
+        display   = (editorial + rss_only)[:10]
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error"}
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
@@ -976,9 +976,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .sbs-hl a:hover{color:var(--red);text-decoration:underline}
 .sbs-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sbs-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px}
-.sbs-dw-yes{background:rgba(21,128,61,.1);color:#15803D}
-.sbs-dw-gap{background:rgba(186,3,42,.08);color:var(--red);animation:gp 2s infinite}
-@keyframes gp{0%,100%{opacity:1}50%{opacity:.5}}
 .sbs-top{background:var(--surface-top);color:var(--navy-d)}
 </style></head><body>
 
@@ -1110,9 +1107,7 @@ function renderSBS(d){
   const dwArts=((d.sources||{}).dailywire||{}).articles||[];
   const rk=i=>(i<9?'0':'')+(i+1);
   document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
-    const dwOn=(t.sources||[]).includes('dailywire');
-    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes">\u2713 DW</span>':'<span class="sbs-badge sbs-dw-gap">\u25cf Gap</span>';
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span></div></div></div>';
   }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
   document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
     const isTop=a.scrape_position&&a.scrape_position<=5;
