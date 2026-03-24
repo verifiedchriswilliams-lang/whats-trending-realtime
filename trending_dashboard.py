@@ -480,10 +480,12 @@ def fetch_facebook_engagement(all_arts):
 
     auth_failures = []
 
+    FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
+
     def fetch_one(item):
         try:
             r = requests.get(
-                f"https://graph.facebook.com/?id={item['url']}&fields=engagement",
+                f"https://graph.facebook.com/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
                 timeout=8,
                 headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
             )
