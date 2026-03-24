@@ -976,6 +976,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .sbs-hl a:hover{color:var(--red);text-decoration:underline}
 .sbs-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .sbs-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px}
+.sbs-dw-yes{background:rgba(21,128,61,.1);color:#15803D}
 .sbs-top{background:var(--surface-top);color:var(--navy-d)}
 </style></head><body>
 
@@ -1107,7 +1108,9 @@ function renderSBS(d){
   const dwArts=((d.sources||{}).dailywire||{}).articles||[];
   const rk=i=>(i<9?'0':'')+(i+1);
   document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span></div></div></div>';
+    const dwOn=(t.sources||[]).includes('dailywire')||t.dw_covered;
+    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes">\u2713 DW</span>':'';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
   }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
   document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
     const isTop=a.scrape_position&&a.scrape_position<=5;
