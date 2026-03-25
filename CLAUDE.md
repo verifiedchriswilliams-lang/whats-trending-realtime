@@ -59,7 +59,9 @@ The key advantage: two articles must share a **pattern of words**, not just one,
 - `SIMILARITY_THRESHOLD = 0.28` — raise to tighten clusters (fewer false merges), lower to loosen (catches more related stories)
 - `STOP_WORDS` — high-frequency political/news words that would cause false merges if left in the TF-IDF vocabulary. Currently includes: trump, president, american, united, states, says, told, report, new, first, could, would, one, year, people, government, country, also, last, week, two, day, three, days, ago, news, just, back, make, time, according, say, still, us, war, world, think, like, big, old, former, just, top, high, state, federal, national, second, city, million, billion, big, great, major, leading, meet, talks, deal, amid, amid, call, push, move, take, help, plan, after, amid, despite, over, under, house, senate, congress, parliament, lawmakers, republican, democrat, gop, bipartisan, party, bill, vote, law, act, policy, administration, officials, white
 
-**Credible source filter:** Only counts a source toward `source_count` if the article is either scrape-confirmed (appeared on homepage) OR less than 4 hours old. This prevents stale Google News RSS articles (surfaced by relevance, not recency) from inflating source counts for stories outlets have moved on from.
+**Credible source filter:** Only counts a source toward `source_count` if the article is either scrape-confirmed (appeared on homepage) OR less than 4 hours old.
+
+**Scrape position cap (`MAX_VALID_SCRAPE_POS = 80`):** An article is only marked `scrape_confirmed=True` if its matched scrape position is ≤ 80. JS-rendered sites like Fox News cannot be scraped by BeautifulSoup — instead of returning headlines, the scraper picks up static sidebar/footer anchor links at positions 90–150+. Without this cap these false matches would inflate heat scores as though the stories were editorial homepage picks. All legitimate sources confirm within positions 1–75. This prevents stale Google News RSS articles (surfaced by relevance, not recency) from inflating source counts for stories outlets have moved on from.
 
 ### Homepage Scraping (Cross-Verification)
 `scrape_homepage(sid, url)` fetches each source's actual homepage and extracts all `<h1>/<h2>/<h3>` text plus prominent anchor link text. Runs concurrently with RSS fetch (20-worker ThreadPoolExecutor).
@@ -109,12 +111,16 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 |---|---|---|---|
 | breitbart | Breitbart | breitbart.com/feed | Right |
 | skynews | Sky News | skynews/home | Center |
-| thehill | The Hill | thehill/all-news | Center |
+| thehill | The Hill | thehill/homenews/feed | Center |
 | washtimes | Washington Times | washingtontimes/news | Right |
-| foxbusiness | Fox Business | foxbusiness/latest | Right |
-| townhall | Townhall | townhall.com/rss | Right |
+| foxbusiness | Fox Business | Google News RSS (site:foxbusiness.com) | Right |
+| townhall | Townhall | townhall.com/rss/tipsheet | Right |
 
 **Per-source limit:** 20 articles from RSS. Scraped homepage adds cross-verification layer and reorders source card to show editorial picks first.
+
+**Note on The Hill:** Previously used `thehill.com/feed/` which mixes news, opinion, and tipsheet posts in reverse-chronological order — tipsheets frequently claimed the top RSS positions (fp=0,1) over real news stories. Switched to `thehill.com/homenews/feed/` which is news-only and better reflects editorial priorities.
+
+**Note on Fox Business:** Previously used `feeds.foxbusiness.com/foxbusiness/latest` (raw chronological) — the most-recently published articles became RSS heroes regardless of editorial prominence. Switched to Google News RSS (site:foxbusiness.com) which ranks by engagement/prominence, consistent with how we handle Fox News, CNN, AP, and Reuters.
 
 ---
 
@@ -192,9 +198,29 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 
 ## Known Issues
 
+### Per-Source Data Quality (from full QA regression, March 2026)
+
+| Source | RSS Quality | Scrape Quality | Notes |
+|---|---|---|---|
+| Fox News | ⚠️ Moderate | ❌ JS-rendered | Google News RSS gives engagement-ranked content, not editorial order. Fox homepage is React-rendered — BeautifulSoup scraper can't see headlines. MAX_VALID_SCRAPE_POS=80 blocks false-positive footer link matches (pos 90-150). |
+| CNN | ✅ Good | ✅ Good | Google News RSS + scrape positions 24-75. Ordering may not exactly match CNN's editorial priority (#1 story, but real CNN articles. |
+| NY Times | ✅ Excellent | ✅ Excellent | Direct homepage RSS feed + tight scrape positions 11-44. Best source setup. |
+| Daily Mail | ✅ Good | ⚠️ Partial | Only ~20% of RSS articles scrape-confirmed because /news/index.rss is the news section but Daily Mail homepage is dominated by lifestyle/celebrity. Expected behavior. |
+| NY Post | ✅ Good | ✅ Good | Direct RSS + scrape positions 7-90. |
+| AP News | ✅ Good | ✅ Good | Google News RSS + scrape positions 32-111. May miss some AP top stories that Google doesn't surface. |
+| Reuters | ⚠️ Moderate | ❌ Blocked | Reuters homepage blocks scraping. Google News RSS articles unverified — pass on age alone. |
+| NBC News | ✅ Excellent | ✅ Excellent | Direct RSS + very tight scrape positions 2-13. Best scraper performance. |
+| Daily Wire | ✅ Excellent | ✅ Excellent | Direct RSS + topStoryTextContainer targeting captures actual editorial Top Stories (positions 1-5). |
+| Breitbart | ✅ Good | ✅ Good | Direct RSS + scrape positions 1-51. |
+| Sky News | ✅ Good | ✅ Good | Direct RSS (home feed) + scrape positions 16-66. |
+| The Hill | ✅ Good | ❌ JS-rendered | Switched to homenews/feed/ (news-only). Homepage is JS-rendered, so 0 scrape confirmations expected. |
+| Washington Times | ✅ Excellent | ✅ Excellent | Direct RSS + scrape positions 4-37. |
+| Fox Business | ✅ Good | ❌ JS-rendered | Switched to Google News RSS. Homepage is JS-rendered like Fox News — 0 scrape confirmations expected. |
+| Townhall | ✅ Good | ✅ Good | Direct RSS (tipsheet) + scrape positions 2-26. |
+
+### Other Known Issues
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
 - **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
-- **Homepage scraping blocks:** Some sources (NYT, Reuters, Fox) may return 403s or JS-render content — scraping degrades gracefully (empty list returned, no crash). Fox News homepage is JS-rendered; Google News RSS compensates for editorial alignment.
 - **Twitter/X trends:** getdaytrends.com and trends24.in may block cloud server IPs intermittently. Shows "unavailable" gracefully when both fail.
 - **Facebook Graph API:** App is currently in Development mode ("no use cases") which may impose tighter rate limits. Rate limit errors (#4) trigger a 2-hour backoff. Token is hardcoded — should be moved to Railway env var. If the app is promoted to Live mode at developers.facebook.com, rate limits increase significantly.
 - **SIMILARITY_THRESHOLD tuning:** 0.28 is the current setting. After a full day of news cycles, this may need adjustment — raise if unrelated stories are still merging, lower if related stories are splitting into separate clusters.
