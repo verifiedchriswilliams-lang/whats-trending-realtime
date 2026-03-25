@@ -59,9 +59,9 @@ SOURCES = [
     # Tier 2 — strong opinion/political feeds
     {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
     {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
-    {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/feed/",                                "lean":"center",       "tier":2},
+    {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/homenews/feed/",                        "lean":"center",       "tier":2},
     {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
-    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://feeds.foxbusiness.com/foxbusiness/latest",         "lean":"right",        "tier":2},
+    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://news.google.com/rss/search?q=site:foxbusiness.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
     {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss/tipsheet",                        "lean":"right",        "tier":2},
 ]
 
@@ -595,6 +595,13 @@ def fetch_facebook_engagement(all_arts):
 
 SIMILARITY_THRESHOLD = 0.28   # Tune: higher = tighter clusters, fewer false merges
 
+# Maximum scrape position to count as scrape-confirmed.
+# Pages like Fox News (JS-rendered) return anchor links from sidebars/footers at positions
+# 90–150+, which are NOT real editorial picks. Capping at 80 blocks these false positives
+# while keeping all legitimate scrape hits (even long pages like CNN rarely exceed pos 75
+# for meaningful above-the-fold content).
+MAX_VALID_SCRAPE_POS = 80
+
 def _tfidf_tokenize(title):
     """Tokenize a headline for TF-IDF clustering (reuses STOP_WORDS)."""
     words = re.findall(r"[A-Za-z']+", title.lower())
@@ -912,8 +919,11 @@ def refresh_data():
                         matched_pos = sc_pos[h]
                         break
                 if matched_pos is not None:
-                    art["scrape_confirmed"] = True
                     art["scrape_position"] = matched_pos
+                    # Only mark confirmed if the position is within the valid editorial
+                    # zone. JS-rendered sites (Fox News, Fox Business) return sidebar/footer
+                    # anchor links at positions 90–150+ — these are NOT editorial picks.
+                    art["scrape_confirmed"] = matched_pos <= MAX_VALID_SCRAPE_POS
                 else:
                     art["scrape_confirmed"] = False
 
