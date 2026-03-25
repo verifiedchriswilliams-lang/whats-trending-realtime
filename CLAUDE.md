@@ -61,7 +61,7 @@ The key advantage: two articles must share a **pattern of words**, not just one,
 
 **Credible source filter:** Only counts a source toward `source_count` if the article is either scrape-confirmed (appeared on homepage) OR less than 4 hours old.
 
-**Scrape position cap (`MAX_VALID_SCRAPE_POS = 80`):** An article is only marked `scrape_confirmed=True` if its matched scrape position is ≤ 80. JS-rendered sites like Fox News cannot be scraped by BeautifulSoup — instead of returning headlines, the scraper picks up static sidebar/footer anchor links at positions 90–150+. Without this cap these false matches would inflate heat scores as though the stories were editorial homepage picks. All legitimate sources confirm within positions 1–75. This prevents stale Google News RSS articles (surfaced by relevance, not recency) from inflating source counts for stories outlets have moved on from.
+**Scrape position cap (`MAX_VALID_SCRAPE_POS = 80`):** An article is only marked `scrape_confirmed=True` if its matched scrape position is ≤ 80. Fox News's raw HTML (server-side rendered) is fully parseable by BeautifulSoup — but the anchor link fallback sweep picks up static sidebar/footer links at positions 90–150+. The Fox-specific targeted scraper (`div.big-top`, `div.thumbs-2-7`) ensures editorial headlines appear at positions 1-10, and the cap blocks the stale footer matches that follow. All legitimate editorial content from any source confirms within positions 1–75. This prevents stale Google News RSS articles (surfaced by relevance, not recency) from inflating source counts for stories outlets have moved on from.
 
 ### Homepage Scraping (Cross-Verification)
 `scrape_homepage(sid, url)` fetches each source's actual homepage and extracts all `<h1>/<h2>/<h3>` text plus prominent anchor link text. Runs concurrently with RSS fetch (20-worker ThreadPoolExecutor).
@@ -94,7 +94,7 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 ### Tier 1 — Editorial/Homepage Feeds
 | ID | Name | RSS Feed | Lean |
 |---|---|---|---|
-| foxnews | Fox News | Google News RSS (site:foxnews.com) | Right |
+| foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right |
 | cnn | CNN | Google News RSS (site:cnn.com) | Left |
 | nytimes | New York Times | nyt/HomePage | Left |
 | dailymail | Daily Mail | news/index | Center-Right |
@@ -104,7 +104,7 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 | nbcnews | NBC News | nbcnews/public/news | Left |
 | dailywire | Daily Wire | dailywire.com/rss | Right |
 
-**Note on Fox News:** Previously used `feeds.foxnews.com/foxnews/national` which pulled the crime beat rather than homepage editorial stories. Switched to Google News RSS to surface Fox's most prominent editorial coverage, matching their actual homepage.
+**Note on Fox News:** History of feed changes: originally used `feeds.foxnews.com/foxnews/national` (crime beat only), then switched to Google News RSS (site:foxnews.com) to get engagement-ranked content. Google News RSS was dropped after QA confirmed it fails to surface Fox's editorially pinned "LIVE UPDATES" hero stories (published once, updated in-place — never refreshed to position 0 in a chronological feed). Final fix: switched back to `feeds.foxnews.com/foxnews/latest` with a 50-article pool (`rss_limit: 50` in source config) to maximize the chance of catching pinned hero stories regardless of publish age. Paired with Fox-specific targeted scraping of `div.big-top` (hero) and `div.thumbs-2-7` (editorial grid) so cross-verification correctly maps scraped editorial positions 1-10 to the right RSS articles. Fox IS server-side rendered — BeautifulSoup can parse the full editorial layout from raw HTML without JavaScript.
 
 ### Tier 2 — Opinion/Political Feeds
 | ID | Name | RSS Feed | Lean |
@@ -156,7 +156,7 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 ### Social Velocity sidebar
 - **Drudge** tab: top headline links scraped from Drudge Report
 - **Twitter** tab: US trending topics. Primary source: getdaytrends.com (server-rendered). Fallback: trends24.in. Both may be intermittent from cloud IPs.
-- **Facebook** tab: top articles by engagement (reactions + shares + comments) via Facebook Graph API. Skips Google News proxy sources (CNN/AP/Reuters/Fox) since their URLs are google.com redirects. Candidates sorted oldest-first so articles have had time to accumulate shares. Threshold: ≥ 10 total engagement. Cache: 60 minutes. Rate-limit backoff: 2 hours.
+- **Facebook** tab: top articles by engagement (reactions + shares + comments) via Facebook Graph API. Skips Google News proxy sources (CNN/AP/Reuters) since their URLs are google.com redirects. Fox News is included now that it uses the direct `feeds.foxnews.com` feed (direct foxnews.com URLs). Candidates sorted oldest-first so articles have had time to accumulate shares. Threshold: ≥ 10 total engagement. Cache: 60 minutes. Rate-limit backoff: 2 hours.
 
 ### Google Trends US sidebar
 - Shows top 25 US search trends via official Google Trends RSS feed
@@ -202,7 +202,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 
 | Source | RSS Quality | Scrape Quality | Notes |
 |---|---|---|---|
-| Fox News | ⚠️ Moderate | ❌ JS-rendered | Google News RSS gives engagement-ranked content, not editorial order. Fox homepage is React-rendered — BeautifulSoup scraper can't see headlines. MAX_VALID_SCRAPE_POS=80 blocks false-positive footer link matches (pos 90-150). |
+| Fox News | ✅ Good | ✅ Good | Direct RSS (feeds.foxnews.com/foxnews/latest, 50 articles). Fox IS server-side rendered — BeautifulSoup parses the full editorial layout. Targeted scraper hits `div.big-top` (hero) + `div.thumbs-2-7` (editorial grid) first, so positions 1-10 are Fox's actual top stories. MAX_VALID_SCRAPE_POS=80 blocks footer anchor links (pos 90-150). |
 | CNN | ✅ Good | ✅ Good | Google News RSS + scrape positions 24-75. Ordering may not exactly match CNN's editorial priority (#1 story, but real CNN articles. |
 | NY Times | ✅ Excellent | ✅ Excellent | Direct homepage RSS feed + tight scrape positions 11-44. Best source setup. |
 | Daily Mail | ✅ Good | ⚠️ Partial | Only ~20% of RSS articles scrape-confirmed because /news/index.rss is the news section but Daily Mail homepage is dominated by lifestyle/celebrity. Expected behavior. |
@@ -236,7 +236,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 - [x] **Last Hour tab** — all articles from last 60 min, newest first, with signal badges and Just Published pulsing indicator.
 - [x] **Facebook engagement signal** — Graph API with app token, top articles by reactions+shares+comments. Oldest-first candidate sorting so articles have had time to accumulate shares.
 - [x] **Possessive stripping + ambient reference filter** — cleaner clustering (legacy from keyword-seed era, some logic still relevant).
-- [x] **Fox News feed fix** — switched from crime-beat RSS to Google News editorial alignment.
+- [x] **Fox News feed fix** — switched from crime-beat `foxnews/national` → Google News RSS → `feeds.foxnews.com/foxnews/latest` (50 articles). Final fix adds Fox-specific targeted scraping of `div.big-top` + `div.thumbs-2-7` to lock editorial positions 1-10 to Fox's actual homepage order. Fox removed from Facebook SKIP_SOURCES (now has direct URLs).
 - [x] **TF-IDF cosine similarity clustering** — replaced keyword-seed approach entirely. No more single-word false merges. `SIMILARITY_THRESHOLD = 0.28`.
 - [x] **Velocity sparklines (Jaccard matching)** — `_heat_history` keyed by frozenset(source_ids) with ≥33% Jaccard overlap for story identity across refreshes. Real 4-point spark curve.
 - [x] **Stale source credibility filter** — sources only counted if article is <4h old OR scrape-confirmed. Prevents stale Google News articles from inflating source chips.

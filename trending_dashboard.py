@@ -47,7 +47,7 @@ SCRAPE_SOURCES = {
 
 SOURCES = [
     # Tier 1 — editorial homepage / top-story feeds where available
-    {"id":"foxnews",    "name":"Fox News",          "rss":"https://news.google.com/rss/search?q=site:foxnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":1},
+    {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/latest", "lean":"right", "tier":1, "rss_limit":50},
     {"id":"cnn",        "name":"CNN",               "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
@@ -197,7 +197,8 @@ def fetch_source(source):
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
-        for i, e in enumerate(feed.entries[:20]):
+        rss_limit = source.get("rss_limit", 20)
+        for i, e in enumerate(feed.entries[:rss_limit]):
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
             # Reject articles older than 48 hours — stale stories pollute clustering
@@ -293,6 +294,27 @@ def scrape_homepage(sid, url):
                 h3 = div.find('h3')
                 if h3:
                     add(h3.get_text(separator=' ', strip=True))
+
+        # --- Fox News: target editorial sections FIRST to ensure correct hero order ---
+        # Fox is server-side rendered — raw HTML contains the actual editorial layout.
+        # div.big-top = the hero/lead story (position 1 on the page)
+        # div.thumbs-2-7 = the main editorial story grid (positions 2-10)
+        # Scraping these first ensures Fox's actual editorial picks get positions 1-10
+        # in our scraped list, so cross-verification correctly marks them as hero/spotlight.
+        # Without this, the generic h1/h2/h3 scan picks up nav/header text before stories.
+        if sid == 'foxnews':
+            big_top = soup.find('div', class_='big-top')
+            if big_top:
+                for h in big_top.find_all(['h1', 'h2', 'h3']):
+                    add(h.get_text(separator=' ', strip=True))
+            thumbs = soup.find('div', class_='thumbs-2-7')
+            if thumbs:
+                for h in thumbs.find_all(['h1', 'h2', 'h3']):
+                    add(h.get_text(separator=' ', strip=True))
+            # Also check collection-3-articles section (below-the-fold editorial grid)
+            for div in soup.find_all('div', class_=lambda c: c and 'collection-article' in c):
+                for h in div.find_all(['h2', 'h3']):
+                    add(h.get_text(separator=' ', strip=True))
 
         # --- All sources: h1/h2/h3 in document order ---
         for tag in soup.find_all(['h1', 'h2', 'h3']):
@@ -480,7 +502,8 @@ def fetch_facebook_engagement(all_arts):
     via the public Facebook Graph API URL endpoint — no API key required.
     Best signal for which stories are catching fire with the conservative Facebook audience.
 
-    Skips Google News proxy sources (cnn, ap, reuters) since their URLs are redirects.
+    Skips Google News proxy sources (cnn, ap, reuters) since their URLs are google.com redirects.
+    Fox News was previously skipped for the same reason but switched to a direct RSS feed.
     Fetches engagement for direct article URLs from all other sources concurrently.
     Falls back to cached data on error with a 1-hour backoff."""
     global _FB_CACHE
@@ -493,7 +516,9 @@ def fetch_facebook_engagement(all_arts):
         return _FB_CACHE["data"]
 
     # Skip Google News proxy sources — their URLs are google.com redirects
-    SKIP_SOURCES = {"cnn", "ap", "reuters", "foxnews"}
+    # Note: foxnews was removed from this list after switching to feeds.foxnews.com/foxnews/latest
+    # which yields direct foxnews.com URLs suitable for Facebook engagement lookup.
+    SKIP_SOURCES = {"cnn", "ap", "reuters"}
     candidates = []
     for sid, arts in all_arts.items():
         if sid in SKIP_SOURCES:
