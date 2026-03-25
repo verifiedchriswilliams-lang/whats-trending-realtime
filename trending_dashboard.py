@@ -167,7 +167,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -956,10 +956,50 @@ def refresh_data():
         display   = (editorial + rss_only)[:10]
         homepage = SCRAPE_SOURCES.get(sid, "")
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error","homepage":homepage}
+    # ── Last Hour feed ────────────────────────────────────────────────────────
+    # Collect every article published in the last 60 minutes across all sources,
+    # sorted newest-first. Annotate with cluster_sources so the UI can show a
+    # "X outlets" cross-signal badge when a breaking story is already clustering.
+    lh_now = datetime.now(timezone.utc)
+    lh_cutoff = lh_now - timedelta(hours=1)
+    # Build title → cluster source count lookup from trending topics
+    title_to_cluster_srcs = {}
+    for t in topics:
+        n = len(t.get("sources", []))
+        for a in t.get("articles", []):
+            title_to_cluster_srcs[a.get("title", "")] = n
+    last_hour = []
+    for s in SOURCES:
+        sid = s["id"]
+        li = LEAN.get(s.get("lean","center"), {"label":"Center","color":"#374151"})
+        for art in all_arts.get(sid, []):
+            pts = art.get("pub_ts")
+            if not pts:
+                continue
+            try:
+                pub = datetime.fromisoformat(pts)
+                if pub < lh_cutoff:
+                    continue
+                age_min = max(0, int((lh_now - pub).total_seconds() / 60))
+                last_hour.append({
+                    "source_id":   sid,
+                    "source_name": s["name"],
+                    "lean_color":  li["color"],
+                    "lean_label":  li["label"],
+                    "title":       art.get("title", ""),
+                    "link":        art.get("link", ""),
+                    "pub_ts":      pts,
+                    "age_minutes": age_min,
+                    "cluster_sources": title_to_cluster_srcs.get(art.get("title",""), 0),
+                })
+            except Exception:
+                continue
+    last_hour.sort(key=lambda x: x["pub_ts"], reverse=True)
+
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,
-                           "sources_live":len(all_arts),"loading":False})
+                           "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
 def bg_loop(interval=1800):
@@ -1135,6 +1175,27 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 @media(max-width:1024px){.sidebar{display:none}.main{margin-left:0}}
 @media(max-width:900px){.cgrid{grid-template-columns:1fr}.tb-nav{display:none}}
+/* ── Last Hour tab ─────────────────────────────────────────────────────── */
+.lh-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none;max-width:900px}
+.lh-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
+.lh-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
+.lh-hdr p{font-size:12px;color:var(--ink-l);margin:0}
+.lh-count{font-size:11px;font-weight:700;background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;margin-left:4px;vertical-align:middle}
+.lh-item{padding:11px 0;border-bottom:1px solid var(--surface-low);display:flex;flex-direction:column;gap:4px}
+.lh-item:last-child{border-bottom:none}
+.lh-eyebrow{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.lh-src{padding:2px 6px;border-radius:3px;color:#fff;font-size:9px;font-weight:800;letter-spacing:.04em}
+.lh-time{font-size:10px;color:var(--ink-l)}
+.lh-hl{font-family:'Newsreader',Georgia,serif;font-size:15px;line-height:1.45;color:var(--ink)}
+.lh-hl a{color:inherit;text-decoration:none}
+.lh-hl a:hover{color:var(--red)}
+.lh-fresh{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.06em}
+.lh-fresh-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1.4s infinite}
+.lh-signal{display:inline-flex;align-items:center;font-size:9px;font-weight:700;background:var(--navy);color:#fff;border-radius:3px;padding:2px 6px;letter-spacing:.04em}
+.lh-empty{padding:40px 0;text-align:center;color:var(--ink-l);font-size:13px}
+.lh-section-hdr{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-l);padding:14px 0 4px;border-top:2px solid var(--surface-top);margin-top:4px}
+.lh-section-hdr:first-child{border-top:none;padding-top:0}
+@media(max-width:1024px){.lh-page{margin-left:0}}
 
 /* SIDE BY SIDE PAGE */
 .sbs-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none}
@@ -1167,6 +1228,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <nav class="tb-nav">
       <a href="#" class="tnav act" onclick="switchPage('dash');return false">Dashboard</a>
       <a href="#" class="tnav" onclick="switchPage('sbs');return false">Side by Side</a>
+      <a href="#" class="tnav" onclick="switchPage('lh');return false">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></a>
     </nav>
   </div>
   <div class="tb-right">
@@ -1266,6 +1328,14 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   </div>
 </div>
 
+<div class="lh-page" id="lh-page">
+  <div class="lh-hdr">
+    <h2>Last Hour</h2>
+    <p>Every article published across all 15 outlets in the past 60 minutes · newest first</p>
+  </div>
+  <div id="lh-feed"><div class="lh-empty">Loading…</div></div>
+</div>
+
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
@@ -1274,11 +1344,48 @@ const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg){
   _page=pg;
-  const isDash=pg==='dash';
-  document.querySelector('.main').style.display=isDash?'block':'none';
-  document.getElementById('sbs-page').style.display=isDash?'none':'block';
-  document.querySelectorAll('.tnav').forEach((a,i)=>a.classList.toggle('act',['dash','sbs'][i]===pg));
+  document.querySelector('.main').style.display=pg==='dash'?'block':'none';
+  document.getElementById('sbs-page').style.display=pg==='sbs'?'block':'none';
+  document.getElementById('lh-page').style.display=pg==='lh'?'block':'none';
+  document.querySelectorAll('.tnav').forEach((a,i)=>a.classList.toggle('act',['dash','sbs','lh'][i]===pg));
   if(pg==='sbs'&&_lastData)renderSBS(_lastData);
+  if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
+}
+// ── Last Hour render ───────────────────────────────────────────────────────
+function rLH(arts){
+  const el=document.getElementById('lh-feed');
+  if(!arts||!arts.length){el.innerHTML='<div class="lh-empty">No articles published in the last hour yet.<br><span style="font-size:11px;margin-top:4px;display:block">Check back after the next refresh cycle.</span></div>';return;}
+  // Update badge
+  const badge=document.getElementById('lh-badge');
+  badge.textContent=arts.length;badge.style.display='';
+  // Split into two buckets: just published (< 15 min) and earlier (15–60 min)
+  const fresh=arts.filter(a=>a.age_minutes<15);
+  const older=arts.filter(a=>a.age_minutes>=15);
+  function renderItem(a){
+    const freshMark=a.age_minutes<15
+      ?'<span class="lh-fresh"><span class="lh-fresh-dot"></span>Just now</span> '
+      :'';
+    const signal=a.cluster_sources>=2
+      ?'<span class="lh-signal" title="Already clustering — '+a.cluster_sources+' outlets covering this story on the Dashboard">\u26a1 '+a.cluster_sources+' outlets</span> '
+      :'';
+    const mins=a.age_minutes<1?'<1m ago':a.age_minutes+'m ago';
+    return '<div class="lh-item">'
+      +'<div class="lh-eyebrow"><span class="lh-src" style="background:'+e(a.lean_color)+'">'+e(a.source_name)+'</span>'
+      +'<span class="lh-time">'+mins+'</span>'
+      +freshMark+signal+'</div>'
+      +'<div class="lh-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>'
+      +'</div>';
+  }
+  let html='';
+  if(fresh.length){
+    html+='<div class="lh-section-hdr">\u26a1 Just Published — last 15 minutes ('+fresh.length+')</div>';
+    html+=fresh.map(renderItem).join('');
+  }
+  if(older.length){
+    html+='<div class="lh-section-hdr">Earlier this hour ('+older.length+')</div>';
+    html+=older.map(renderItem).join('');
+  }
+  el.innerHTML=html;
 }
 function renderSBS(d){
   const topics=(d.trending_topics||[]).slice(0,10);
@@ -1440,6 +1547,11 @@ async function ld(){
       _lastTs=d.last_updated;
       rT(d.trending_topics);rFb(d.facebook_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
       if(_page==='sbs')renderSBS(d);
+      // Always update LH badge count; re-render feed if on that tab
+      const lhArts=d.last_hour||[];
+      const lhBadge=document.getElementById('lh-badge');
+      if(lhArts.length){lhBadge.textContent=lhArts.length;lhBadge.style.display='';}else{lhBadge.style.display='none';}
+      if(_page==='lh')rLH(lhArts);
     }
   }catch(ex){setTimeout(ld,5000)}
 }
