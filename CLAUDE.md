@@ -42,18 +42,24 @@ CLAUDE.md               ← this file
 - `double_confirmed` = outlets where story is BOTH RSS position 0–1 AND scraped from homepage
 - `editorial_spotlight` = outlets where scraped homepage position is 1–3 (editors are actively leading with this story; for Daily Wire this maps to their "Top Stories" section)
 
-### Story Clustering (IMPORTANT — do not revert this logic)
-Stories are clustered by **specific keywords only** — words appearing in more than 10% of all articles are filtered out as "generic connective tissue" (e.g. "trump", "president", "american"). This is intentional. Without this filter, a single mega-cluster forms around common words, making the tool useless for editorial signal.
+### Story Clustering — TF-IDF Cosine Similarity (IMPORTANT — do not revert this logic)
 
-The threshold: `max_freq = max(4, len(flat) * 0.10)`
+Stories are clustered using **TF-IDF cosine similarity**, not keyword seeds. This replaced the old keyword-frequency approach after it proved unable to prevent false merges (e.g. "Delta/Congress" merging unrelated stories that shared a common word).
 
-A story clusters around a keyword if:
-- The keyword appears in ≤10% of all articles AND
-- At least 2 sources cover it OR 3+ articles mention it
+**How it works:**
+1. Each article title is tokenized and stopwords are removed (see `STOP_WORDS` set)
+2. A TF-IDF sparse vector is built for all article titles in the corpus
+3. Articles are greedily assigned to the nearest existing cluster centroid if cosine similarity ≥ `SIMILARITY_THRESHOLD = 0.28`
+4. If no cluster exceeds the threshold, a new cluster is seeded
+5. Cluster centroids are updated online (running mean) as new articles join
 
-**Possessive stripping:** `extract_keywords()` strips `'s` from tokens before processing — "trump's" → "trump", "iran's" → "iran" — so possessives don't seed their own spurious clusters.
+The key advantage: two articles must share a **pattern of words**, not just one, to exceed the threshold. Single shared words rarely cross it.
 
-**Ambient reference filter:** Keywords spanning 5+ distinct sources with zero secondary keyword overlap are geopolitical/celebrity references (e.g. "israel" during an active war), not specific story anchors. These are rejected even if they pass the frequency filter. Requires at least 1 secondary shared keyword when seed spans 5+ sources.
+**Constants to tune:**
+- `SIMILARITY_THRESHOLD = 0.28` — raise to tighten clusters (fewer false merges), lower to loosen (catches more related stories)
+- `STOP_WORDS` — high-frequency political/news words that would cause false merges if left in the TF-IDF vocabulary. Currently includes: trump, president, american, united, states, says, told, report, new, first, could, would, one, year, people, government, country, also, last, week, two, day, three, days, ago, news, just, back, make, time, according, say, still, us, war, world, think, like, big, old, former, just, top, high, state, federal, national, second, city, million, billion, big, great, major, leading, meet, talks, deal, amid, amid, call, push, move, take, help, plan, after, amid, despite, over, under, house, senate, congress, parliament, lawmakers, republican, democrat, gop, bipartisan, party, bill, vote, law, act, policy, administration, officials, white
+
+**Credible source filter:** Only counts a source toward `source_count` if the article is either scrape-confirmed (appeared on homepage) OR less than 4 hours old. This prevents stale Google News RSS articles (surfaced by relevance, not recency) from inflating source counts for stories outlets have moved on from.
 
 ### Homepage Scraping (Cross-Verification)
 `scrape_homepage(sid, url)` fetches each source's actual homepage and extracts all `<h1>/<h2>/<h3>` text plus prominent anchor link text. Runs concurrently with RSS fetch (20-worker ThreadPoolExecutor).
@@ -68,6 +74,13 @@ Matched articles are marked `scrape_confirmed=True`. In the expanded article vie
 - `★✓` = double-confirmed (both RSS position AND scraped homepage)
 
 **Source card ordering:** Editorial picks (scrape_position set) appear first, then RSS chronological. For Daily Wire, `topStoryTextContainer` h3s are targeted first to capture editorial Top Stories in correct order.
+
+### Velocity Sparklines
+Each trending topic's heat trajectory is tracked across refreshes using **Jaccard source-set matching** — a cluster is considered "the same story" across cycles if the set of source IDs covering it overlaps by ≥ 33% with a previously seen cluster.
+
+This replaced a naive approach that keyed history by cluster label text, which broke every cycle because TF-IDF cluster labels change as new articles arrive.
+
+`_heat_history = {}` stores up to 4 readings per frozenset(source_ids). The `spark()` JS function draws a real multi-point curve from this array.
 
 ### Daily Wire Alignment Score
 Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL keywords from ALL cluster articles vs DW's RSS (not just the cluster label). Results shown as A/B/C/D grade + per-topic ✓/✗ breakdown.
@@ -107,27 +120,37 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 
 ## UI Features
 
-### Top Trending Topics panel (Dashboard tab)
+### Dashboard tab — Top Trending Topics
 - Ranked by heat score (highest first)
-- **"Lead at X outlets"** navy badge: story was hero at that many outlets (RSS + scrape verified)
+- **"Lead at X outlets"** navy badge: story was hero at that many outlets (RSS + scrape verified). Hover tooltip lists the outlets.
 - **"● DW Gap"** pulsing red badge: story is in top 10 but Daily Wire isn't covering it
 - Source dots: colored by political lean, larger with outline ring = hero/lead position
 - Green ▲ / Red ▼ delta badge: trajectory vs previous refresh (heat score change)
+- Velocity sparkline: small 4-point chart showing heat score over last 4 refreshes (Jaccard-matched)
 - Click any row to expand and see all individual article headlines per outlet
-- `★` = RSS hero, `✓` = scrape confirmed, `★✓` = double confirmed
-- Article age shown inline ("14m ago", "3h ago") from parsed pub_ts
+- `★` = RSS hero, `✓` = scrape confirmed, `★✓` = double confirmed (all have hover tooltips)
+- Article age shown inline ("14m ago", "3h ago") from parsed pub_ts. Hover for exact timestamp.
+- **Breaking** orange badge: article published within last 90 minutes
 
 ### Side by Side tab
 - Left column: top 10 trending topics by heat score (source count + signal)
 - Right column: top 10 Daily Wire articles (editorial picks first, then RSS)
-- Green **✓ DW** badge on left when Daily Wire is covering that trending topic
+- Green **✓ DW** badge on left when Daily Wire is covering that trending topic. Hover shows DW article title.
 - No red gap badge — absence of the green check is signal enough
 - DW articles show **Top Story** badge for editorial picks (scrape_position ≤ 5)
+
+### Last Hour tab
+- All articles published in the last 60 minutes across all 15 outlets, chronological (newest first)
+- Two sections: **Just Published** (< 15 min old) with pulsing dot indicator, and **Earlier This Hour**
+- **⚡ X sources** signal badge when the article's story is already clustering on the Dashboard (shows how many outlets are covering it)
+- Political lean color on the source eyebrow (FOX NEWS, CNN, etc.)
+- Live count badge on the tab updates every refresh cycle
+- Auto-refreshes with the main data pipeline
 
 ### Social Velocity sidebar
 - **Drudge** tab: top headline links scraped from Drudge Report
 - **Twitter** tab: US trending topics. Primary source: getdaytrends.com (server-rendered). Fallback: trends24.in. Both may be intermittent from cloud IPs.
-- **Facebook** tab: top articles by engagement (reactions + shares + comments) via Facebook Graph API. Requires app token (see Environment). Skips Google News proxy sources (CNN/AP/Reuters) since their URLs are redirects.
+- **Facebook** tab: top articles by engagement (reactions + shares + comments) via Facebook Graph API. Skips Google News proxy sources (CNN/AP/Reuters/Fox) since their URLs are google.com redirects. Candidates sorted oldest-first so articles have had time to accumulate shares. Threshold: ≥ 10 total engagement. Cache: 60 minutes. Rate-limit backoff: 2 hours.
 
 ### Google Trends US sidebar
 - Shows top 25 US search trends via official Google Trends RSS feed
@@ -135,10 +158,11 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 - Cached 2 hours, 4-hour backoff on failure
 - "X min ago" / "Xh ago" label shows cache age
 
-### Source Headlines grid
+### Live Source Feed (Source Headlines grid)
 - All 15 sources displayed with their top 8 headlines
 - Color-coded by political lean
 - Editorial picks (scrape-confirmed) shown first per source
+- Source names link to each outlet's homepage
 
 ### Daily Wire Coverage Alignment
 - Circular gauge showing % of top 10 trends covered
@@ -169,10 +193,11 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 ## Known Issues
 
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
-- **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up.
+- **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
 - **Homepage scraping blocks:** Some sources (NYT, Reuters, Fox) may return 403s or JS-render content — scraping degrades gracefully (empty list returned, no crash). Fox News homepage is JS-rendered; Google News RSS compensates for editorial alignment.
 - **Twitter/X trends:** getdaytrends.com and trends24.in may block cloud server IPs intermittently. Shows "unavailable" gracefully when both fail.
-- **Facebook Graph API:** Requires app-level access token. If token expires or is revoked, shows "unavailable" with explanation rather than loading spinner.
+- **Facebook Graph API:** App is currently in Development mode ("no use cases") which may impose tighter rate limits. Rate limit errors (#4) trigger a 2-hour backoff. Token is hardcoded — should be moved to Railway env var. If the app is promoted to Live mode at developers.facebook.com, rate limits increase significantly.
+- **SIMILARITY_THRESHOLD tuning:** 0.28 is the current setting. After a full day of news cycles, this may need adjustment — raise if unrelated stories are still merging, lower if related stories are splitting into separate clusters.
 
 ---
 
@@ -182,9 +207,17 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 - [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet).
 - [x] **Google Stitch design refresh** — full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
 - [x] **Side by Side tab** — trending topics vs Daily Wire editorial picks, side by side.
-- [x] **Facebook engagement signal** — Graph API with app token, top articles by reactions+shares+comments.
-- [x] **Possessive stripping + ambient reference filter** — cleaner clustering, no spurious Trump's/Israel mega-clusters.
+- [x] **Last Hour tab** — all articles from last 60 min, newest first, with signal badges and Just Published pulsing indicator.
+- [x] **Facebook engagement signal** — Graph API with app token, top articles by reactions+shares+comments. Oldest-first candidate sorting so articles have had time to accumulate shares.
+- [x] **Possessive stripping + ambient reference filter** — cleaner clustering (legacy from keyword-seed era, some logic still relevant).
 - [x] **Fox News feed fix** — switched from crime-beat RSS to Google News editorial alignment.
+- [x] **TF-IDF cosine similarity clustering** — replaced keyword-seed approach entirely. No more single-word false merges. `SIMILARITY_THRESHOLD = 0.28`.
+- [x] **Velocity sparklines (Jaccard matching)** — `_heat_history` keyed by frozenset(source_ids) with ≥33% Jaccard overlap for story identity across refreshes. Real 4-point spark curve.
+- [x] **Stale source credibility filter** — sources only counted if article is <4h old OR scrape-confirmed. Prevents stale Google News articles from inflating source chips.
+- [x] **Tooltips** — all UI badges have hover explanations: Breaking, age, Lead (lists outlets), ★/✓ marks, ✓ DW badge, delta.
+- [x] **Source name homepage links** — source names in Live Source Feed link to each outlet's homepage.
+- [x] **Duplicate subtitle removal** — trending rows no longer repeat the headline in a gray subtitle below the bold title.
+- [x] **Header cleanup** — removed non-functional notification and account placeholder icon buttons.
 
 ### Backlog
 - [ ] **Drudge Report scraper** — no RSS feed, requires HTML parsing; would be high signal
@@ -194,6 +227,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 - [ ] **Drudge siren** — visual alert when a story is Drudge's top link
 - [ ] **foxbusiness scrape** — add to SCRAPE_SOURCES (currently missing from scrape config)
 - [ ] **Facebook token rotation** — move FB_TOKEN out of source code into Railway env var
+- [ ] **Facebook Live mode** — promote app at developers.facebook.com to increase rate limits
 
 ---
 
@@ -215,5 +249,6 @@ The dashboard is designed for a 5-minute morning scan by Daily Wire editors. Pri
 1. Top 3 trending topics (highest heat score = most cross-source coverage)
 2. Any "● DW Gap" badges on topics 1–10
 3. Daily Wire Alignment grade — if C or D, editors need story assignments
-4. Google Trends sidebar — catches search-driven stories RSS may miss
-5. Side by Side tab — quick visual scan of trending vs DW editorial priorities
+4. Last Hour tab — catch anything breaking in the last 60 minutes that hasn't clustered yet
+5. Google Trends sidebar — catches search-driven stories RSS may miss
+6. Side by Side tab — quick visual scan of trending vs DW editorial priorities
