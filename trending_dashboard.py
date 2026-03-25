@@ -498,18 +498,24 @@ def fetch_facebook_engagement(all_arts):
     for sid, arts in all_arts.items():
         if sid in SKIP_SOURCES:
             continue
-        for art in arts[:10]:
+        for art in arts[:20]:
             url = art.get("link", "")
             if url and url.startswith("http") and "google.com" not in url:
                 candidates.append({
                     "url":    url,
                     "title":  art.get("title", ""),
                     "source": sid,
+                    "pub_ts": art.get("pub_ts", ""),
                 })
 
     if not candidates:
         print("  Facebook: no candidates (all sources skipped or no URLs)")
         return _FB_CACHE.get("data", [])
+
+    # Sort oldest-first so we check articles that have had the most time to
+    # accumulate Facebook shares. Very recent articles (< 30 min) have near-zero
+    # engagement and cause the entire sample to return empty.
+    candidates.sort(key=lambda x: x.get("pub_ts", ""))
 
     FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
     first_error = []  # capture first error message for diagnostics
@@ -530,7 +536,7 @@ def fetch_facebook_engagement(all_arts):
             total = (eng.get("reaction_count", 0) +
                      eng.get("share_count", 0) +
                      eng.get("comment_count", 0))
-            if total > 0:
+            if total >= 10:
                 return {**item,
                         "fb_total":     total,
                         "fb_reactions": eng.get("reaction_count", 0),
