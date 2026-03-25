@@ -170,8 +170,10 @@ STOP_WORDS = {
 data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
-# Previous topics for trajectory tracking (heat score deltas)
-_prev_heat = {}  # keyword → heat_score from last refresh
+# Heat history for velocity sparklines.
+# Keyed by frozenset of source IDs (stable across refreshes even when headline changes).
+# Each entry stores the last 4 heat scores so the sparkline draws a real curve.
+_heat_history = {}  # frozenset(source_ids) → [heat1, heat2, heat3, heat4]
 
 # Google Trends cache — only re-fetch every 2 hours, back off 4h on failure
 _gt_cache = {"data": [], "fetched_at": 0, "next_retry": 0}
@@ -919,12 +921,27 @@ def refresh_data():
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
-    # Trajectory: compare heat scores to previous refresh
-    global _prev_heat
+    # Velocity sparklines: match clusters across refreshes by source-set Jaccard similarity.
+    # Headlines change each cycle (TF-IDF picks a different representative each time),
+    # so keying by headline text almost never matches. Source sets are stable — the same
+    # story is covered by the same outlets across refreshes even if wording differs.
+    global _heat_history
+    new_history = {}
     for t in topics:
-        prev = _prev_heat.get(t["keyword"])
-        t["delta"] = (t["heat_score"] - prev) if prev is not None else None
-    _prev_heat = {t["keyword"]: t["heat_score"] for t in topics}
+        cur_srcs = frozenset(t.get("sources", []))
+        # Find the previous cluster with highest source overlap (Jaccard ≥ 0.33)
+        best_key, best_sim = None, 0.0
+        for key in _heat_history:
+            inter = len(cur_srcs & key)
+            union = len(cur_srcs | key)
+            sim = inter / union if union > 0 else 0.0
+            if sim > best_sim:
+                best_sim, best_key = sim, key
+        history = _heat_history[best_key] if best_key and best_sim >= 0.33 else []
+        t["delta"] = (t["heat_score"] - history[-1]) if history else None
+        t["heat_history"] = (history + [t["heat_score"]])[-4:]  # keep last 4 readings
+        new_history[cur_srcs] = t["heat_history"]
+    _heat_history = new_history
 
     srcs = {}
     for s in SOURCES:
@@ -1281,19 +1298,37 @@ function renderSBS(d){
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
 function fc(ms){if(ms<=0)return'Refreshing…';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);return m+':'+String(s).padStart(2,'0')+' Refresh'}
-function spark(delta,heat){
-  const w=88,h=32;
+function spark(delta,heat,history){
+  const w=88,h=32,pad=4;
+  // With a real history array, draw a true multi-point curve
+  if(history&&history.length>=2){
+    const mn=Math.min(...history),mx=Math.max(...history);
+    const range=mx-mn||1;
+    const pts=history.map((v,i)=>{
+      const x=pad+(i/(history.length-1))*(w-pad*2);
+      const y=pad+(1-(v-mn)/range)*(h-pad*2);
+      return x+' '+y;
+    });
+    const p='M'+pts.join(' L');
+    const rising=history[history.length-1]>history[0];
+    const flat=history[history.length-1]===history[0];
+    const color=rising?'#BA032A':flat?'#c5c6ce':'#c5c6ce';
+    const sw=rising?'2.5':'1.5';
+    const tip=delta===null?'First reading':delta>0?'Gaining momentum — +'+delta+' pts since last refresh':delta<0?'Losing momentum — '+delta+' pts since last refresh':'No change since last refresh';
+    return '<span title="'+tip+'"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="'+color+'" stroke-width="'+sw+'" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+  }
+  // Fallback: single delta point (first refresh or no history)
   if(delta===null||delta===undefined){
-    return '<span title="First data point — no previous refresh to compare against yet."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="M0 16 L'+w+' 16" stroke="#c5c6ce" stroke-width="1.5" fill="none"/></svg></span>';
+    return '<span title="First data point — velocity will appear after next refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="M'+pad+' '+(h/2)+' L'+(w-pad)+' '+(h/2)+'" stroke="#e2e8f0" stroke-width="1.5" fill="none"/></svg></span>';
   }
   if(delta>0){
     const rise=Math.min(delta/(heat||1)*160,24);
-    const p='M0 '+(h-4)+' L22 '+(h-4-rise*.25)+' L44 '+(h-4-rise*.55)+' L66 '+(h-4-rise*.82)+' L'+w+' '+Math.max(4,h-4-rise);
-    return '<span title="Gaining momentum — heat score rose +'+delta+' points since last refresh. More sources picked this up or promoted it above the fold."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#BA032A" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+    const p='M0 '+(h-pad)+' L22 '+(h-pad-rise*.25)+' L44 '+(h-pad-rise*.55)+' L66 '+(h-pad-rise*.82)+' L'+w+' '+Math.max(pad,h-pad-rise);
+    return '<span title="Gaining momentum — heat score rose +'+delta+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#BA032A" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   }
   const drop=Math.min(Math.abs(delta)/(heat||1)*160,24);
-  const p='M0 4 L22 '+(4+drop*.25)+' L44 '+(4+drop*.55)+' L66 '+(4+drop*.82)+' L'+w+' '+Math.min(h-4,4+drop);
-  return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh. Sources are moving on or deprioritising this story."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+  const p='M0 '+pad+' L22 '+(pad+drop*.25)+' L44 '+(pad+drop*.55)+' L66 '+(pad+drop*.82)+' L'+w+' '+Math.min(h-pad,pad+drop);
+  return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 }
 function rT(topics){
   const tb=document.getElementById('tl');
@@ -1323,7 +1358,7 @@ function rT(topics){
       +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
       +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
-      +'<td>'+spark(t.delta,t.heat_score)+'</td>'
+      +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
       +'</tr>'
       +'<tr id="ta'+i+'" class="x-row"><td colspan="5"><div class="x-inner">'+arts+'</div></td></tr>';
