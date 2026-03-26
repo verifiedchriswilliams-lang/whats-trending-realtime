@@ -1511,8 +1511,33 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .fab{position:fixed;bottom:24px;right:24px;z-index:80;width:56px;height:56px;border-radius:3px;background:linear-gradient(180deg,var(--navy) 0%,#000 100%);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s}
 .fab:hover{transform:scale(1.05)}
 
-@media(max-width:1024px){.sidebar{display:none}.main{margin-left:0}}
-@media(max-width:900px){.cgrid{grid-template-columns:1fr}.tb-nav{display:none}}
+/* ── Responsive breakpoints ────────────────────────────────────────────── */
+/* Sidebar collapses + mobile bottom nav appears at ≤900px */
+@media(max-width:900px){
+  .sidebar{display:none}
+  .main{margin-left:0;padding-bottom:76px}
+  .lh-page{margin-left:0;padding-bottom:76px}
+  .sbs-page{margin-left:0;padding-bottom:76px}
+  .cgrid{grid-template-columns:1fr}
+  .fab{display:none}
+  .mob-nav{display:flex}
+}
+/* Tablet: collapse the social sidebar into single-column */
+@media(max-width:680px){.sbs-grid{grid-template-columns:1fr}.sbs-divider{display:none}}
+
+/* ── Mobile bottom navigation bar ─────────────────────────────────────── */
+.mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:#fff;border-top:2px solid var(--surface-top);
+  padding-bottom:env(safe-area-inset-bottom,0px);height:60px}
+.mob-nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  flex:1;height:100%;font-size:8.5px;font-weight:700;letter-spacing:.03em;
+  color:var(--ink-l);text-decoration:none;gap:1px;transition:color .15s;
+  text-transform:uppercase;padding:4px 2px 0;position:relative}
+.mob-nav-item .ms{font-size:21px;line-height:1}
+.mob-nav-item.active{color:var(--red)}
+.mob-lh-badge{display:none;position:absolute;top:4px;right:calc(50% - 18px);
+  background:var(--red);color:#fff;border-radius:8px;font-size:8px;
+  font-weight:800;padding:1px 4px;line-height:1.4}
 /* ── Last Hour tab ─────────────────────────────────────────────────────── */
 .lh-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none;max-width:900px}
 .lh-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
@@ -1563,11 +1588,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <header class="topbar">
   <div class="tb-left">
     <span class="tb-brand">Editorial Intelligence</span>
-    <nav class="tb-nav">
-      <a href="#" class="tnav act" onclick="switchPage('dash');return false">Dashboard</a>
-      <a href="#" class="tnav" onclick="switchPage('sbs');return false">Side by Side</a>
-      <a href="#" class="tnav" onclick="switchPage('lh');return false">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></a>
-    </nav>
   </div>
   <div class="tb-right">
     <div class="live-pill"><span class="live-dot"></span><span class="live-txt">Live</span></div>
@@ -1581,7 +1601,22 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <div><div class="sb-title">Intelligence Ops</div><div class="sb-sub">Global Newsroom</div></div>
   </div>
   <nav class="sb-nav">
-    <a href="#" class="sb-lnk act"><span class="ms">local_fire_department</span><span>Topic Intelligence</span></a>
+    <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false">
+      <span class="ms">local_fire_department</span><span>Topic Intelligence</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false">
+      <span class="ms">newspaper</span><span>Live Source Feed</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false">
+      <span class="ms">trending_up</span><span>Social Velocity</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-sbs" onclick="switchPage('sbs');return false">
+      <span class="ms">compare_arrows</span><span>Side by Side</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
+      <span class="ms">schedule</span>
+      <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
+    </a>
   </nav>
   <div class="sb-footer">
     <button class="sb-btn" onclick="fr()"><span class="ms" style="font-size:16px">refresh</span>Refresh Now</button>
@@ -1619,7 +1654,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
           </table>
         </div>
       </div>
-      <div class="feed-hdr">
+      <div class="feed-hdr" id="live-feed-section">
         <h3>Live Source Feed</h3>
         <div class="feed-div"></div>
         <span style="font-size:11px;color:var(--ink-l);white-space:nowrap" id="es">—</span>
@@ -1627,7 +1662,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <div class="src-grid" id="sg"></div>
     </section>
     <aside>
-      <div class="panel">
+      <div class="panel" id="social-velocity-section">
         <div class="panel-hd"><span class="ms" style="color:var(--red)">trending_up</span><h3>Social Velocity</h3></div>
         <div class="stabs">
           <button class="stab active" onclick="switchTab('dr')"><span class="ms" style="font-size:14px">campaign</span>Drudge</button>
@@ -1674,28 +1709,78 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   <div id="lh-feed"><div class="lh-empty">Loading…</div></div>
 </div>
 
+<!-- Mobile bottom navigation — visible on screens ≤900px -->
+<nav class="mob-nav">
+  <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false">
+    <span class="ms">local_fire_department</span><span>Topics</span>
+  </a>
+  <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false">
+    <span class="ms">newspaper</span><span>Sources</span>
+  </a>
+  <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false">
+    <span class="ms">trending_up</span><span>Social</span>
+  </a>
+  <a href="#" class="mob-nav-item" id="mob-sbs" onclick="switchPage('sbs');return false">
+    <span class="ms">compare_arrows</span><span>Side by Side</span>
+  </a>
+  <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false">
+    <span class="ms">schedule</span><span>Last Hour</span>
+    <span class="mob-lh-badge" id="mob-lh-badge">0</span>
+  </a>
+</nav>
+
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
 const SO=['foxnews','nypost','dailywire','breitbart','washtimes','townhall','ap','reuters','thehill','skynews','cnn','nytimes','nbcnews','dailymail','foxbusiness'];
 const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
-function switchPage(pg){
+function switchPage(pg, scrollTo){
   _page=pg;
   document.querySelector('.main').style.display=pg==='dash'?'block':'none';
   document.getElementById('sbs-page').style.display=pg==='sbs'?'block':'none';
   document.getElementById('lh-page').style.display=pg==='lh'?'block':'none';
-  document.querySelectorAll('.tnav').forEach((a,i)=>a.classList.toggle('act',['dash','sbs','lh'][i]===pg));
+
+  // Determine which sidebar nav item is "active" (scroll-to items map back to 'dash')
+  const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
+                  : scrollTo==='social-velocity-section' ? 'nav-social'
+                  : pg==='dash' ? 'nav-topics'
+                  : pg==='sbs'  ? 'nav-sbs'
+                  : pg==='lh'   ? 'nav-lh' : '';
+  document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
+  if(activeNav){const el=document.getElementById(activeNav);if(el)el.classList.add('act');}
+
+  // Mobile bottom nav active state
+  const activeMob = scrollTo==='live-feed-section' ? 'mob-live'
+                  : scrollTo==='social-velocity-section' ? 'mob-social'
+                  : pg==='dash' ? 'mob-topics'
+                  : pg==='sbs'  ? 'mob-sbs'
+                  : pg==='lh'   ? 'mob-lh' : '';
+  document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
+  if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
+
   if(pg==='sbs'&&_lastData)renderSBS(_lastData);
   if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
+
+  // Scroll to sub-section if requested (e.g. Live Source Feed, Social Velocity)
+  if(scrollTo){
+    setTimeout(()=>{
+      const t=document.getElementById(scrollTo);
+      if(t)t.scrollIntoView({behavior:'smooth',block:'start'});
+    },50);
+  } else {
+    window.scrollTo({top:0,behavior:'smooth'});
+  }
 }
 // ── Last Hour render ───────────────────────────────────────────────────────
 function rLH(arts){
   const el=document.getElementById('lh-feed');
   if(!arts||!arts.length){el.innerHTML='<div class="lh-empty">No articles published in the last hour yet.<br><span style="font-size:11px;margin-top:4px;display:block">Check back after the next refresh cycle.</span></div>';return;}
-  // Update badge
+  // Update badge (sidebar + mobile)
   const badge=document.getElementById('lh-badge');
   badge.textContent=arts.length;badge.style.display='';
+  const mbadge=document.getElementById('mob-lh-badge');
+  if(mbadge){mbadge.textContent=arts.length;mbadge.style.display='';}
   // Split into two buckets: just published (< 15 min) and earlier (15–60 min)
   const fresh=arts.filter(a=>a.age_minutes<15);
   const older=arts.filter(a=>a.age_minutes>=15);
