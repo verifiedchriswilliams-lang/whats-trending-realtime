@@ -1329,7 +1329,7 @@ def refresh_data():
     last_hour.sort(key=lambda x: x["pub_ts"], reverse=True)
 
     with data_lock:
-        data_store.update({"last_updated":datetime.now(timezone.utc).isoformat()+"Z","sources":srcs,"trending_topics":topics,
+        data_store.update({"last_updated":datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),"sources":srcs,"trending_topics":topics,
                            "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,"reddit_posts":reddit_posts,
                            "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
