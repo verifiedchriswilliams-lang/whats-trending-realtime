@@ -580,7 +580,7 @@ def fetch_facebook_engagement(all_arts):
     # Sort oldest-first so we check articles that have had the most time to
     # accumulate Facebook shares. Very recent articles (< 30 min) have near-zero
     # engagement and cause the entire sample to return empty.
-    candidates.sort(key=lambda x: x.get("pub_ts", ""))
+    candidates.sort(key=lambda x: x.get("pub_ts") or "")
 
     FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
     first_error = []  # capture first error message for diagnostics
