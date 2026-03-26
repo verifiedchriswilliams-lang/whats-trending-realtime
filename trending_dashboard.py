@@ -48,11 +48,11 @@ SCRAPE_SOURCES = {
 SOURCES = [
     # Tier 1 — editorial homepage / top-story feeds where available
     {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/latest", "lean":"right", "tier":1, "rss_limit":50},
-    {"id":"cnn",        "name":"CNN",               "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "tier":1},
+    {"id":"cnn",        "name":"CNN",               "rss":"http://rss.cnn.com/rss/cnn_topstories.rss",                                   "lean":"left", "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
     {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
     {"id":"nypost",     "name":"NY Post",           "rss":"https://nypost.com/feed/",                                 "lean":"right",        "tier":1},
-    {"id":"ap",         "name":"AP News",           "rss":"https://news.google.com/rss/search?q=site:apnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
+    {"id":"ap",         "name":"AP News",           "rss":"https://feeds.apnews.com/rss/apf-topnews",                                    "lean":"center", "tier":1},
     {"id":"reuters",    "name":"Reuters",           "rss":"https://news.google.com/rss/search?q=site:reuters.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
     {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/feeds/rss.xml",                  "lean":"right",        "tier":1},
@@ -516,10 +516,10 @@ def fetch_facebook_engagement(all_arts):
     if not HAS_SCRAPE:
         return _FB_CACHE["data"]
 
-    # Skip Google News proxy sources — their URLs are google.com redirects
-    # Note: foxnews was removed from this list after switching to feeds.foxnews.com/foxnews/latest
-    # which yields direct foxnews.com URLs suitable for Facebook engagement lookup.
-    SKIP_SOURCES = {"cnn", "ap", "reuters"}
+    # Skip Google News proxy sources — their URLs are google.com redirects.
+    # Reuters still uses Google News RSS (direct feed unavailable), so skip it.
+    # CNN, AP, Fox News removed after switching to direct feeds (direct article URLs).
+    SKIP_SOURCES = {"reuters"}
     candidates = []
     for sid, arts in all_arts.items():
         if sid in SKIP_SOURCES:

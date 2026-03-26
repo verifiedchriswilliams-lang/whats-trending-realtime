@@ -95,11 +95,11 @@ Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL k
 | ID | Name | RSS Feed | Lean |
 |---|---|---|---|
 | foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right |
-| cnn | CNN | Google News RSS (site:cnn.com) | Left |
+| cnn | CNN | rss.cnn.com/rss/cnn_topstories.rss | Left |
 | nytimes | New York Times | nyt/HomePage | Left |
 | dailymail | Daily Mail | news/index | Center-Right |
 | nypost | NY Post | nypost.com/feed | Right |
-| ap | AP News | Google News RSS (site:apnews.com) | Center |
+| ap | AP News | feeds.apnews.com/rss/apf-topnews | Center |
 | reuters | Reuters | Google News RSS (site:reuters.com) | Center |
 | nbcnews | NBC News | nbcnews/public/news | Left |
 | dailywire | Daily Wire | dailywire.com/rss | Right |
@@ -203,11 +203,11 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 | Source | RSS Quality | Scrape Quality | Notes |
 |---|---|---|---|
 | Fox News | ✅ Good | ✅ Good | Direct RSS (feeds.foxnews.com/foxnews/latest, 50 articles). Fox IS server-side rendered — BeautifulSoup parses the full editorial layout. Targeted scraper hits `div.big-top` (hero) + `div.thumbs-2-7` (editorial grid) first, so positions 1-10 are Fox's actual top stories. MAX_VALID_SCRAPE_POS=80 blocks footer anchor links (pos 90-150). |
-| CNN | ✅ Good | ✅ Good | Google News RSS + scrape positions 24-75. Ordering may not exactly match CNN's editorial priority (#1 story, but real CNN articles. |
+| CNN | ✅ Good | ✅ Good | Direct RSS (rss.cnn.com/rss/cnn_topstories.rss) — chronological editorial top stories. Fixes Last Hour tab (Google News RSS was engagement-ranked, causing all CNN articles to appear hours old). Scrape positions 24-75. |
 | NY Times | ✅ Excellent | ✅ Excellent | Direct homepage RSS feed + tight scrape positions 11-44. Best source setup. |
 | Daily Mail | ✅ Good | ⚠️ Partial | Only ~20% of RSS articles scrape-confirmed because /news/index.rss is the news section but Daily Mail homepage is dominated by lifestyle/celebrity. Expected behavior. |
 | NY Post | ✅ Good | ✅ Good | Direct RSS + scrape positions 7-90. |
-| AP News | ✅ Good | ✅ Good | Google News RSS + scrape positions 32-111. May miss some AP top stories that Google doesn't surface. |
+| AP News | ✅ Good | ✅ Good | Direct RSS (feeds.apnews.com/rss/apf-topnews) — AP's own top news feed. Fixes Last Hour tab coverage. Scrape positions 32-111. |
 | Reuters | ⚠️ Moderate | ❌ Blocked | Reuters homepage blocks scraping. Google News RSS articles unverified — pass on age alone. |
 | NBC News | ✅ Excellent | ✅ Excellent | Direct RSS + very tight scrape positions 2-13. Best scraper performance. |
 | Daily Wire | ✅ Excellent | ✅ Excellent | Direct RSS + topStoryTextContainer targeting captures actual editorial Top Stories (positions 1-5). |
