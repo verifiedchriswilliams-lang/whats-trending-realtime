@@ -1390,25 +1390,15 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .ov-ttl{font-family:'Newsreader',Georgia,serif;font-size:22px;color:#fff;margin-bottom:6px}
 .ov-sub{font-size:12px;color:rgba(255,255,255,.45)}
 
-/* TOP HEADER */
-.topbar{position:fixed;top:0;left:0;right:0;height:64px;z-index:100;display:flex;align-items:center;justify-content:space-between;padding:0 24px;background:#f8f9fb;border-bottom:1px solid var(--surface-top)}
-.tb-left{display:flex;align-items:center;gap:32px}
-.tb-brand{font-family:'Newsreader',Georgia,serif;font-size:20px;font-weight:700;color:var(--navy-d);letter-spacing:-.2px;white-space:nowrap}
-.tb-nav{display:flex;align-items:center;height:64px}
-.tnav{display:flex;align-items:center;height:64px;padding:0 14px;font-size:12px;font-weight:500;color:var(--ink-l);text-decoration:none;border-bottom:2px solid transparent;transition:color .15s}
-.tnav.act{color:var(--red);font-weight:700;border-bottom-color:var(--red)}
-.tnav:hover:not(.act){color:var(--navy-d)}
-.tb-right{display:flex;align-items:center;gap:10px}
-.live-pill{display:flex;align-items:center;gap:6px;padding:4px 12px;background:rgba(186,3,42,.08);border-radius:2px}
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);animation:lp 2s infinite;box-shadow:0 0 8px rgba(186,3,42,.6)}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.2}}
-.live-txt{font-size:9px;font-weight:800;letter-spacing:2px;color:var(--red);text-transform:uppercase}
-.tb-time{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums}
-.icon-btn{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:none;background:none;cursor:pointer;border-radius:2px;color:var(--ink-m);transition:background .15s}
-.icon-btn:hover{background:var(--surface-ctr)}
+.sb-live{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:12px;background:rgba(186,3,42,.06);border-radius:4px;border:1px solid rgba(186,3,42,.12)}
+.sb-live-pill{display:flex;align-items:center;gap:5px}
+.sb-live-txt{font-size:9px;font-weight:800;letter-spacing:2px;color:var(--red);text-transform:uppercase}
+.sb-live-time{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums;margin-left:auto}
 
 /* LEFT SIDEBAR */
-.sidebar{position:fixed;top:64px;left:0;bottom:0;width:256px;z-index:90;display:flex;flex-direction:column;padding:16px;background:#f2f4f6;border-right:1px solid var(--surface-top);overflow-y:auto}
+.sidebar{position:fixed;top:0;left:0;bottom:0;width:256px;z-index:90;display:flex;flex-direction:column;padding:16px;background:#f2f4f6;border-right:1px solid var(--surface-top);overflow-y:auto}
 .sb-brand{display:flex;align-items:center;gap:12px;padding:8px;margin-bottom:24px}
 .sb-icon{width:40px;height:40px;border-radius:2px;background:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sb-title{font-family:'Newsreader',Georgia,serif;font-size:17px;color:var(--navy-d);line-height:1.2}
@@ -1423,7 +1413,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .sb-meta{padding:5px 12px;font-size:11px;color:var(--ink-l);display:flex;align-items:center;gap:6px}
 
 /* MAIN CANVAS */
-.main{margin-left:256px;margin-top:64px;padding:20px 20px 24px;min-height:calc(100vh - 64px)}
+.main{margin-left:256px;margin-top:0;padding:20px 20px 24px;min-height:100vh}
 .cgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
 
 /* SECTION HEADER */
@@ -1539,7 +1529,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   background:var(--red);color:#fff;border-radius:8px;font-size:8px;
   font-weight:800;padding:1px 4px;line-height:1.4}
 /* ── Last Hour tab ─────────────────────────────────────────────────────── */
-.lh-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none;max-width:900px}
+.lh-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none;max-width:900px}
 .lh-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
 .lh-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
 .lh-hdr p{font-size:12px;color:var(--ink-l);margin:0}
@@ -1561,7 +1551,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 @media(max-width:1024px){.lh-page{margin-left:0}}
 
 /* SIDE BY SIDE PAGE */
-.sbs-page{margin-left:256px;margin-top:64px;padding:28px 28px 40px;min-height:calc(100vh - 64px);display:none}
+.sbs-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none}
 .sbs-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
 .sbs-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
 .sbs-hdr p{font-size:12px;color:var(--ink-l);margin:0}
@@ -1585,20 +1575,14 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 <div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
 
-<header class="topbar">
-  <div class="tb-left">
-    <span class="tb-brand">Editorial Intelligence</span>
-  </div>
-  <div class="tb-right">
-    <div class="live-pill"><span class="live-dot"></span><span class="live-txt">Live</span></div>
-    <span class="tb-time" id="cd"></span>
-  </div>
-</header>
-
 <aside class="sidebar">
   <div class="sb-brand">
     <div class="sb-icon"><span class="ms" style="color:#fff;font-size:22px">psychology</span></div>
     <div><div class="sb-title">Intelligence Ops</div><div class="sb-sub">Global Newsroom</div></div>
+  </div>
+  <div class="sb-live">
+    <div class="sb-live-pill"><span class="live-dot"></span><span class="sb-live-txt">Live</span></div>
+    <span class="sb-live-time" id="cd"></span>
   </div>
   <nav class="sb-nav">
     <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false">
