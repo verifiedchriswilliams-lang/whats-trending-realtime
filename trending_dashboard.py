@@ -1585,7 +1585,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   /* Main pages: remove sidebar offset, add top padding for mob-hdr */
   .main{margin-left:0;padding-top:56px;padding-bottom:76px}
   .lh-page{margin-left:0;padding-top:56px;padding-bottom:76px}
-  .sbs-page{margin-left:0;padding:56px 16px 76px}
+  .sbs-page{margin-left:0!important;padding:56px 16px 76px!important}
   .cgrid{grid-template-columns:1fr}
   .fab{display:none}
   .mob-nav{display:flex}
