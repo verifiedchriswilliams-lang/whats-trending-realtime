@@ -458,42 +458,52 @@ def fetch_twitter_trends():
 
 
 def fetch_reddit_trending():
-    """Fetch hot posts from r/Conservative via Reddit's free public JSON API.
-    Strong signal for what the conservative 25-65 audience is actively reading.
-    No API key required — Reddit's public JSON endpoints are open."""
+    """Fetch hot posts from r/Conservative via Reddit's public JSON API.
+    Tries multiple endpoints with browser-like headers to avoid cloud IP blocks."""
     global _REDDIT_CACHE
     now = time.time()
     if _REDDIT_CACHE["data"] and now - _REDDIT_CACHE["fetched_at"] < 1800:
         return _REDDIT_CACHE["data"]
     if not HAS_SCRAPE:
         return _REDDIT_CACHE["data"]
-    try:
-        r = requests.get(
-            "https://www.reddit.com/r/Conservative/hot.json?limit=25",
-            timeout=15,
-            headers={'User-Agent': 'TrendingInRealTime/1.0 (editorial dashboard)'},
-        )
-        r.raise_for_status()
-        data = r.json()
-        posts = []
-        for child in data.get("data", {}).get("children", []):
-            p = child.get("data", {})
-            if p.get("stickied"): continue  # skip pinned mod posts
-            title     = p.get("title", "").strip()
-            url       = p.get("url", "#")
-            score     = p.get("score", 0)
-            num_comments = p.get("num_comments", 0)
-            permalink = "https://reddit.com" + p.get("permalink", "") if p.get("permalink") else "#"
-            if title:
-                posts.append({"title": title, "link": url, "thread": permalink,
-                              "score": score, "comments": num_comments})
-        if posts:
-            _REDDIT_CACHE = {"data": posts[:20], "fetched_at": now}
-            print(f"  Reddit r/Conservative: {len(posts[:20])} posts")
-        return _REDDIT_CACHE["data"]
-    except Exception as ex:
-        print(f"  Reddit fetch error: {ex}")
-        return _REDDIT_CACHE["data"]
+    # Reddit requires a descriptive User-Agent and increasingly blocks cloud IPs.
+    # Try the standard endpoint first, then old.reddit.com as fallback.
+    REDDIT_HEADERS = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json, text/plain, */*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Referer': 'https://www.reddit.com/',
+    }
+    urls_to_try = [
+        "https://www.reddit.com/r/Conservative/hot.json?limit=25&raw_json=1",
+        "https://old.reddit.com/r/Conservative/hot.json?limit=25&raw_json=1",
+    ]
+    for url in urls_to_try:
+        try:
+            r = requests.get(url, timeout=15, headers=REDDIT_HEADERS, allow_redirects=True)
+            print(f"  Reddit [{r.status_code}] {url[:60]}")
+            if r.status_code != 200:
+                continue
+            data = r.json()
+            posts = []
+            for child in data.get("data", {}).get("children", []):
+                p = child.get("data", {})
+                if p.get("stickied"): continue  # skip pinned mod posts
+                title     = p.get("title", "").strip()
+                url_link  = p.get("url", "#")
+                score     = p.get("score", 0)
+                num_comments = p.get("num_comments", 0)
+                permalink = "https://reddit.com" + p.get("permalink", "") if p.get("permalink") else "#"
+                if title:
+                    posts.append({"title": title, "link": url_link, "thread": permalink,
+                                  "score": score, "comments": num_comments})
+            if posts:
+                _REDDIT_CACHE = {"data": posts[:20], "fetched_at": now}
+                print(f"  Reddit r/Conservative: {len(posts[:20])} posts")
+                return _REDDIT_CACHE["data"]
+        except Exception as ex:
+            print(f"  Reddit fetch error ({url[:40]}): {ex}")
+    return _REDDIT_CACHE["data"]
 
 
 _FB_CACHE = {"data": [], "fetched_at": 0, "backoff_until": 0}
@@ -1089,6 +1099,33 @@ def debug_fb():
         return jsonify({"status": r.status_code, "url_tested": test_url, "response": r.json()})
     except Exception as ex:
         return jsonify({"error": str(ex)})
+
+@app.route('/debug/reddit')
+def debug_reddit():
+    """Diagnostic endpoint: makes one live Reddit API call and returns raw response + status."""
+    if not HAS_SCRAPE:
+        return jsonify({"error": "requests not available"})
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+    }
+    results = {}
+    for label, url in [
+        ("www", "https://www.reddit.com/r/Conservative/hot.json?limit=3&raw_json=1"),
+        ("old", "https://old.reddit.com/r/Conservative/hot.json?limit=3&raw_json=1"),
+    ]:
+        try:
+            r = requests.get(url, timeout=10, headers=headers)
+            try:
+                body = r.json()
+                entry_count = len(body.get("data", {}).get("children", []))
+            except Exception:
+                body = r.text[:300]
+                entry_count = 0
+            results[label] = {"status": r.status_code, "entries": entry_count, "sample": body if entry_count == 0 else None}
+        except Exception as ex:
+            results[label] = {"error": str(ex)}
+    return jsonify(results)
 
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
