@@ -270,18 +270,24 @@ def fetch_google_trends():
 
 def scrape_homepage(sid, url):
     """Scrape a news source homepage and return headlines in editorial order.
-    Returns a list of (normalized_headline, page_position) tuples (1-based).
+    Returns a 3-tuple: (headlines, url_map, orig_map) where:
+      headlines = [(normalized_headline, page_position), ...] (1-based position)
+      url_map   = {normalized_headline: article_url} (populated for Fox editorial picks)
+      orig_map  = {normalized_headline: original_case_title} (for synthetic injection)
     Position 1 = highest editorial placement on the page.
 
     For Daily Wire: explicitly targets the editorial 'Top Stories' section
     (div[class*=topStoryTextContainer] h3) so those 5 curated picks come first
     (positions 1-5), before the generic h2/h3 scan fills in the rest.
-    This fixes the RSS-vs-editorial mismatch where old stories can stay #1
-    on the site even after newer articles have pushed them down the feed.
 
-    Empty list returned on failure — scraping degrades gracefully."""
+    For Fox News: captures anchor URLs from editorial sections (big-top, thumbs-2-7)
+    so that unmatched editorial picks can be injected as synthetic articles in refresh_data().
+    This fixes the Fox RSS mismatch — feeds.foxnews.com/foxnews/latest is chronological
+    and may not contain editorially pinned hero stories published hours earlier.
+
+    Empty tuple returned on failure — scraping degrades gracefully."""
     if not HAS_SCRAPE:
-        return []
+        return [], {}, {}
     try:
         r = requests.get(url, timeout=10, headers={
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -289,14 +295,37 @@ def scrape_homepage(sid, url):
         })
         r.raise_for_status()
         soup = BeautifulSoup(r.text, 'html.parser')
-        ordered = []  # ordered list of normalized headline strings (de-duped)
-        seen = set()
+        ordered      = []  # list of normalized headline strings (de-duped, lowercase)
+        ordered_orig = []  # parallel list of original-case headline strings
+        seen    = set()
+        url_map = {}  # norm → article href (Fox editorial sections only)
 
-        def add(text):
+        def add(text, href=None):
             norm = text.strip().lower()
             if 20 <= len(norm) <= 250 and norm not in seen:
                 seen.add(norm)
                 ordered.append(norm)
+                ordered_orig.append(text.strip())
+                if href:
+                    # Ensure absolute URL
+                    if href.startswith('/'):
+                        href = 'https://www.foxnews.com' + href
+                    if href.startswith('http'):
+                        url_map[norm] = href
+
+        def _fox_href(tag):
+            """Find the article href closest to a Fox headline tag."""
+            # Check if the tag itself is inside an <a>
+            parent_a = tag.find_parent('a', href=True)
+            if parent_a:
+                return parent_a['href']
+            # Else look for an <a> in the immediate container (article/div)
+            container = tag.find_parent(['article', 'div'])
+            if container:
+                a_tag = container.find('a', href=True)
+                if a_tag:
+                    return a_tag['href']
+            return None
 
         # --- Daily Wire: target editorial Top Stories section FIRST ---
         # The Top Stories widget uses divs with class containing 'topStoryTextContainer'
@@ -311,22 +340,20 @@ def scrape_homepage(sid, url):
         # Fox is server-side rendered — raw HTML contains the actual editorial layout.
         # div.big-top = the hero/lead story (position 1 on the page)
         # div.thumbs-2-7 = the main editorial story grid (positions 2-10)
-        # Scraping these first ensures Fox's actual editorial picks get positions 1-10
-        # in our scraped list, so cross-verification correctly marks them as hero/spotlight.
-        # Without this, the generic h1/h2/h3 scan picks up nav/header text before stories.
+        # We also capture anchor hrefs so unmatched picks can be synthetic-injected.
         if sid == 'foxnews':
             big_top = soup.find('div', class_='big-top')
             if big_top:
                 for h in big_top.find_all(['h1', 'h2', 'h3']):
-                    add(h.get_text(separator=' ', strip=True))
+                    add(h.get_text(separator=' ', strip=True), _fox_href(h))
             thumbs = soup.find('div', class_='thumbs-2-7')
             if thumbs:
                 for h in thumbs.find_all(['h1', 'h2', 'h3']):
-                    add(h.get_text(separator=' ', strip=True))
+                    add(h.get_text(separator=' ', strip=True), _fox_href(h))
             # Also check collection-3-articles section (below-the-fold editorial grid)
             for div in soup.find_all('div', class_=lambda c: c and 'collection-article' in c):
                 for h in div.find_all(['h2', 'h3']):
-                    add(h.get_text(separator=' ', strip=True))
+                    add(h.get_text(separator=' ', strip=True), _fox_href(h))
 
         # --- All sources: h1/h2/h3 in document order ---
         for tag in soup.find_all(['h1', 'h2', 'h3']):
@@ -336,12 +363,15 @@ def scrape_homepage(sid, url):
         for tag in soup.find_all('a', href=True):
             add(tag.get_text(separator=' ', strip=True))
 
-        # Return as (text, position) — position is 1-based editorial rank
-        return [(text, pos + 1) for pos, text in enumerate(ordered)]
+        # headlines: list of (norm_text, 1-based position)
+        headlines = [(text, pos + 1) for pos, text in enumerate(ordered)]
+        # orig_map: norm → original case (for synthetic article title display)
+        orig_map = {norm: orig for norm, orig in zip(ordered, ordered_orig)}
+        return headlines, url_map, orig_map
 
     except Exception as ex:
         print(f"  scrape {sid}: {ex}")
-        return []
+        return [], {}, {}
 
 _DRUDGE_CACHE   = {"data": [], "fetched_at": 0}
 _TWITTER_CACHE  = {"data": [], "fetched_at": 0}
@@ -962,10 +992,20 @@ def refresh_data():
             sid, arts = f.result()
             if arts: all_arts[sid]=arts; print(f"  ✓ {sid}: {len(arts)}")
             else: print(f"  ✗ {sid}: no data")
-        scraped_pages = {}  # sid → list of (normalized_headline, position) tuples
+        scraped_pages    = {}  # sid → [(normalized_headline, position), ...]
+        scraped_url_maps = {}  # sid → {norm_headline: article_url} (Fox editorial only)
+        scraped_orig_maps= {}  # sid → {norm_headline: original_case_title}
         for f in as_completed(scrape_futures):
             sid = scrape_futures[f]
-            scraped_pages[sid] = f.result()
+            result = f.result()
+            # scrape_homepage() now returns (headlines, url_map, orig_map) 3-tuple
+            if isinstance(result, tuple) and len(result) == 3:
+                headlines, url_map, orig_map = result
+            else:
+                headlines, url_map, orig_map = result, {}, {}
+            scraped_pages[sid] = headlines
+            if url_map:    scraped_url_maps[sid] = url_map
+            if orig_map:   scraped_orig_maps[sid] = orig_map
             if scraped_pages[sid]:
                 print(f"  🔎 scraped {sid}: {len(scraped_pages[sid])} headlines (top: {scraped_pages[sid][0][0][:50] if scraped_pages[sid] else '—'})")
 
@@ -998,6 +1038,69 @@ def refresh_data():
                     art["scrape_confirmed"] = matched_pos <= MAX_VALID_SCRAPE_POS
                 else:
                     art["scrape_confirmed"] = False
+
+    # ── Fox News synthetic editorial injection ────────────────────────────────
+    # feeds.foxnews.com/foxnews/latest is purely chronological. Fox's editorially
+    # pinned hero stories (LIVE UPDATES, major breaking stories) are published once
+    # and stay prominent on the homepage for hours, but fall out of a 50-article
+    # chronological pool quickly. The scraper correctly finds these headlines from
+    # div.big-top and div.thumbs-2-7, but they can't be cross-matched to RSS articles
+    # that aren't in the pool.
+    #
+    # Fix: for scraped Fox editorial picks at positions 1–12 that have NO matching
+    # RSS article, inject a synthetic article using the scraped headline + URL.
+    # These are marked scrape_confirmed=True, feed_position=0 (RSS hero), and
+    # flagged synthetic=True so they can be styled differently if needed.
+    FOX_INJECT_LIMIT = 12  # only inject for the top N editorial positions
+    fox_sc_list  = scraped_pages.get('foxnews', [])
+    fox_url_map  = scraped_url_maps.get('foxnews', {})
+    fox_orig_map = scraped_orig_maps.get('foxnews', {})
+    if fox_sc_list and fox_url_map:
+        fox_arts = all_arts.get('foxnews', [])
+        # Build set of scraped norms that are already matched to an RSS article
+        already_matched = set()
+        sc_pos_lookup = {text: pos for text, pos in fox_sc_list}
+        sc_texts = list(sc_pos_lookup.keys())
+        for art in fox_arts:
+            norm = art['title'].lower()
+            for h in sc_texts:
+                if (norm in h or h in norm or
+                        (len(norm.split()) >= 4 and
+                         len(set(norm.split()) & set(h.split())) / max(len(norm.split()), 1) >= 0.6)):
+                    already_matched.add(h)
+                    break
+        # Inject synthetic articles for unmatched editorial positions 1–FOX_INJECT_LIMIT
+        injected = 0
+        for h_norm, pos in fox_sc_list:
+            if pos > FOX_INJECT_LIMIT:
+                break
+            if h_norm in already_matched:
+                continue
+            href = fox_url_map.get(h_norm)
+            if not href or 'foxnews.com' not in href:
+                continue  # skip if no valid Fox URL captured
+            orig_title = fox_orig_map.get(h_norm, h_norm.title())
+            synthetic = {
+                "title":           orig_title,
+                "link":            href,
+                "summary":         "",
+                "published":       "",
+                "pub_ts":          None,   # no timestamp; credibility via scrape_confirmed
+                "feed_position":   0,      # treated as RSS hero in heat scoring
+                "scrape_confirmed": True,
+                "scrape_position": pos,
+                "synthetic":       True,   # flag for diagnostics/styling
+            }
+            if 'foxnews' not in all_arts:
+                all_arts['foxnews'] = []
+            all_arts['foxnews'].append(synthetic)
+            already_matched.add(h_norm)
+            injected += 1
+            print(f"  🦊 Fox inject pos={pos}: {orig_title[:70]}")
+        if injected:
+            print(f"  Fox News: {injected} synthetic editorial articles injected")
+        else:
+            print(f"  Fox News: all {min(FOX_INJECT_LIMIT, len(fox_sc_list))} editorial picks already matched in RSS pool")
 
     print("  Fetching Drudge + Twitter/X + Memeorandum...")
     drudge_links    = fetch_drudge()
