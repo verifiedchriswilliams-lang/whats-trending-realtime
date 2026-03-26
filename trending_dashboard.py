@@ -1548,18 +1548,78 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .fab:hover{transform:scale(1.05)}
 
 /* ── Responsive breakpoints ────────────────────────────────────────────── */
+/* ── Mobile top header + hamburger drawer ──────────────────────────────── */
+.mob-hdr{display:none;position:fixed;top:0;left:0;right:0;height:48px;z-index:300;
+  background:#fff;border-bottom:2px solid var(--surface-top);
+  align-items:center;justify-content:space-between;padding:0 16px 0 14px}
+.mob-hdr-brand{display:flex;align-items:center;gap:9px}
+.mob-hdr-icon{width:30px;height:30px;border-radius:2px;background:var(--navy);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.mob-hdr-title{font-family:'Newsreader',Georgia,serif;font-size:15px;font-weight:700;color:var(--navy-d)}
+.mob-hdr-right{display:flex;align-items:center;gap:10px}
+.mob-live-pill{display:flex;align-items:center;gap:4px}
+.mob-live-txt{font-size:8px;font-weight:800;letter-spacing:1.5px;color:var(--red);text-transform:uppercase}
+.mob-cd{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums}
+.mob-hbg{background:none;border:none;cursor:pointer;padding:4px;color:var(--navy-d);
+  display:flex;align-items:center;justify-content:center;border-radius:4px}
+.mob-hbg .ms{font-size:26px}
+/* Drawer overlay */
+.mob-overlay{display:none;position:fixed;inset:0;z-index:290;background:rgba(0,0,0,.35)}
+.mob-overlay.open{display:block}
+/* Drawer panel */
+.mob-drawer{position:fixed;top:48px;right:-260px;bottom:0;width:240px;z-index:295;
+  background:#fff;border-left:1px solid var(--surface-top);
+  display:flex;flex-direction:column;padding:12px;
+  box-shadow:-4px 0 20px rgba(0,0,0,.15);
+  transition:right .22s cubic-bezier(.4,0,.2,1);overflow-y:auto}
+.mob-drawer.open{right:0}
+.mob-drawer .sb-lnk{font-size:14px;padding:11px 14px;border-radius:4px}
+.mob-drawer-live{display:flex;align-items:center;gap:8px;padding:8px 10px;
+  margin-bottom:12px;background:rgba(186,3,42,.06);border-radius:4px;
+  border:1px solid rgba(186,3,42,.12)}
+
 /* Sidebar collapses + mobile bottom nav appears at ≤900px */
 @media(max-width:900px){
+  .mob-hdr{display:flex}
   .sidebar{display:none}
-  .main{margin-left:0;padding-bottom:76px}
-  .lh-page{margin-left:0;padding-bottom:76px}
-  .sbs-page{margin-left:0;padding-bottom:76px}
+  .main{margin-left:0;padding-top:56px;padding-bottom:76px}
+  .lh-page{margin-left:0;padding-top:56px;padding-bottom:76px}
+  .sbs-page{margin-left:0;padding-top:56px;padding-bottom:76px}
   .cgrid{grid-template-columns:1fr}
   .fab{display:none}
   .mob-nav{display:flex}
 }
 /* Tablet: collapse the social sidebar into single-column */
 @media(max-width:680px){.sbs-grid{grid-template-columns:1fr}.sbs-divider{display:none}}
+
+/* ── sec-hdr: stack on mobile, hide decorative date/badge ─────────────── */
+@media(max-width:600px){
+  .sec-hdr{flex-direction:column;align-items:flex-start;gap:6px}
+  .sec-hdr > div:last-child{display:none}
+}
+
+/* ── Responsive trending table (mobile card layout) ───────────────────── */
+@media(max-width:600px){
+  .topics-tbl,.topics-tbl tbody{display:block;width:100%}
+  .topics-tbl thead{display:none}
+  .topics-tbl tbody tr.t-row{
+    display:grid;
+    grid-template-columns:44px 1fr auto;
+    grid-template-rows:auto auto;
+    padding:10px 8px;cursor:pointer;
+    border-bottom:1px solid var(--surface-top);background:inherit}
+  .topics-tbl tbody tr.t-row td{display:block;overflow:visible;padding:0}
+  .topics-tbl tbody tr.t-row td:nth-child(1){grid-column:1;grid-row:1/3;padding-top:2px}
+  .topics-tbl tbody tr.t-row td:nth-child(2){grid-column:2;grid-row:1}
+  .topics-tbl tbody tr.t-row td:nth-child(3){grid-column:2;grid-row:2;padding-top:5px}
+  .topics-tbl tbody tr.t-row td:nth-child(4){display:none}
+  .topics-tbl tbody tr.t-row td:nth-child(5){grid-column:3;grid-row:1/3;padding-left:10px;text-align:right;padding-top:2px}
+  .topics-tbl tbody tr.x-row{display:block;width:100%}
+  .topics-tbl tbody tr.x-row td{display:block;padding:0 8px 12px 52px!important}
+  .t-hl{font-size:15px}
+  .sig-n{font-size:18px}
+  .rn{font-size:20px!important}
+}
 
 /* ── Mobile bottom navigation bar ─────────────────────────────────────── */
 .mob-nav{display:none;position:fixed;bottom:0;left:0;right:0;z-index:200;
@@ -1620,6 +1680,46 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 </style></head><body>
 
 <div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
+
+<!-- Mobile top header bar -->
+<div class="mob-hdr" id="mob-hdr">
+  <div class="mob-hdr-brand">
+    <div class="mob-hdr-icon"><span class="ms" style="color:#fff;font-size:17px">psychology</span></div>
+    <span class="mob-hdr-title">Intelligence Ops</span>
+  </div>
+  <div class="mob-hdr-right">
+    <div class="mob-live-pill"><span class="live-dot"></span><span class="mob-live-txt">Live</span></div>
+    <span class="mob-cd" id="cd-mob"></span>
+    <button class="mob-hbg" onclick="toggleDrawer()" aria-label="Open navigation">
+      <span class="ms" id="mob-hbg-icon">menu</span>
+    </button>
+  </div>
+</div>
+
+<!-- Drawer backdrop -->
+<div class="mob-overlay" id="mob-overlay" onclick="closeDrawer()"></div>
+
+<!-- Mobile nav drawer (slides in from right) -->
+<div class="mob-drawer" id="mob-drawer">
+  <nav class="sb-nav" style="gap:4px">
+    <a href="#" class="sb-lnk act" id="drw-topics" onclick="switchPage('dash');closeDrawer();return false">
+      <span class="ms">local_fire_department</span><span>Topic Intelligence</span>
+    </a>
+    <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false">
+      <span class="ms">newspaper</span><span>Live Source Feed</span>
+    </a>
+    <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false">
+      <span class="ms">trending_up</span><span>Social Velocity</span>
+    </a>
+    <a href="#" class="sb-lnk" id="drw-sbs" onclick="switchPage('sbs');closeDrawer();return false">
+      <span class="ms">compare_arrows</span><span>Side by Side</span>
+    </a>
+    <a href="#" class="sb-lnk" id="drw-lh" onclick="switchPage('lh');closeDrawer();return false">
+      <span class="ms">schedule</span>
+      <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
+    </a>
+  </nav>
+</div>
 
 <aside class="sidebar">
   <div class="sb-brand">
@@ -1788,6 +1888,14 @@ function switchPage(pg, scrollTo){
                   : pg==='lh'   ? 'mob-lh' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
   if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
+  // Sync drawer nav active state
+  const activeDrw = scrollTo==='live-feed-section' ? 'drw-live'
+                  : scrollTo==='social-velocity-section' ? 'drw-social'
+                  : pg==='dash' ? 'drw-topics'
+                  : pg==='sbs'  ? 'drw-sbs'
+                  : pg==='lh'   ? 'drw-lh' : '';
+  document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
+  if(activeDrw){const el=document.getElementById(activeDrw);if(el)el.classList.add('act');}
 
   if(pg==='sbs'&&_lastData)renderSBS(_lastData);
   if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
@@ -1811,6 +1919,8 @@ function rLH(arts){
   badge.textContent=arts.length;badge.style.display='';
   const mbadge=document.getElementById('mob-lh-badge');
   if(mbadge){mbadge.textContent=arts.length;mbadge.style.display='';}
+  const dbadge=document.getElementById('lh-badge-drw');
+  if(dbadge){dbadge.textContent=arts.length;dbadge.style.display='';}
   // Split into two buckets: just published (< 15 min) and earlier (15–60 min)
   const fresh=arts.filter(a=>a.age_minutes<15);
   const older=arts.filter(a=>a.age_minutes>=15);
@@ -2004,8 +2114,26 @@ async function fr(){
   try{await fetch('/api/refresh',{method:'POST'})}catch(ex){}
   _n=Date.now()+30*60*1000;_lastTs=null;setTimeout(ld,3000);
 }
-setInterval(()=>{const r=_n-Date.now();document.getElementById('cd').textContent=fc(r);if(r<=0){_n=Date.now()+30*60*1000;ld()}},1000);
+setInterval(()=>{
+  const r=_n-Date.now(),txt=fc(r);
+  document.getElementById('cd').textContent=txt;
+  const cdm=document.getElementById('cd-mob');if(cdm)cdm.textContent=txt;
+  if(r<=0){_n=Date.now()+30*60*1000;ld()}
+},1000);
 setInterval(ld,2*60*1000);
+
+function toggleDrawer(){
+  const dr=document.getElementById('mob-drawer'),ov=document.getElementById('mob-overlay'),ic=document.getElementById('mob-hbg-icon');
+  const open=dr.classList.toggle('open');
+  ov.classList.toggle('open',open);
+  ic.textContent=open?'close':'menu';
+}
+function closeDrawer(){
+  document.getElementById('mob-drawer').classList.remove('open');
+  document.getElementById('mob-overlay').classList.remove('open');
+  document.getElementById('mob-hbg-icon').textContent='menu';
+}
+
 ld();
 </script></body></html>"""
 
