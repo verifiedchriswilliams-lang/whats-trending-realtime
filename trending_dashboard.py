@@ -1578,22 +1578,20 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   margin-bottom:12px;background:rgba(186,3,42,.06);border-radius:4px;
   border:1px solid rgba(186,3,42,.12)}
 
-/* Sidebar collapses + mobile bottom nav appears at ≤900px */
+/* ── All ≤900px mobile overrides in one block ──────────────────────────── */
 @media(max-width:900px){
   .mob-hdr{display:flex}
   .sidebar{display:none}
+  /* Main pages: remove sidebar offset, add top padding for mob-hdr */
   .main{margin-left:0;padding-top:56px;padding-bottom:76px}
   .lh-page{margin-left:0;padding-top:56px;padding-bottom:76px}
-  .sbs-page{margin-left:0;padding-top:56px;padding-bottom:76px}
+  .sbs-page{margin-left:0;padding:56px 16px 76px}
   .cgrid{grid-template-columns:1fr}
   .fab{display:none}
   .mob-nav{display:flex}
-}
-/* Tablet/mobile: Side by Side stacks to single column */
-@media(max-width:900px){
+  /* Side by Side: stack columns vertically */
   .sbs-hdr{flex-direction:column;align-items:flex-start;gap:4px}
   .sbs-hdr h2{font-size:22px}
-  .sbs-page{padding-left:16px;padding-right:16px}
   .sbs-grid{display:block}
   .sbs-divider{display:none}
   .sbs-grid>div+div+div{margin-top:28px;padding-top:20px;border-top:2px solid var(--surface-top)}
