@@ -1589,8 +1589,15 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   .fab{display:none}
   .mob-nav{display:flex}
 }
-/* Tablet: collapse the social sidebar into single-column */
-@media(max-width:680px){.sbs-grid{grid-template-columns:1fr}.sbs-divider{display:none}}
+/* Tablet/mobile: Side by Side stacks to single column */
+@media(max-width:900px){
+  .sbs-hdr{flex-direction:column;align-items:flex-start;gap:4px}
+  .sbs-hdr h2{font-size:22px}
+  .sbs-page{padding-left:16px;padding-right:16px}
+  .sbs-grid{display:block}
+  .sbs-divider{display:none}
+  .sbs-grid>div+div+div{margin-top:28px;padding-top:20px;border-top:2px solid var(--surface-top)}
+}
 
 /* ── sec-hdr: stack on mobile, hide decorative date/badge ─────────────── */
 @media(max-width:600px){
