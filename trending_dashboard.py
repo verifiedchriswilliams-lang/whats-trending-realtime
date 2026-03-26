@@ -193,7 +193,19 @@ _RSS_HEADERS = {
 
 def fetch_source(source):
     try:
-        feed = feedparser.parse(source["rss"], request_headers=_RSS_HEADERS)
+        # Use requests (with 15s timeout) to fetch raw RSS bytes, then hand to feedparser.
+        # feedparser.parse(url) uses urllib with no timeout — one slow/hung feed blocks
+        # the entire ThreadPoolExecutor and freezes the refresh cycle indefinitely.
+        if HAS_SCRAPE:
+            try:
+                resp = requests.get(source["rss"], timeout=15, headers=_RSS_HEADERS)
+                raw = resp.content
+            except Exception as e:
+                print(f"  {source['id']} RSS fetch error: {e}")
+                return source["id"], []
+            feed = feedparser.parse(raw)
+        else:
+            feed = feedparser.parse(source["rss"], request_headers=_RSS_HEADERS)
         if feed.bozo and not feed.entries: return source["id"], []
         arts = []
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
