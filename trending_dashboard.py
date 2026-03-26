@@ -167,7 +167,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"last_hour":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"facebook_posts":[],"reddit_posts":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -479,12 +479,13 @@ def fetch_reddit_trending():
         for child in data.get("data", {}).get("children", []):
             p = child.get("data", {})
             if p.get("stickied"): continue  # skip pinned mod posts
-            title = p.get("title", "").strip()
-            url   = p.get("url", "#")
-            score = p.get("score", 0)
+            title     = p.get("title", "").strip()
+            url       = p.get("url", "#")
+            score     = p.get("score", 0)
             num_comments = p.get("num_comments", 0)
+            permalink = "https://reddit.com" + p.get("permalink", "") if p.get("permalink") else "#"
             if title:
-                posts.append({"title": title, "link": url,
+                posts.append({"title": title, "link": url, "thread": permalink,
                               "score": score, "comments": num_comments})
         if posts:
             _REDDIT_CACHE = {"data": posts[:20], "fetched_at": now}
@@ -959,13 +960,14 @@ def refresh_data():
                 else:
                     art["scrape_confirmed"] = False
 
-    print("  Fetching Drudge + Twitter/X + Facebook engagement...")
+    print("  Fetching Drudge + Twitter/X + Reddit r/Conservative...")
     drudge_links    = fetch_drudge()
     twitter_trends  = fetch_twitter_trends()
-    facebook_posts  = fetch_facebook_engagement(all_arts)
+    reddit_posts    = fetch_reddit_trending()
+    facebook_posts  = fetch_facebook_engagement(all_arts)  # kept dormant; returns [] until FB app permissions fixed
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
-    print(f"  {'✓' if facebook_posts else '✗'} Facebook: {len(facebook_posts)} articles with engagement")
+    print(f"  {'✓' if reddit_posts else '✗'} Reddit: {len(reddit_posts)} posts")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1046,7 +1048,7 @@ def refresh_data():
 
     with data_lock:
         data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
-                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,
+                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,"reddit_posts":reddit_posts,
                            "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
@@ -1360,11 +1362,11 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
         <div class="stabs">
           <button class="stab active" onclick="switchTab('dr')"><span class="ms" style="font-size:14px">campaign</span>Drudge</button>
           <button class="stab" onclick="switchTab('tw')"><span class="ms" style="font-size:14px">tag</span>Twitter</button>
-          <button class="stab" onclick="switchTab('fb')"><span class="ms" style="font-size:14px">thumb_up</span>Facebook</button>
+          <button class="stab" onclick="switchTab('re')"><span class="ms" style="font-size:14px">forum</span>Reddit</button>
         </div>
         <div id="sp-dr" class="spanel active"><div id="dl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
-        <div id="sp-fb" class="spanel"><div id="fl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
+        <div id="sp-re" class="spanel"><div id="rl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
       </div>
     </aside>
   </div>
@@ -1545,31 +1547,25 @@ let _activeTab='dr';
 function switchTab(tab){
   _activeTab=tab;
   document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','fb'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-fb'][i]==='sp-'+tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-re'][i]==='sp-'+tab)});
 }
-function fmtFb(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return n}
-function rFb(posts){
-  const el=document.getElementById('fl');
+function fmtK(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return n}
+function rRe(posts){
+  const el=document.getElementById('rl');
   if(!posts||!posts.length){
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">No Facebook engagement data yet.<br><span style="font-size:11px;margin-top:4px;display:block">Checking article URLs against the Facebook Graph API.</span></div>';
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Reddit data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Fetching r/Conservative hot posts…</span></div>';
     return;
   }
-  if(posts.length===1&&posts[0].__unavailable){
-    const reason=posts[0].reason?'<br><span style="font-size:10px;opacity:.7">'+e(posts[0].reason)+'</span>':'';
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.'+reason+'</div>';
-    return;
-  }
-  const SA2={foxnews:'FOX',nypost:'NYP',dailywire:'DW',breitbart:'BB',washtimes:'WT',townhall:'TH',nytimes:'NYT',nbcnews:'NBC',dailymail:'DM',foxbusiness:'FOXB',skynews:'SKY',thehill:'HILL'};
-  el.innerHTML=posts.map(p=>{
-    const src=SA2[p.source]||(p.source||'').slice(0,4).toUpperCase();
-    const tot=fmtFb(p.fb_total||0);
-    const rx=fmtFb(p.fb_reactions||0);
-    const sh=fmtFb(p.fb_shares||0);
-    const cm=fmtFb(p.fb_comments||0);
-    return '<div class="si"><a href="'+e(p.url)+'" target="_blank">'+e(p.title)+'</a>'
-      +'<div class="si-m" title="'+tot+' total \u00b7 '+rx+' reactions \u00b7 '+sh+' shares \u00b7 '+cm+' comments">'
-      +'<span style="background:#1877F2;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">'+e(src)+'</span>'
-      +'\uD83D\uDC4D\uFE0F '+rx+' \u00b7 \u{1F501} '+sh+' \u00b7 \u{1F4AC} '+cm
+  el.innerHTML=posts.map((p,i)=>{
+    const score=fmtK(p.score||0);
+    const cmts=fmtK(p.comments||0);
+    const threadLink=p.thread&&p.thread!=='#'?'<a href="'+e(p.thread)+'" target="_blank" rel="noopener" title="View Reddit thread" style="color:var(--ink-l);font-size:10px;text-decoration:none;border-bottom:1px dashed var(--surface-top);margin-left:6px">thread</a>':'';
+    return '<div class="si">'
+      +'<a href="'+e(p.link)+'" target="_blank" rel="noopener">'+e(p.title)+'</a>'
+      +'<div class="si-m">'
+      +'<span style="background:#FF4500;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">r/Conservative</span>'
+      +'\u2191 '+score+' \u00b7 \uD83D\uDCAC '+cmts+' comments'
+      +threadLink
       +'</div></div>';
   }).join('');
 }
@@ -1611,7 +1607,7 @@ async function ld(){
     _lastData=d;
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
-      rT(d.trending_topics);rFb(d.facebook_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
+      rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
       if(_page==='sbs')renderSBS(d);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
