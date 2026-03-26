@@ -457,53 +457,62 @@ def fetch_twitter_trends():
     return _TWITTER_CACHE["data"]
 
 
-def fetch_reddit_trending():
-    """Fetch hot posts from r/Conservative via Reddit's public JSON API.
-    Tries multiple endpoints with browser-like headers to avoid cloud IP blocks."""
-    global _REDDIT_CACHE
+def fetch_memeorandum():
+    """Scrape Memeorandum (memeorandum.com) for top political stories.
+    Memeorandum is a political news aggregator that surfaces stories getting
+    the most cross-blog/cross-media attention — a strong editorial signal.
+    Simple static HTML, no API key, no auth required."""
+    global _REDDIT_CACHE  # reusing cache slot; renamed in data_store as 'reddit_posts'
     now = time.time()
     if _REDDIT_CACHE["data"] and now - _REDDIT_CACHE["fetched_at"] < 1800:
         return _REDDIT_CACHE["data"]
     if not HAS_SCRAPE:
         return _REDDIT_CACHE["data"]
-    # Reddit requires a descriptive User-Agent and increasingly blocks cloud IPs.
-    # Try the standard endpoint first, then old.reddit.com as fallback.
-    REDDIT_HEADERS = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json, text/plain, */*',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Referer': 'https://www.reddit.com/',
-    }
-    urls_to_try = [
-        "https://www.reddit.com/r/Conservative/hot.json?limit=25&raw_json=1",
-        "https://old.reddit.com/r/Conservative/hot.json?limit=25&raw_json=1",
-    ]
-    for url in urls_to_try:
-        try:
-            r = requests.get(url, timeout=15, headers=REDDIT_HEADERS, allow_redirects=True)
-            print(f"  Reddit [{r.status_code}] {url[:60]}")
-            if r.status_code != 200:
+    try:
+        r = requests.get(
+            "https://www.memeorandum.com/",
+            timeout=12,
+            headers={
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml',
+                'Accept-Language': 'en-US,en;q=0.9',
+            }
+        )
+        r.raise_for_status()
+        soup = BeautifulSoup(r.text, 'html.parser')
+        stories = []
+        seen = set()
+        # Memeorandum structure: each story cluster has a cite.main > a (main article link)
+        # followed by smaller links showing who's discussing it.
+        for cite in soup.find_all('cite', class_='main'):
+            a = cite.find('a', href=True)
+            if not a:
                 continue
-            data = r.json()
-            posts = []
-            for child in data.get("data", {}).get("children", []):
-                p = child.get("data", {})
-                if p.get("stickied"): continue  # skip pinned mod posts
-                title     = p.get("title", "").strip()
-                url_link  = p.get("url", "#")
-                score     = p.get("score", 0)
-                num_comments = p.get("num_comments", 0)
-                permalink = "https://reddit.com" + p.get("permalink", "") if p.get("permalink") else "#"
-                if title:
-                    posts.append({"title": title, "link": url_link, "thread": permalink,
-                                  "score": score, "comments": num_comments})
-            if posts:
-                _REDDIT_CACHE = {"data": posts[:20], "fetched_at": now}
-                print(f"  Reddit r/Conservative: {len(posts[:20])} posts")
-                return _REDDIT_CACHE["data"]
-        except Exception as ex:
-            print(f"  Reddit fetch error ({url[:40]}): {ex}")
-    return _REDDIT_CACHE["data"]
+            title = a.get_text(strip=True)
+            link  = a.get('href', '#')
+            if not title or title in seen or len(title) < 15:
+                continue
+            seen.add(title)
+            # Count how many discussants (other sites) are covering this story
+            # by finding the discussion block that follows this cite
+            discussants = 0
+            parent = cite.find_parent()
+            if parent:
+                disc = parent.find_next_sibling(class_='discussants')
+                if disc:
+                    discussants = len(disc.find_all('a', href=True))
+            stories.append({"title": title, "link": link, "discussants": discussants})
+            if len(stories) >= 20:
+                break
+        if stories:
+            _REDDIT_CACHE = {"data": stories, "fetched_at": now}
+            print(f"  Memeorandum: {len(stories)} stories")
+        else:
+            print("  Memeorandum: no stories parsed")
+        return _REDDIT_CACHE["data"]
+    except Exception as ex:
+        print(f"  Memeorandum fetch error: {ex}")
+        return _REDDIT_CACHE["data"]
 
 
 _FB_CACHE = {"data": [], "fetched_at": 0, "backoff_until": 0}
@@ -970,14 +979,14 @@ def refresh_data():
                 else:
                     art["scrape_confirmed"] = False
 
-    print("  Fetching Drudge + Twitter/X + Reddit r/Conservative...")
+    print("  Fetching Drudge + Twitter/X + Memeorandum...")
     drudge_links    = fetch_drudge()
     twitter_trends  = fetch_twitter_trends()
-    reddit_posts    = fetch_reddit_trending()
+    reddit_posts    = fetch_memeorandum()
     facebook_posts  = fetch_facebook_engagement(all_arts)  # kept dormant; returns [] until FB app permissions fixed
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
-    print(f"  {'✓' if reddit_posts else '✗'} Reddit: {len(reddit_posts)} posts")
+    print(f"  {'✓' if reddit_posts else '✗'} Memeorandum: {len(reddit_posts)} stories")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1100,32 +1109,24 @@ def debug_fb():
     except Exception as ex:
         return jsonify({"error": str(ex)})
 
-@app.route('/debug/reddit')
-def debug_reddit():
-    """Diagnostic endpoint: makes one live Reddit API call and returns raw response + status."""
+@app.route('/debug/memo')
+def debug_memo():
+    """Diagnostic: fetch Memeorandum and return first 3 parsed stories."""
     if not HAS_SCRAPE:
         return jsonify({"error": "requests not available"})
-    headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
-    }
-    results = {}
-    for label, url in [
-        ("www", "https://www.reddit.com/r/Conservative/hot.json?limit=3&raw_json=1"),
-        ("old", "https://old.reddit.com/r/Conservative/hot.json?limit=3&raw_json=1"),
-    ]:
-        try:
-            r = requests.get(url, timeout=10, headers=headers)
-            try:
-                body = r.json()
-                entry_count = len(body.get("data", {}).get("children", []))
-            except Exception:
-                body = r.text[:300]
-                entry_count = 0
-            results[label] = {"status": r.status_code, "entries": entry_count, "sample": body if entry_count == 0 else None}
-        except Exception as ex:
-            results[label] = {"error": str(ex)}
-    return jsonify(results)
+    try:
+        r = requests.get("https://www.memeorandum.com/", timeout=12, headers={
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        })
+        soup = BeautifulSoup(r.text, 'html.parser')
+        stories = []
+        for cite in soup.find_all('cite', class_='main')[:3]:
+            a = cite.find('a', href=True)
+            if a:
+                stories.append({"title": a.get_text(strip=True), "link": a.get('href')})
+        return jsonify({"status": r.status_code, "stories_found": len(soup.find_all('cite', class_='main')), "sample": stories})
+    except Exception as ex:
+        return jsonify({"error": str(ex)})
 
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
@@ -1399,7 +1400,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
         <div class="stabs">
           <button class="stab active" onclick="switchTab('dr')"><span class="ms" style="font-size:14px">campaign</span>Drudge</button>
           <button class="stab" onclick="switchTab('tw')"><span class="ms" style="font-size:14px">tag</span>Twitter</button>
-          <button class="stab" onclick="switchTab('re')"><span class="ms" style="font-size:14px">forum</span>Reddit</button>
+          <button class="stab" onclick="switchTab('re')"><span class="ms" style="font-size:14px">hub</span>Memo</button>
         </div>
         <div id="sp-dr" class="spanel active"><div id="dl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
@@ -1590,19 +1591,16 @@ function fmtK(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)retur
 function rRe(posts){
   const el=document.getElementById('rl');
   if(!posts||!posts.length){
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Reddit data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Fetching r/Conservative hot posts…</span></div>';
+    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Memeorandum unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Fetching top political stories…</span></div>';
     return;
   }
   el.innerHTML=posts.map((p,i)=>{
-    const score=fmtK(p.score||0);
-    const cmts=fmtK(p.comments||0);
-    const threadLink=p.thread&&p.thread!=='#'?'<a href="'+e(p.thread)+'" target="_blank" rel="noopener" title="View Reddit thread" style="color:var(--ink-l);font-size:10px;text-decoration:none;border-bottom:1px dashed var(--surface-top);margin-left:6px">thread</a>':'';
+    const disc=p.discussants>0?'<span style="color:var(--ink-l);font-size:10px">\u00b7 '+p.discussants+' sources discussing</span>':'';
     return '<div class="si">'
       +'<a href="'+e(p.link)+'" target="_blank" rel="noopener">'+e(p.title)+'</a>'
       +'<div class="si-m">'
-      +'<span style="background:#FF4500;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">r/Conservative</span>'
-      +'\u2191 '+score+' \u00b7 \uD83D\uDCAC '+cmts+' comments'
-      +threadLink
+      +'<span style="background:#1a5276;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">MEMO</span>'
+      +disc
       +'</div></div>';
   }).join('');
 }
