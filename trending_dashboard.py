@@ -1015,13 +1015,22 @@ def compute_alignment(all_arts, topics):
         # Also check the display label parts
         for w in topic["keyword"].lower().split():
             if len(w) > 3: cluster_kws.add(w)
-        # DW covers it if they share ANY specific keyword with the cluster
+        # 1. Exact keyword intersection
         shared = cluster_kws & dw_kws
         if shared: return True, shared
-        # Fallback: substring match on DW article titles
+        # 2. Prefix-aware match: catches olympic/olympics, transgender/trans, etc.
+        #    Two keywords match if they share a common 5-char prefix (lightweight stemming).
+        for ck in cluster_kws:
+            if len(ck) < 5: continue
+            pfx = ck[:5]
+            for dk in dw_kws:
+                if len(dk) >= 5 and dk[:5] == pfx:
+                    return True, {ck}
+        # 3. Substring fallback: cluster keyword appears inside a DW article title
         for a in dw:
+            title_lower = a["title"].lower()
             for kw in cluster_kws:
-                if len(kw) > 4 and kw in a["title"].lower():
+                if len(kw) > 4 and kw in title_lower:
                     return True, {kw}
         return False, set()
 
@@ -1122,6 +1131,40 @@ def refresh_data():
     INJECT_LIMIT    = 10
     SKIP_INJECT     = {'dailymail'}   # sources whose homepage mix makes injection unreliable
 
+    # Junk filter for synthetic injection — blocks nav elements, promos, and ads
+    # that pass the URL quality gate (depth ≥ 2) but aren't actual news headlines.
+    _JUNK_TITLE_RE = re.compile(
+        r'\d+\s*%\s*off'           # "60% Off"
+        r'|vip\s+membership'       # "VIP Memberships"
+        r'|^listen\s+to\b'         # "Listen to Sky News podcasts"
+        r'|podcast'                # any podcast reference
+        r'|newsletter'             # newsletter signups
+        r'|site\s+information'     # "Site Information Navigation"
+        r'|navigation$'            # ends with "Navigation"
+        r'|–\s+top\s+stories$'     # "Source Name – Top Stories"
+        r'|subscribe\b'            # subscribe prompts
+        r'|sign\s+up\b'            # sign up prompts
+        r'|^new!\s'                # "NEW! ..." promos
+        r'|^new\s+live\b'          # "NEW Live sports talk show..."
+        r'|get\s+today.s\s+top\s+stories'  # WashTimes newsletter promo
+        r'|every\s+day\s+at\s+\d'  # "Every Day at 2PM" schedule promos
+        r'|listen\s+to\s+the\s+front',  # "Listen to The Front" podcast promo
+        re.IGNORECASE
+    )
+    _JUNK_PATH_RE = re.compile(
+        r'/podcast|/subscribe|/newsletter|/membership|/about|/contact'
+        r'|/privacy|/terms|/rss|/feeds|/apps|/store',
+        re.IGNORECASE
+    )
+
+    def _is_junk_injection(title, href):
+        if _JUNK_TITLE_RE.search(title):
+            return True
+        path = href.split('?')[0] if '?' in href else href
+        if _JUNK_PATH_RE.search(path):
+            return True
+        return False
+
     total_injected = 0
     for inject_sid, inject_homepage_url in SCRAPE_SOURCES.items():
         if inject_sid in SKIP_INJECT:
@@ -1160,6 +1203,10 @@ def refresh_data():
             href = iurl_map.get(h_norm)
             if not href:
                 continue
+            orig_title = iorig_map.get(h_norm, h_norm.title())
+            # Skip nav elements, promos, ads, and podcast/newsletter links
+            if _is_junk_injection(orig_title, href):
+                continue
             # Must be from this source's own domain
             _hp = href.find('://')
             _hq = href.find('/', _hp + 3) if _hp >= 0 else -1
@@ -1172,7 +1219,6 @@ def refresh_data():
             path_parts = [p for p in _path.split('/') if p]
             if len(path_parts) < 2:
                 continue
-            orig_title = iorig_map.get(h_norm, h_norm.title())
             synthetic = {
                 "title":            orig_title,
                 "link":             href,
@@ -1283,7 +1329,7 @@ def refresh_data():
     last_hour.sort(key=lambda x: x["pub_ts"], reverse=True)
 
     with data_lock:
-        data_store.update({"last_updated":datetime.utcnow().isoformat()+"Z","sources":srcs,"trending_topics":topics,
+        data_store.update({"last_updated":datetime.now(timezone.utc).isoformat()+"Z","sources":srcs,"trending_topics":topics,
                            "twitter_trends":twitter_trends,"drudge_links":drudge_links,"facebook_posts":facebook_posts,"reddit_posts":reddit_posts,
                            "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
