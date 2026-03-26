@@ -1111,6 +1111,17 @@ def api_refresh():
     threading.Thread(target=refresh_data,daemon=True).start()
     return jsonify({"status":"ok"})
 
+@app.route('/debug/refresh')
+def debug_refresh():
+    """Run refresh_data() synchronously and return any exception. Diagnoses startup crashes."""
+    import traceback
+    try:
+        refresh_data()
+        with data_lock:
+            return jsonify({"status": "ok", "sources_live": data_store.get("sources_live"), "last_updated": data_store.get("last_updated")})
+    except Exception as ex:
+        return jsonify({"error": str(ex), "traceback": traceback.format_exc()})
+
 @app.route('/debug/fb')
 def debug_fb():
     """Diagnostic endpoint: makes ONE live Facebook Graph API call and returns raw response.
