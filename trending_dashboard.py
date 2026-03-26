@@ -1584,17 +1584,17 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   .sidebar{display:none}
   /* Main pages: remove sidebar offset, add top padding for mob-hdr */
   .main{margin-left:0;padding-top:56px;padding-bottom:76px}
-  .lh-page{margin-left:0;padding-top:56px;padding-bottom:76px}
+  .lh-page{margin-left:0!important;padding-top:56px!important;padding-bottom:76px!important}
   .sbs-page{margin-left:0!important;padding:56px 16px 76px!important}
   .cgrid{grid-template-columns:1fr}
   .fab{display:none}
   .mob-nav{display:flex}
   /* Side by Side: stack columns vertically */
-  .sbs-hdr{flex-direction:column;align-items:flex-start;gap:4px}
-  .sbs-hdr h2{font-size:22px}
-  .sbs-grid{display:block}
-  .sbs-divider{display:none}
-  .sbs-grid>div+div+div{margin-top:28px;padding-top:20px;border-top:2px solid var(--surface-top)}
+  .sbs-hdr{flex-direction:column!important;align-items:flex-start!important;gap:4px!important}
+  .sbs-hdr h2{font-size:22px!important}
+  .sbs-grid{display:block!important;grid-template-columns:unset!important}
+  .sbs-divider{display:none!important}
+  .sbs-grid>div+div+div{margin-top:28px!important;padding-top:20px!important;border-top:2px solid var(--surface-top)!important}
 }
 
 /* ── sec-hdr: stack on mobile, hide decorative date/badge ─────────────── */
