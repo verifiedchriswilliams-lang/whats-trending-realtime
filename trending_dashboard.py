@@ -544,15 +544,19 @@ def fetch_facebook_engagement(all_arts):
 
     FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
     first_error = []  # capture first error message for diagnostics
+    first_response = []  # log first raw API response for diagnostics
 
     def fetch_one(item):
         try:
             r = requests.get(
-                f"https://graph.facebook.com/v19.0/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
+                f"https://graph.facebook.com/v21.0/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
                 timeout=8,
                 headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
             )
             data = r.json()
+            # Log the first raw response so Railway logs show what's actually coming back
+            if not first_response:
+                first_response.append({"url": item['url'], "status": r.status_code, "data": data})
             if "error" in data:
                 if not first_error:
                     first_error.append(data["error"])
@@ -582,6 +586,9 @@ def fetch_facebook_engagement(all_arts):
                 if r:
                     results.append(r)
 
+        if first_response:
+            fr = first_response[0]
+            print(f"  Facebook API first response [{fr['status']}] url={fr['url'][:60]} data={str(fr['data'])[:200]}")
         if first_error:
             print(f"  Facebook API error: {first_error[0]}")
 
@@ -1062,6 +1069,24 @@ def api_data():
 def api_refresh():
     threading.Thread(target=refresh_data,daemon=True).start()
     return jsonify({"status":"ok"})
+
+@app.route('/debug/fb')
+def debug_fb():
+    """Diagnostic endpoint: makes ONE live Facebook Graph API call and returns raw response.
+    Useful for confirming API connectivity and permissions from Railway. DELETE after fix."""
+    if not HAS_SCRAPE:
+        return jsonify({"error": "requests not available"})
+    FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
+    test_url = "https://nypost.com/2025/01/15/us-news/trump-cabinet-picks/"
+    try:
+        r = requests.get(
+            f"https://graph.facebook.com/v21.0/?id={test_url}&fields=engagement&access_token={FB_TOKEN}",
+            timeout=10,
+            headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
+        )
+        return jsonify({"status": r.status_code, "url_tested": test_url, "response": r.json()})
+    except Exception as ex:
+        return jsonify({"error": str(ex)})
 
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
