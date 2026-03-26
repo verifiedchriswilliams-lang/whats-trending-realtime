@@ -482,10 +482,20 @@ def fetch_memeorandum():
         soup = BeautifulSoup(r.text, 'html.parser')
         stories = []
         seen = set()
-        # Memeorandum structure: each story cluster has a cite.main > a (main article link)
-        # followed by smaller links showing who's discussing it.
-        for cite in soup.find_all('cite', class_='main'):
-            a = cite.find('a', href=True)
+        # Memeorandum structure (confirmed via browser inspection March 2026):
+        #   div.item
+        #     div.ii
+        #       strong.L1/.L2/.L3/.L4  ← prominence tier
+        #         a href="..."          ← main story headline
+        #     div (no class)            ← "Discussion: Site A and Site B"
+        for item in soup.find_all('div', class_='item'):
+            ii = item.find('div', class_='ii')
+            if not ii:
+                continue
+            strong = ii.find('strong')
+            if not strong:
+                continue
+            a = strong.find('a', href=True)
             if not a:
                 continue
             title = a.get_text(strip=True)
@@ -493,14 +503,12 @@ def fetch_memeorandum():
             if not title or title in seen or len(title) < 15:
                 continue
             seen.add(title)
-            # Count how many discussants (other sites) are covering this story
-            # by finding the discussion block that follows this cite
+            # Count discussants: sibling divs containing "Discussion:" text
             discussants = 0
-            parent = cite.find_parent()
-            if parent:
-                disc = parent.find_next_sibling(class_='discussants')
-                if disc:
-                    discussants = len(disc.find_all('a', href=True))
+            for sibling in item.find_all('div'):
+                if 'Discussion:' in sibling.get_text():
+                    discussants = len(sibling.find_all('a', href=True))
+                    break
             stories.append({"title": title, "link": link, "discussants": discussants})
             if len(stories) >= 20:
                 break
@@ -1111,7 +1119,7 @@ def debug_fb():
 
 @app.route('/debug/memo')
 def debug_memo():
-    """Diagnostic: fetch Memeorandum and return first 3 parsed stories."""
+    """Diagnostic: fetch Memeorandum with correct selectors (div.item > div.ii > strong > a)."""
     if not HAS_SCRAPE:
         return jsonify({"error": "requests not available"})
     try:
@@ -1120,11 +1128,15 @@ def debug_memo():
         })
         soup = BeautifulSoup(r.text, 'html.parser')
         stories = []
-        for cite in soup.find_all('cite', class_='main')[:3]:
-            a = cite.find('a', href=True)
+        for item in soup.find_all('div', class_='item')[:5]:
+            ii = item.find('div', class_='ii')
+            if not ii: continue
+            strong = ii.find('strong')
+            if not strong: continue
+            a = strong.find('a', href=True)
             if a:
                 stories.append({"title": a.get_text(strip=True), "link": a.get('href')})
-        return jsonify({"status": r.status_code, "stories_found": len(soup.find_all('cite', class_='main')), "sample": stories})
+        return jsonify({"status": r.status_code, "items_found": len(soup.find_all('div', class_='item')), "sample": stories})
     except Exception as ex:
         return jsonify({"error": str(ex)})
 
