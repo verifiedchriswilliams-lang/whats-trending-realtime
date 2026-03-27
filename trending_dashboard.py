@@ -858,6 +858,60 @@ def best_label(kw, articles):
                    '', title, flags=re.IGNORECASE).strip()
     return title
 
+# ── Story category classification ──────────────────────────────────────────
+_INTL_KW = {
+    'china','chinese','beijing','russia','russian','moscow','ukraine','ukrainian',
+    'kyiv','iran','iranian','tehran','israel','israeli','gaza','palestine','palestinian',
+    'europe','european','nato','britain','british','england','london','france','french',
+    'paris','germany','german','berlin','canada','canadian','ottawa','mexico','mexican',
+    'india','indian','pakistan','pakistani','afghanistan','afghan','korea','korean',
+    'japan','japanese','taiwan','taiwanese','australia','australian','new zealand',
+    'middle east','africa','african','latin america','eu ','european union','brussels',
+    'kremlin','zelensky','netanyahu','modi','trudeau','macron','xi jinping','xi ',
+    'ceasefire','cease-fire','foreign minister','diplomatic','embassy','sanctions',
+    'g7','g20','imf','world bank','united nations','un security','interpol',
+    'south china sea','black sea','red sea','strait of hormuz',
+}
+_SPORTS_KW = {
+    'nfl','nba','mlb','nhl','nascar','fifa','mls','pga tour','ufc','mma','ncaa','espn',
+    'super bowl','world cup','championship','playoffs','playoff','nfl draft','nba draft',
+    'quarterback','pitcher','linebacker','goalie','touchdown','home run','slam dunk',
+    'hat trick','overtime','halftime','inning','free throw','field goal',
+    'stadium','arena','roster','free agency','trade deadline','signing bonus',
+    'lakers','cowboys','patriots','eagles','chiefs','49ers','yankees','celtics',
+    'lebron','mahomes','brady','curry','durant','jalen hurts','burrow',
+    'olympics','olympic games','march madness','final four','world series',
+    'wimbledon','us open','masters tournament','pga tour','tour de france',
+    'formula 1','formula one','grand prix','soccer','basketball','baseball',
+    'football game','hockey','tennis match','golf tournament',
+}
+_ENT_KW = {
+    'hollywood','celebrity','celebrities','movie','film','box office',
+    'tv show','television show','streaming','netflix','disney+','hulu','hbo max','prime video',
+    'album','concert','tour','grammy','oscar','emmy','golden globe','tony award',
+    'actor','actress','singer','rapper','musician','pop star',
+    'trailer','movie premiere','episode','season finale','cast','director','producer',
+    'kardashian','taylor swift','beyonce','drake','rihanna','kanye','spotify',
+    'billboard','tiktok','viral video','influencer','reality tv','reality show',
+    'red carpet','award show','music video','chart-topping','box-office',
+    'superhero','marvel','dc comics','animated film','documentary film',
+}
+
+def classify_category(titles):
+    """Classify article titles into national/international/sports/entertainment."""
+    combined = ' ' + ' '.join(titles).lower() + ' '
+    intl  = sum(1 for kw in _INTL_KW   if kw in combined)
+    sport = sum(1 for kw in _SPORTS_KW  if kw in combined)
+    ent   = sum(1 for kw in _ENT_KW     if kw in combined)
+    best_score = max(intl, sport, ent)
+    if best_score == 0:
+        return 'national'
+    if intl == best_score:
+        return 'international'
+    if sport == best_score:
+        return 'sports'
+    return 'entertainment'
+
 def cluster_topics(all_arts):
     # Flatten articles
     flat = []
@@ -984,7 +1038,8 @@ def cluster_topics(all_arts):
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
                          "heat_score": heat, "hero_sources": hero_sources,
-                         "age_minutes": age_minutes, "is_breaking": is_breaking})
+                         "age_minutes": age_minutes, "is_breaking": is_breaking,
+                         "category": classify_category([a["title"] for a in cl_arts])})
 
     clusters.sort(key=lambda x: -x["heat_score"])
     return clusters[:20]
@@ -1323,6 +1378,7 @@ def refresh_data():
                     "pub_ts":      pts,
                     "age_minutes": age_min,
                     "cluster_sources": title_to_cluster_srcs.get(art.get("title",""), 0),
+                    "category":    classify_category([art.get("title", "")]),
                 })
             except Exception:
                 continue
@@ -1492,6 +1548,11 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .tag.brk{background:rgba(186,3,42,.1);color:var(--red);animation:lp 1.5s infinite}
 .tag.age{background:var(--surface-low);color:var(--ink-l);border:1px solid var(--surface-high)}
 .tag.lead{background:var(--navy);color:#fff}
+.tag.cat{border-radius:2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+.tag.cat-natl{background:#EFF6FF;color:#1D4ED8}
+.tag.cat-intl{background:#F0FDFA;color:#0F766E}
+.tag.cat-sport{background:#F0FDF4;color:#15803D}
+.tag.cat-ent{background:#FFF7ED;color:#C2410C}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
 .chip{width:26px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;font-family:'Inter',sans-serif;flex-shrink:0}
 .chip.hero{outline:2px solid var(--navy);outline-offset:1px}
@@ -1940,7 +2001,7 @@ function rLH(arts){
     return '<div class="lh-item">'
       +'<div class="lh-eyebrow"><span class="lh-src" style="background:'+e(a.lean_color)+'">'+e(a.source_name)+'</span>'
       +'<span class="lh-time">'+mins+'</span>'
-      +freshMark+signal+'</div>'
+      +catBadge(a.category)+freshMark+signal+'</div>'
       +'<div class="lh-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div>'
       +'</div>';
   }
@@ -1962,7 +2023,7 @@ function renderSBS(d){
   document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
     const dwOn=(t.sources||[]).includes('dailywire')||t.dw_covered;
     const badge=dwOn?'<span class="sbs-badge sbs-dw-yes" title="Daily Wire is covering this story">\u2713 DW</span>':'';
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta"><span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta">'+catBadge(t.category)+'<span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
   }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
   document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
     const isTop=a.scrape_position&&a.scrape_position<=5;
@@ -2005,6 +2066,12 @@ function spark(delta,heat,history){
   const p='M0 '+pad+' L22 '+(pad+drop*.25)+' L44 '+(pad+drop*.55)+' L66 '+(pad+drop*.82)+' L'+w+' '+Math.min(h-pad,pad+drop);
   return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 }
+const _CAT_LABEL={'national':'Natl','international':'Intl','sports':'Sport','entertainment':'Ent'};
+const _CAT_CLS={'national':'cat-natl','international':'cat-intl','sports':'cat-sport','entertainment':'cat-ent'};
+function catBadge(cat){
+  const lbl=_CAT_LABEL[cat]||'Natl',cls=_CAT_CLS[cat]||'cat-natl';
+  return '<span class="tag cat '+cls+'">'+lbl+'</span>';
+}
 function rT(topics){
   const tb=document.getElementById('tl');
   if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
@@ -2031,7 +2098,7 @@ function rT(topics){
     const rn=(i<9?'0':'')+(i+1);
     return '<tr class="t-row" onclick="tg('+i+')">'
       +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
-      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
+      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+catBadge(t.category)+brkBadge+ageBadge+leadBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
       +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
