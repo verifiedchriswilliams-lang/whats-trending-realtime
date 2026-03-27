@@ -951,7 +951,7 @@ _HEALTH_KW = {
 _CAT_PRIORITY = ['international','crime','sports','entertainment','business','technology','health','national']
 
 def classify_category(titles):
-    """Classify article titles into one of 9 categories."""
+    """Classify article titles into 1-2 categories (list). Returns ['national'] as default."""
     combined = ' ' + ' '.join(titles).lower() + ' '
     scores = {
         'international': sum(1 for kw in _INTL_KW   if kw in combined),
@@ -964,12 +964,10 @@ def classify_category(titles):
     }
     best_score = max(scores.values())
     if best_score == 0:
-        return 'national'
-    # Among tied winners, pick by priority order
-    for cat in _CAT_PRIORITY:
-        if scores.get(cat, 0) == best_score:
-            return cat
-    return 'national'
+        return ['national']
+    # Collect all categories that hit the best score, in priority order, cap at 2
+    winners = [cat for cat in _CAT_PRIORITY if scores.get(cat, 0) == best_score]
+    return winners[:2] if winners else ['national']
 
 def cluster_topics(all_arts):
     # Flatten articles
@@ -2131,9 +2129,12 @@ function spark(delta,heat,history){
 }
 const _CAT_LABEL={'national':'Natl','international':'Intl','sports':'Sport','entertainment':'Ent','business':'Biz','crime':'Crime','technology':'Tech','health':'Health'};
 const _CAT_CLS={'national':'cat-natl','international':'cat-intl','sports':'cat-sport','entertainment':'cat-ent','business':'cat-biz','crime':'cat-crime','technology':'cat-tech','health':'cat-health'};
-function catBadge(cat){
-  const lbl=_CAT_LABEL[cat]||'Natl',cls=_CAT_CLS[cat]||'cat-natl';
-  return '<span class="tag cat '+cls+'">'+lbl+'</span>';
+function catBadge(cats){
+  const arr=Array.isArray(cats)?cats:[cats||'national'];
+  return arr.map(cat=>{
+    const lbl=_CAT_LABEL[cat]||'Natl',cls=_CAT_CLS[cat]||'cat-natl';
+    return '<span class="tag cat '+cls+'">'+lbl+'</span>';
+  }).join('');
 }
 function rT(topics){
   const tb=document.getElementById('tl');
