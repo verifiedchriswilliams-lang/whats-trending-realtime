@@ -1398,6 +1398,9 @@ def refresh_data():
         editorial = sorted([a for a in raw if a.get("scrape_position")], key=lambda a: a["scrape_position"])
         rss_only  = [a for a in raw if not a.get("scrape_position")]
         display   = (editorial + rss_only)[:10]
+        for art in display:
+            if "category" not in art:
+                art["category"] = classify_category([art.get("title", "")])
         homepage = SCRAPE_SOURCES.get(sid, "")
         srcs[sid]={**s,"lean_label":li["label"],"lean_color":li["color"],"articles":display,"status":"ok" if sid in all_arts else "error","homepage":homepage}
     # ── Last Hour feed ────────────────────────────────────────────────────────
@@ -1598,6 +1601,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .x-row td{padding:0;border-bottom:1px solid var(--surface-high)}
 .rn{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;text-align:center;display:block}
 .rn-h{color:var(--red)}.rn-n{color:var(--ink-l)}
+.rn-cat{display:flex;justify-content:center;margin-top:4px;gap:2px}
 .t-hl{font-family:'Newsreader',Georgia,serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
 .t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Inter',sans-serif}
 .t-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
@@ -2089,7 +2093,7 @@ function renderSBS(d){
   document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
     const isTop=a.scrape_position&&a.scrape_position<=5;
     const age=a.pub_ts?'<span>'+ta(a.pub_ts)+'</span>':'';
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div><div class="sbs-meta">'+(isTop?'<span class="sbs-badge sbs-top">Top Story</span>':'')+age+'</div></div></div>';
+    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div><div class="sbs-meta">'+catBadge(a.category)+(isTop?'<span class="sbs-badge sbs-top">Top Story</span>':'')+age+'</div></div></div>';
   }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">Daily Wire articles loading…</div>';
 }
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
@@ -2161,8 +2165,8 @@ function rT(topics){
     }).join('');
     const rn=(i<9?'0':'')+(i+1);
     return '<tr class="t-row" onclick="tg('+i+')">'
-      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
-      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+catBadge(t.category)+brkBadge+ageBadge+leadBadge+'</div></td>'
+      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span><div class="rn-cat">'+catBadge(t.category)+'</div></td>'
+      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
       +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
