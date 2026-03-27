@@ -896,21 +896,80 @@ _ENT_KW = {
     'red carpet','award show','music video','chart-topping','box-office',
     'superhero','marvel','dc comics','animated film','documentary film',
 }
+_BIZ_KW = {
+    'stock market','stock price','shares','dow jones','nasdaq','s&p 500','wall street',
+    'federal reserve','fed rate','interest rate','inflation','recession','gdp','economy',
+    'economic growth','earnings report','quarterly earnings','revenue','profit','loss',
+    'bankruptcy','merger','acquisition','ipo','hedge fund','private equity','venture capital',
+    'bitcoin','cryptocurrency','crypto','ethereum','blockchain',
+    'oil price','gas price','energy price','commodity','trade deficit','trade war',
+    'tariff','tariffs','jobs report','unemployment rate','labor market','wage growth',
+    'treasury','national debt','debt ceiling','federal budget','fiscal','monetary policy',
+    'small business','corporation','ceo','executive','investor','investment',
+    'housing market','mortgage rate','real estate market','retail sales',
+}
+_CRIME_KW = {
+    'murder','homicide','killing','killed','shooting','gunshot','stabbing','stabbed',
+    'robbery','robbed','theft','stolen','burglar','burglary','arson',
+    'arrest','arrested','charged','indicted','convicted','sentenced','verdict','guilty','acquitted',
+    'trial','defendant','suspect','fugitive','manhunt','wanted','on the run',
+    'hostage','kidnap','kidnapping','abduction','abducted',
+    'assault','sexual assault','rape','trafficking','human trafficking',
+    'drug bust','drug trafficking','cartel','gang violence','organized crime',
+    'serial killer','mass shooting','death toll','crime scene',
+    'fbi investigation','doj investigation','grand jury','plea deal',
+    'prison','jail','inmate','parole','probation','execution','death row',
+    'police shooting','officer involved','bodycam','use of force',
+}
+_TECH_KW = {
+    'artificial intelligence','ai model','machine learning','chatgpt','openai','anthropic',
+    'google deepmind','large language model','llm','generative ai','ai-generated',
+    'silicon valley','tech company','startup','venture capital','tech giant',
+    'apple inc','microsoft','amazon','meta platforms','alphabet','nvidia','amd',
+    'semiconductor','chip shortage','data center','cloud computing','aws','azure',
+    'data breach','hacked','cybersecurity','cyber attack','ransomware','phishing',
+    'social media platform','algorithm change','content moderation',
+    'self-driving','autonomous vehicle','electric vehicle','spacex','rocket launch',
+    'quantum computing','robotics','drone','surveillance tech','facial recognition',
+    'elon musk','mark zuckerberg','sam altman','sundar pichai','satya nadella',
+    'app store','smartphone','iphone','android','software update','operating system',
+}
+_HEALTH_KW = {
+    'vaccine','vaccination','covid','pandemic','outbreak','epidemic','disease',
+    'virus','bacteria','infection','contagious','quarantine','public health',
+    'cancer','tumor','clinical trial','fda approval','drug approval','fda approves',
+    'hospital','healthcare','health insurance','medicare','medicaid','aca',
+    'surgery','diagnosis','treatment','therapy','prescription drug','opioid',
+    'overdose','drug overdose','mental health','suicide rate','depression','anxiety',
+    'cdc','nih','who ','world health','surgeon general',
+    'obesity','diabetes','heart disease','alzheimer','dementia','rare disease',
+    'medical research','scientists find','study finds','health warning',
+    'birth rate','fertility','abortion','reproductive','planned parenthood',
+}
+
+# Priority order for ties — more specific categories beat broader ones
+_CAT_PRIORITY = ['international','crime','sports','entertainment','business','technology','health','national']
 
 def classify_category(titles):
-    """Classify article titles into national/international/sports/entertainment."""
+    """Classify article titles into one of 9 categories."""
     combined = ' ' + ' '.join(titles).lower() + ' '
-    intl  = sum(1 for kw in _INTL_KW   if kw in combined)
-    sport = sum(1 for kw in _SPORTS_KW  if kw in combined)
-    ent   = sum(1 for kw in _ENT_KW     if kw in combined)
-    best_score = max(intl, sport, ent)
+    scores = {
+        'international': sum(1 for kw in _INTL_KW   if kw in combined),
+        'sports':        sum(1 for kw in _SPORTS_KW  if kw in combined),
+        'entertainment': sum(1 for kw in _ENT_KW     if kw in combined),
+        'business':      sum(1 for kw in _BIZ_KW     if kw in combined),
+        'crime':         sum(1 for kw in _CRIME_KW   if kw in combined),
+        'technology':    sum(1 for kw in _TECH_KW    if kw in combined),
+        'health':        sum(1 for kw in _HEALTH_KW  if kw in combined),
+    }
+    best_score = max(scores.values())
     if best_score == 0:
         return 'national'
-    if intl == best_score:
-        return 'international'
-    if sport == best_score:
-        return 'sports'
-    return 'entertainment'
+    # Among tied winners, pick by priority order
+    for cat in _CAT_PRIORITY:
+        if scores.get(cat, 0) == best_score:
+            return cat
+    return 'national'
 
 def cluster_topics(all_arts):
     # Flatten articles
@@ -1553,6 +1612,10 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .tag.cat-intl{background:#F0FDFA;color:#0F766E}
 .tag.cat-sport{background:#F0FDF4;color:#15803D}
 .tag.cat-ent{background:#FFF7ED;color:#C2410C}
+.tag.cat-biz{background:#F5F3FF;color:#6D28D9}
+.tag.cat-crime{background:#FEF2F2;color:#991B1B}
+.tag.cat-tech{background:#EEF2FF;color:#4338CA}
+.tag.cat-health{background:#FDF2F8;color:#BE185D}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
 .chip{width:26px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;font-family:'Inter',sans-serif;flex-shrink:0}
 .chip.hero{outline:2px solid var(--navy);outline-offset:1px}
@@ -2066,8 +2129,8 @@ function spark(delta,heat,history){
   const p='M0 '+pad+' L22 '+(pad+drop*.25)+' L44 '+(pad+drop*.55)+' L66 '+(pad+drop*.82)+' L'+w+' '+Math.min(h-pad,pad+drop);
   return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 }
-const _CAT_LABEL={'national':'Natl','international':'Intl','sports':'Sport','entertainment':'Ent'};
-const _CAT_CLS={'national':'cat-natl','international':'cat-intl','sports':'cat-sport','entertainment':'cat-ent'};
+const _CAT_LABEL={'national':'Natl','international':'Intl','sports':'Sport','entertainment':'Ent','business':'Biz','crime':'Crime','technology':'Tech','health':'Health'};
+const _CAT_CLS={'national':'cat-natl','international':'cat-intl','sports':'cat-sport','entertainment':'cat-ent','business':'cat-biz','crime':'cat-crime','technology':'cat-tech','health':'cat-health'};
 function catBadge(cat){
   const lbl=_CAT_LABEL[cat]||'Natl',cls=_CAT_CLS[cat]||'cat-natl';
   return '<span class="tag cat '+cls+'">'+lbl+'</span>';
