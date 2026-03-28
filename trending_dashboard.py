@@ -43,6 +43,8 @@ SCRAPE_SOURCES = {
     "washtimes":  "https://www.washingtontimes.com",
     "townhall":   "https://townhall.com",
     "skynews":    "https://news.sky.com",
+    "cbsnews":    "https://www.cbsnews.com",
+    "washexam":   "https://www.washingtonexaminer.com",
 }
 
 SOURCES = [
@@ -63,6 +65,10 @@ SOURCES = [
     {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
     {"id":"foxbusiness","name":"Fox Business",      "rss":"https://news.google.com/rss/search?q=site:foxbusiness.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
     {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss/tipsheet",                        "lean":"right",        "tier":2},
+    # Tier 3 — new additions
+    {"id":"cbsnews",    "name":"CBS News",          "rss":"https://www.cbsnews.com/latest/rss/main",                  "lean":"center-left",  "tier":2},
+    {"id":"washexam",   "name":"Washington Examiner","rss":"https://news.google.com/rss/search?q=site:washingtonexaminer.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
+    {"id":"freepress",  "name":"The Free Press",    "rss":"https://www.thefp.com/feed",                               "lean":"center-right", "tier":2},
 ]
 
 LEAN = {
@@ -1993,8 +1999,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
-const SO=['nytimes','foxnews','dailywire','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart'];
-const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH'};
+const SO=['nytimes','foxnews','dailywire','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart','cbsnews','washexam','freepress'];
+const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH',cbsnews:'CBS',washexam:'EXAM',freepress:'FP'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg, scrollTo){
   _page=pg;
