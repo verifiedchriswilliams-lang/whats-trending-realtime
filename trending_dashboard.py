@@ -1601,7 +1601,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .x-row td{padding:0;border-bottom:1px solid var(--surface-high)}
 .rn{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;text-align:center;display:block}
 .rn-h{color:var(--red)}.rn-n{color:var(--ink-l)}
-.rn-cat{display:flex;justify-content:center;margin-top:4px;gap:2px}
+.rn-cat{display:flex;flex-direction:column;align-items:center;margin-top:4px;gap:2px}
 .t-hl{font-family:'Newsreader',Georgia,serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
 .t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Inter',sans-serif}
 .t-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
@@ -1993,7 +1993,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
-const SO=['foxnews','nypost','dailywire','breitbart','washtimes','townhall','ap','reuters','thehill','skynews','cnn','nytimes','nbcnews','dailymail','foxbusiness'];
+const SO=['nytimes','foxnews','dailywire','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart'];
 const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg, scrollTo){
