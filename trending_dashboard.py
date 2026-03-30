@@ -16,8 +16,8 @@ def pip_install(pkg):
 try: import feedparser
 except ImportError: pip_install('feedparser'); import feedparser
 
-try: from flask import Flask, jsonify
-except ImportError: pip_install('flask'); from flask import Flask, jsonify
+try: from flask import Flask, jsonify, request
+except ImportError: pip_install('flask'); from flask import Flask, jsonify, request
 
 try: import requests; from bs4 import BeautifulSoup; HAS_SCRAPE = True
 except ImportError:
@@ -1467,9 +1467,21 @@ app = Flask(__name__)
 @app.route('/')
 def index(): return HTML, 200, {'Content-Type':'text/html; charset=utf-8'}
 
+@app.route('/robots.txt')
+def robots():
+    return ("User-agent: *\nDisallow: /api/\nDisallow: /debug/\n", 200, {'Content-Type': 'text/plain'})
+
 @app.route('/api/data')
 def api_data():
-    with data_lock: return jsonify(data_store)
+    with data_lock:
+        ts = data_store.get('last_updated') or ''
+        etag = f'"{hash(ts)}"'
+        if request.headers.get('If-None-Match') == etag:
+            return ('', 304)
+        resp = jsonify(data_store)
+        resp.headers['ETag'] = etag
+        resp.headers['Cache-Control'] = 'no-store'
+        return resp
 
 @app.route('/api/refresh', methods=['POST'])
 def api_refresh():
@@ -2231,9 +2243,14 @@ function rS(srcs){
       +'</div>';
   }).join('');
 }
+let _etag='';
 async function ld(){
   try{
-    const d=await(await fetch('/api/data')).json();
+    const hdrs=_etag?{'If-None-Match':_etag}:{};
+    const res=await fetch('/api/data',{headers:hdrs});
+    if(res.status===304)return;
+    if(res.headers.get('ETag'))_etag=res.headers.get('ETag');
+    const d=await res.json();
     if(d.loading){setTimeout(ld,3000);return}
     document.getElementById('ov').classList.add('h');
     document.getElementById('sc2').textContent=(d.sources_live||0)+' sources live';
@@ -2266,7 +2283,6 @@ setInterval(()=>{
   const cdm=document.getElementById('cd-mob');if(cdm)cdm.textContent=txt;
   if(r<=0){_n=Date.now()+30*60*1000;ld()}
 },1000);
-setInterval(ld,2*60*1000);
 
 function toggleDrawer(){
   const dr=document.getElementById('mob-drawer'),ov=document.getElementById('mob-overlay'),ic=document.getElementById('mob-hbg-icon');
