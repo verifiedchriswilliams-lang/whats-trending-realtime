@@ -1986,10 +1986,12 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
           <button class="stab active" onclick="switchTab('dr')"><span class="ms" style="font-size:14px">campaign</span>Drudge</button>
           <button class="stab" onclick="switchTab('tw')"><span class="ms" style="font-size:14px">tag</span>Twitter</button>
           <button class="stab" onclick="switchTab('re')"><span class="ms" style="font-size:14px">hub</span>Memo</button>
+          <button class="stab" onclick="switchTab('fb')"><span class="ms" style="font-size:14px">thumb_up</span>Facebook</button>
         </div>
         <div id="sp-dr" class="spanel active"><div id="dl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-tw" class="spanel"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-re" class="spanel"><div id="rl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
+        <div id="sp-fb" class="spanel"><div id="fl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
       </div>
     </aside>
   </div>
@@ -2238,8 +2240,8 @@ function tg(i){
 let _activeTab='dr';
 function switchTab(tab){
   _activeTab=tab;
-  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','fb'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-re'][i]==='sp-'+tab)});
+  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['dr','tw','re','fb'][i]===tab)});
+  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-dr','sp-tw','sp-re','sp-fb'][i]==='sp-'+tab)});
 }
 function fmtK(n){if(n>=1000000)return(n/1000000).toFixed(1)+'M';if(n>=1000)return(n/1000).toFixed(1)+'k';return n}
 function rRe(posts){
@@ -2267,6 +2269,22 @@ function rDr(links){
   const el=document.getElementById('dl');
   if(!links||!links.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Drudge unavailable</div>';return}
   el.innerHTML=links.map(l=>'<div class="si"><a href="'+e(l.link)+'" target="_blank">'+e(l.title)+'</a></div>').join('');
+}
+function rFb(posts){
+  const el=document.getElementById('fl');
+  if(!posts||!posts.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Checking top articles by reactions + shares…</span></div>';return;}
+  el.innerHTML=posts.map(p=>{
+    const total=p.fb_total||0;
+    const src=(p.source||'').toUpperCase();
+    const srcColors={'FOXNEWS':'#c0392b','CNN':'#c0392b','NYTIMES':'#2c3e50','DAILYMAIL':'#8e44ad','NYPOST':'#c0392b','AP':'#2980b9','NBCNEWS':'#2980b9','DAILYWIRE':'#1a5276','BREITBART':'#922b21','SKYNEWS':'#1abc9c','THEHILL':'#2ecc71','WASHTIMES':'#c0392b','TOWNHALL':'#922b21','FOXBUSINESS':'#c0392b','REUTERS':'#f39c12'};
+    const clr=srcColors[src]||'#555';
+    return '<div class="si">'
+      +'<a href="'+e(p.url)+'" target="_blank" rel="noopener">'+e(p.title)+'</a>'
+      +'<div class="si-m">'
+      +'<span style="background:'+clr+';color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">'+src+'</span>'
+      +'<span style="color:var(--ink-l);font-size:10px">&#128077; '+fmtK(total)+' interactions</span>'
+      +'</div></div>';
+  }).join('');
 }
 function rS(srcs){
   if(!srcs)return;
@@ -2303,7 +2321,7 @@ async function ld(){
     _lastData=d;
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
-      rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
+      rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rFb(d.facebook_posts);rS(d.sources);
       if(_page==='sbs')renderSBS(d);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
