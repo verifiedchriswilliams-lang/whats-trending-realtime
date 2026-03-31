@@ -1636,7 +1636,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 /* MAIN CANVAS */
 .main{margin-left:256px;margin-top:0;padding:20px 20px 24px;min-height:100vh}
-.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 280px;gap:20px;align-items:start}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:20px;align-items:start}
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
