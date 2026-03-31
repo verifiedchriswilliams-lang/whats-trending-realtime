@@ -1367,7 +1367,7 @@ def refresh_data():
     drudge_links    = fetch_drudge()
     twitter_trends  = fetch_twitter_trends()
     reddit_posts    = fetch_memeorandum()
-    facebook_posts  = fetch_facebook_engagement(all_arts)  # kept dormant; returns [] until FB app permissions fixed
+    facebook_posts  = fetch_facebook_engagement(all_arts)
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
     print(f"  {'✓' if reddit_posts else '✗'} Memeorandum: {len(reddit_posts)} stories")
