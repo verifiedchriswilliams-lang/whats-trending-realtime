@@ -4,7 +4,7 @@ TrendingInRealTime.com — Editorial Intelligence Dashboard  v2
 Newspaper theme. Clustering fix. 15 sources incl. NYT.
 """
 
-import json, time, threading, re, sys, os, webbrowser, math
+import json, time, threading, re, sys, os, webbrowser, math, secrets
 from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -24,6 +24,9 @@ except ImportError:
     pip_install('requests'); pip_install('beautifulsoup4')
     try: import requests; from bs4 import BeautifulSoup; HAS_SCRAPE = True
     except: HAS_SCRAPE = False; print("  requests/bs4 unavailable — scraping disabled.")
+
+# Session token — set once at startup, embedded in main page, required for /api/data
+_SESSION_TOKEN = secrets.token_hex(16)
 
 # Google Trends via official public RSS (no API key, no rate limits)
 TRENDS_RSS = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US"
@@ -1465,7 +1468,12 @@ def bg_loop(interval=1800):
 app = Flask(__name__)
 
 @app.route('/')
-def index(): return HTML, 200, {'Content-Type':'text/html; charset=utf-8'}
+def index():
+    from flask import make_response
+    resp = make_response(HTML, 200)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    resp.set_cookie('_ds', _SESSION_TOKEN, httponly=True, samesite='Strict', max_age=86400*30)
+    return resp
 
 @app.route('/robots.txt')
 def robots():
@@ -1473,6 +1481,8 @@ def robots():
 
 @app.route('/api/data')
 def api_data():
+    if request.cookies.get('_ds') != _SESSION_TOKEN:
+        return ('Forbidden', 403)
     with data_lock:
         ts = data_store.get('last_updated') or ''
         etag = f'"{hash(ts)}"'
