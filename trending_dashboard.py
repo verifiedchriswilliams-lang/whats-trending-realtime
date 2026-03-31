@@ -1470,9 +1470,10 @@ app = Flask(__name__)
 @app.route('/')
 def index():
     from flask import make_response
-    resp = make_response(HTML, 200)
+    # Inject session token as a JS variable so it survives corporate proxies (Zscaler etc.)
+    page = HTML.replace('/*__API_KEY__*/', f'const _API_KEY="{_SESSION_TOKEN}";', 1)
+    resp = make_response(page, 200)
     resp.headers['Content-Type'] = 'text/html; charset=utf-8'
-    resp.set_cookie('_ds', _SESSION_TOKEN, httponly=True, samesite='Strict', max_age=86400*30)
     return resp
 
 @app.route('/robots.txt')
@@ -1481,7 +1482,7 @@ def robots():
 
 @app.route('/api/data')
 def api_data():
-    if request.cookies.get('_ds') != _SESSION_TOKEN:
+    if request.headers.get('X-Dashboard-Key') != _SESSION_TOKEN:
         ip = request.headers.get('X-Forwarded-For', request.remote_addr)
         ua = request.headers.get('User-Agent', 'unknown')
         print(f"403 BLOCKED | IP: {ip} | UA: {ua}", flush=True)
@@ -2256,10 +2257,12 @@ function rS(srcs){
       +'</div>';
   }).join('');
 }
+/*__API_KEY__*/
 let _etag='';
 async function ld(){
   try{
-    const hdrs=_etag?{'If-None-Match':_etag}:{};
+    const hdrs={'X-Dashboard-Key':_API_KEY};
+    if(_etag)hdrs['If-None-Match']=_etag;
     const res=await fetch('/api/data',{headers:hdrs});
     if(res.status===304)return;
     if(res.headers.get('ETag'))_etag=res.headers.get('ETag');
