@@ -1476,6 +1476,31 @@ def index():
     resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
 
+@app.route('/privacy')
+def privacy():
+    return ("""<!DOCTYPE html>
+<html><head><title>Privacy Policy — TrendingInRealTime.com</title>
+<style>body{font-family:sans-serif;max-width:800px;margin:60px auto;padding:0 24px;color:#333;line-height:1.7}
+h1{font-size:24px;margin-bottom:8px}h2{font-size:18px;margin-top:32px}</style></head>
+<body>
+<h1>Privacy Policy</h1>
+<p><strong>Last updated: March 31, 2026</strong></p>
+<p>TrendingInRealTime.com is an internal editorial intelligence dashboard operated by Daily Wire Ventures.
+This application is not a public-facing consumer product and is accessible only to authorized Daily Wire editorial staff.</p>
+<h2>Data Collection</h2>
+<p>This application does not collect, store, or share any personal data from users.
+No user accounts are created. No personal information is transmitted to third parties.</p>
+<h2>Facebook API Usage</h2>
+<p>This application uses the Facebook Graph API solely to retrieve publicly available engagement
+metrics (share counts, reactions) on published news article URLs. No user data, profile information,
+or private content is accessed. All data retrieved is publicly available information.</p>
+<h2>Cookies</h2>
+<p>This application uses a single session cookie for internal authentication purposes only.
+No tracking or advertising cookies are used.</p>
+<h2>Contact</h2>
+<p>For questions about this privacy policy, contact: cwilliams@dwventures.com</p>
+</body></html>""", 200, {'Content-Type': 'text/html; charset=utf-8'})
+
 @app.route('/robots.txt')
 def robots():
     return ("User-agent: *\nDisallow: /api/\nDisallow: /debug/\n", 200, {'Content-Type': 'text/plain'})
