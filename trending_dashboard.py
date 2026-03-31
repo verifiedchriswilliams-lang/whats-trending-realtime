@@ -720,7 +720,7 @@ def fetch_facebook_engagement(all_arts):
 
     try:
         results = []
-        sample = candidates[:15]
+        sample = candidates[:8]  # 10 calls/hour limit — stay well under with 8/cycle
         with ThreadPoolExecutor(max_workers=12) as ex:
             futures = [ex.submit(fetch_one, item) for item in sample]
             for f in as_completed(futures):
@@ -739,10 +739,13 @@ def fetch_facebook_engagement(all_arts):
             err_type = first_error[0].get("type", "")
             err_msg  = first_error[0].get("message", "")
             print(f"  Facebook: no results — {err_type}: {err_msg}")
-            # Rate limit (#4): back off 2 hours instead of retrying every cycle
+            # Rate limits: back off to avoid hammering the API
             if err_code == 4:
-                display = "App rate limit reached. Your Facebook app may be in Development mode — switch it to Live mode at developers.facebook.com to increase limits."
-                _FB_CACHE["backoff_until"] = now + 7200
+                display = "App rate limit reached."
+                _FB_CACHE["backoff_until"] = now + 7200  # 2-hour backoff for app-level limit
+            elif err_code == 613:
+                display = "Rate limited (10 calls/hour). Will retry next hour."
+                _FB_CACHE["backoff_until"] = now + 3600  # 1-hour backoff for per-hour limit
             else:
                 display = f"{err_type}: {err_msg}"
             _FB_CACHE["data"] = [{"__unavailable": True, "reason": display}]
@@ -2273,6 +2276,7 @@ function rDr(links){
 function rFb(posts){
   const el=document.getElementById('fl');
   if(!posts||!posts.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Facebook engagement unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Checking top articles by reactions + shares…</span></div>';return;}
+  if(posts.length===1&&posts[0].__unavailable){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">'+e(posts[0].reason||'Temporarily unavailable')+'</div>';return;}
   el.innerHTML=posts.map(p=>{
     const total=p.fb_total||0;
     const src=(p.source||'').toUpperCase();
