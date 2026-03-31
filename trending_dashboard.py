@@ -1482,6 +1482,9 @@ def robots():
 @app.route('/api/data')
 def api_data():
     if request.cookies.get('_ds') != _SESSION_TOKEN:
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+        ua = request.headers.get('User-Agent', 'unknown')
+        print(f"403 BLOCKED | IP: {ip} | UA: {ua}", flush=True)
         return ('Forbidden', 403)
     with data_lock:
         ts = data_store.get('last_updated') or ''
