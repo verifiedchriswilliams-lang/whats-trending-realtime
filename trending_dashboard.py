@@ -176,7 +176,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"reddit_posts":[],"last_hour":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"reddit_posts":[],"bluesky_trends":[],"liberal_reddit":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -186,6 +186,10 @@ _heat_history = {}  # frozenset(source_ids) → [heat1, heat2, heat3, heat4]
 
 # Google Trends cache — only re-fetch every 2 hours, back off 4h on failure
 _gt_cache = {"data": [], "fetched_at": 0, "next_retry": 0}
+
+# Blue Trends caches — 30-minute TTL, same cadence as main refresh
+_BLUESKY_CACHE    = {"data": [], "fetched_at": 0}
+_LIB_REDDIT_CACHE = {"data": [], "fetched_at": 0}
 
 def parse_pub_date(entry):
     """Parse publication date from a feed entry. Returns UTC datetime or None."""
@@ -635,6 +639,108 @@ def fetch_memeorandum():
     except Exception as ex:
         print(f"  Memeorandum fetch error: {ex}")
         return _REDDIT_CACHE["data"]
+
+
+def fetch_bluesky_trends():
+    """Fetch trending topics from Bluesky via their public AT Protocol API.
+    No API key required — uses the same endpoint the official Bluesky app uses.
+    Returns list of dicts: {topic, displayName, postCount}
+    Cache: 30 minutes."""
+    global _BLUESKY_CACHE
+    now = time.time()
+    if _BLUESKY_CACHE["data"] and now - _BLUESKY_CACHE["fetched_at"] < 1800:
+        return _BLUESKY_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _BLUESKY_CACHE["data"]
+    try:
+        r = requests.get(
+            "https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrendingTopics",
+            params={"limit": 25},
+            timeout=12,
+            headers={"User-Agent": "TrendingInRealTime/1.0 (editorial research tool)"},
+        )
+        r.raise_for_status()
+        data = r.json()
+        topics = []
+        for t in data.get("topics", []):
+            name = t.get("displayName") or t.get("topic", "")
+            tag  = t.get("topic", "")
+            cnt  = t.get("postCount", 0)
+            if not name:
+                continue
+            topics.append({"displayName": name, "topic": tag, "postCount": cnt})
+        _BLUESKY_CACHE = {"data": topics, "fetched_at": now}
+        print(f"  Bluesky trends: {len(topics)} topics")
+        return topics
+    except Exception as ex:
+        print(f"  Bluesky trends error: {ex}")
+        return _BLUESKY_CACHE["data"]
+
+
+def fetch_liberal_reddit():
+    """Fetch hot posts from liberal subreddits via Reddit's public JSON API.
+    Subreddits: politics, progressive, liberal, democrats.
+    No API key required; uses a descriptive User-Agent per Reddit policy.
+    Returns list of dicts sorted by score: {title, url, score, subreddit, permalink, num_comments}
+    Cache: 30 minutes."""
+    global _LIB_REDDIT_CACHE
+    now = time.time()
+    if _LIB_REDDIT_CACHE["data"] and now - _LIB_REDDIT_CACHE["fetched_at"] < 1800:
+        return _LIB_REDDIT_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _LIB_REDDIT_CACHE["data"]
+
+    SUBREDDITS = ["politics", "progressive", "liberal", "democrats"]
+    hdrs = {
+        "User-Agent": "TrendingInRealTime/1.0 (editorial research; contact cwilliams@dwventures.com)",
+        "Accept": "application/json",
+    }
+    all_posts = []
+    seen_titles = set()
+    for sub in SUBREDDITS:
+        try:
+            r = requests.get(
+                f"https://www.reddit.com/r/{sub}/hot.json",
+                params={"limit": 25, "t": "day"},
+                timeout=12,
+                headers=hdrs,
+            )
+            r.raise_for_status()
+            data = r.json()
+            for child in data.get("data", {}).get("children", []):
+                p = child.get("data", {})
+                title = p.get("title", "").strip()
+                if not title or len(title) < 10:
+                    continue
+                # Light dedup: skip if we've already seen a very similar title
+                title_key = title[:50].lower()
+                if title_key in seen_titles:
+                    continue
+                seen_titles.add(title_key)
+                # Skip pinned mod/admin posts
+                if p.get("stickied") or p.get("distinguished") == "moderator":
+                    continue
+                url = p.get("url", "")
+                permalink = "https://www.reddit.com" + p.get("permalink", "")
+                all_posts.append({
+                    "title":        title,
+                    "url":          url if url.startswith("http") else permalink,
+                    "score":        p.get("score", 0),
+                    "subreddit":    sub,
+                    "permalink":    permalink,
+                    "num_comments": p.get("num_comments", 0),
+                })
+        except Exception as ex:
+            print(f"  Liberal Reddit ({sub}) error: {ex}")
+
+    all_posts.sort(key=lambda x: x["score"], reverse=True)
+    result = all_posts[:30]
+    if result:
+        _LIB_REDDIT_CACHE = {"data": result, "fetched_at": now}
+        print(f"  Liberal Reddit: {len(result)} posts across {len(SUBREDDITS)} subreddits")
+    else:
+        print("  Liberal Reddit: no posts retrieved")
+    return _LIB_REDDIT_CACHE["data"]
 
 
 _FB_CACHE = {"data": [], "fetched_at": 0, "backoff_until": 0}
@@ -1366,13 +1472,17 @@ def refresh_data():
     if total_injected:
         print(f"  Total synthetic injections: {total_injected} across all sources")
 
-    print("  Fetching Drudge + Twitter/X + Memeorandum...")
+    print("  Fetching Drudge + Twitter/X + Memeorandum + Bluesky + Liberal Reddit...")
     drudge_links    = fetch_drudge()
     twitter_trends  = fetch_twitter_trends()
     reddit_posts    = fetch_memeorandum()
+    bluesky_trends  = fetch_bluesky_trends()
+    liberal_reddit  = fetch_liberal_reddit()
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
     print(f"  {'✓' if reddit_posts else '✗'} Memeorandum: {len(reddit_posts)} stories")
+    print(f"  {'✓' if bluesky_trends else '✗'} Bluesky: {len(bluesky_trends)} trends")
+    print(f"  {'✓' if liberal_reddit else '✗'} Liberal Reddit: {len(liberal_reddit)} posts")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1457,7 +1567,7 @@ def refresh_data():
 
     with data_lock:
         data_store.update({"last_updated":datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),"sources":srcs,"trending_topics":topics,
-                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"reddit_posts":reddit_posts,
+                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"reddit_posts":reddit_posts,"bluesky_trends":bluesky_trends,"liberal_reddit":liberal_reddit,
                            "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
@@ -1867,6 +1977,38 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .sbs-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px}
 .sbs-dw-yes{background:rgba(21,128,61,.1);color:#15803D}
 .sbs-top{background:var(--surface-top);color:var(--navy-d)}
+
+/* BLUE TRENDS PAGE */
+.bt-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none}
+.bt-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
+.bt-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
+.bt-hdr p{font-size:12px;color:var(--ink-l);margin:0}
+.bt-grid{display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start}
+.bt-divider{background:var(--surface-top);align-self:stretch;margin:0 28px}
+.bt-col{}
+.bt-col-hd{display:flex;align-items:flex-start;gap:10px;padding-bottom:10px;border-bottom:2px solid var(--navy);margin-bottom:2px}
+.bt-col-icon{flex-shrink:0;margin-top:2px}
+.bt-col-title{font-family:'Newsreader',Georgia,serif;font-size:17px;font-weight:700;color:var(--navy-d);display:block}
+.bt-col-sub{font-size:10px;color:var(--ink-l);text-transform:uppercase;letter-spacing:.6px;display:block;margin-top:3px}
+.bt-item{padding:10px 0;border-bottom:1px solid var(--surface-low);display:flex;align-items:flex-start;gap:12px}
+.bt-item:last-child{border-bottom:none}
+.bt-rank{font-family:'Newsreader',Georgia,serif;font-size:20px;font-weight:700;color:#1d9bf0;min-width:28px;flex-shrink:0;line-height:1.2}
+.bt-body{}
+.bt-title{font-family:'Newsreader',Georgia,serif;font-size:14px;color:var(--ink);line-height:1.4}
+.bt-title a{color:var(--ink);text-decoration:none}
+.bt-title a:hover{color:#1d9bf0;text-decoration:underline}
+.bt-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bt-sub-badge{font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px;background:#ff450018;color:#cc3700}
+.bt-loading{padding:20px;color:var(--ink-l);font-size:13px}
+@media(max-width:1024px){.bt-page{margin-left:0}}
+@media(max-width:900px){
+  .bt-page{margin-left:0!important;padding:56px 16px 76px!important}
+  .bt-hdr{flex-direction:column!important;align-items:flex-start!important;gap:4px!important}
+  .bt-hdr h2{font-size:22px!important}
+  .bt-grid{display:block!important;grid-template-columns:unset!important}
+  .bt-divider{display:none}
+  .bt-col{margin-bottom:28px}
+}
 </style></head><body>
 
 <div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 15 sources · Building intelligence report…</div></div>
@@ -1908,6 +2050,10 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span class="ms">schedule</span>
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
+    <a href="#" class="sb-lnk" id="drw-bt" onclick="switchPage('bt');closeDrawer();return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
+      <span class="ms" style="color:#1d9bf0">water_drop</span>
+      <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
+    </a>
   </nav>
 </div>
 
@@ -1936,6 +2082,10 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
       <span class="ms">schedule</span>
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-bt" onclick="switchPage('bt');return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
+      <span class="ms" style="color:#1d9bf0">water_drop</span>
+      <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
     </a>
   </nav>
   <div class="sb-footer">
@@ -2029,6 +2179,30 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   <div id="lh-feed"><div class="lh-empty">Loading…</div></div>
 </div>
 
+<div class="bt-page" id="bt-page">
+  <div class="bt-hdr">
+    <h2>Blue Trends</h2>
+    <p>What's generating engagement on the left — Bluesky trending topics &amp; top liberal Reddit posts</p>
+  </div>
+  <div class="bt-grid">
+    <div class="bt-col">
+      <div class="bt-col-hd">
+        <span class="bt-col-icon" style="color:#1d9bf0"><svg width="18" height="18" viewBox="0 0 360 320" fill="currentColor"><path d="M180 142c-15-47-61-82-110-82C31 60 0 93 0 133c0 74 76 116 180 187 104-71 180-113 180-187 0-40-31-73-70-73-49 0-95 35-110 82z"/></svg></span>
+        <div><div class="bt-col-title">Bluesky Trending</div><div class="bt-col-sub">Top topics right now on Bluesky</div></div>
+      </div>
+      <div id="bt-bsky"><div class="bt-loading">Loading…</div></div>
+    </div>
+    <div class="bt-divider"></div>
+    <div class="bt-col">
+      <div class="bt-col-hd">
+        <span class="bt-col-icon" style="color:#ff4500"><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="10"/><path fill="#fff" d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .42-.83l-2.38-.5a.25.25 0 0 0-.3.19l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .27-.06zM7.5 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.57 2.65a3.53 3.53 0 0 1-2 .46 3.53 3.53 0 0 1-2-.46.25.25 0 0 1 .35-.35 3.08 3.08 0 0 0 1.68.37 3.08 3.08 0 0 0 1.68-.37.25.25 0 0 1 .35.35zm-.07-1.65a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"/></svg></span>
+        <div><div class="bt-col-title">Liberal Reddit Hot</div><div class="bt-col-sub">r/politics · r/progressive · r/liberal · r/democrats</div></div>
+      </div>
+      <div id="bt-reddit"><div class="bt-loading">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- Mobile bottom navigation — visible on screens ≤900px -->
 <nav class="mob-nav">
   <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false">
@@ -2060,13 +2234,15 @@ function switchPage(pg, scrollTo){
   document.querySelector('.main').style.display=pg==='dash'?'block':'none';
   document.getElementById('sbs-page').style.display=pg==='sbs'?'block':'none';
   document.getElementById('lh-page').style.display=pg==='lh'?'block':'none';
+  document.getElementById('bt-page').style.display=pg==='bt'?'block':'none';
 
   // Determine which sidebar nav item is "active" (scroll-to items map back to 'dash')
   const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
                   : scrollTo==='social-velocity-section' ? 'nav-social'
                   : pg==='dash' ? 'nav-topics'
                   : pg==='sbs'  ? 'nav-sbs'
-                  : pg==='lh'   ? 'nav-lh' : '';
+                  : pg==='lh'   ? 'nav-lh'
+                  : pg==='bt'   ? 'nav-bt' : '';
   document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeNav){const el=document.getElementById(activeNav);if(el)el.classList.add('act');}
 
@@ -2075,7 +2251,8 @@ function switchPage(pg, scrollTo){
                   : scrollTo==='social-velocity-section' ? 'mob-social'
                   : pg==='dash' ? 'mob-topics'
                   : pg==='sbs'  ? 'mob-sbs'
-                  : pg==='lh'   ? 'mob-lh' : '';
+                  : pg==='lh'   ? 'mob-lh'
+                  : pg==='bt'   ? 'mob-bt' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
   if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
   // Sync drawer nav active state
@@ -2083,12 +2260,14 @@ function switchPage(pg, scrollTo){
                   : scrollTo==='social-velocity-section' ? 'drw-social'
                   : pg==='dash' ? 'drw-topics'
                   : pg==='sbs'  ? 'drw-sbs'
-                  : pg==='lh'   ? 'drw-lh' : '';
+                  : pg==='lh'   ? 'drw-lh'
+                  : pg==='bt'   ? 'drw-bt' : '';
   document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeDrw){const el=document.getElementById(activeDrw);if(el)el.classList.add('act');}
 
   if(pg==='sbs'&&_lastData)renderSBS(_lastData);
   if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
+  if(pg==='bt'&&_lastData)rBT(_lastData);
 
   // Scroll to sub-section if requested (e.g. Live Source Feed, Social Velocity)
   if(scrollTo){
@@ -2270,6 +2449,52 @@ function rDr(links){
   if(!links||!links.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Drudge unavailable</div>';return}
   el.innerHTML=links.map(l=>'<div class="si"><a href="'+e(l.link)+'" target="_blank">'+e(l.title)+'</a></div>').join('');
 }
+// ── Blue Trends render ─────────────────────────────────────────────────────
+function rBT(d){
+  const bskyEl=document.getElementById('bt-bsky');
+  const redEl=document.getElementById('bt-reddit');
+  if(!bskyEl||!redEl)return;
+
+  // Bluesky trending topics
+  const topics=d.bluesky_trends||[];
+  if(!topics.length){
+    bskyEl.innerHTML='<div class="bt-loading">Bluesky trending data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
+  } else {
+    bskyEl.innerHTML=topics.map((t,i)=>{
+      const cnt=t.postCount?'<span>'+fmtK(t.postCount)+' posts</span>':'';
+      const tag=t.topic&&t.topic!==t.displayName?'<span style="color:#1d9bf0;font-size:10px">'+e(t.topic)+'</span>':'';
+      return '<div class="bt-item">'
+        +'<div class="bt-rank">'+(i+1)+'</div>'
+        +'<div class="bt-body">'
+        +'<div class="bt-title" style="font-weight:600;color:#1d9bf0">'+e(t.displayName)+'</div>'
+        +(cnt||tag?'<div class="bt-meta">'+cnt+tag+'</div>':'')
+        +'</div></div>';
+    }).join('');
+  }
+
+  // Liberal Reddit hot posts
+  const posts=d.liberal_reddit||[];
+  const subColors={politics:'#ff4500',progressive:'#7e22ce',liberal:'#2563eb',democrats:'#1d4ed8'};
+  if(!posts.length){
+    redEl.innerHTML='<div class="bt-loading">Liberal Reddit data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
+  } else {
+    redEl.innerHTML=posts.map((p,i)=>{
+      const clr=subColors[p.subreddit]||'#ff4500';
+      const score=p.score?fmtK(p.score)+' pts':'';
+      const cmts=p.num_comments?p.num_comments+' comments':'';
+      return '<div class="bt-item">'
+        +'<div class="bt-rank" style="color:#ff4500">'+(i+1)+'</div>'
+        +'<div class="bt-body">'
+        +'<div class="bt-title"><a href="'+e(p.url)+'" target="_blank" rel="noopener">'+e(p.title)+'</a></div>'
+        +'<div class="bt-meta">'
+        +'<span style="background:'+clr+'18;color:'+clr+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px">r/'+e(p.subreddit)+'</span>'
+        +(score?'<span>'+score+'</span>':'')
+        +(cmts?'<a href="'+e(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--ink-l);text-decoration:none">'+cmts+'</a>':'')
+        +'</div></div></div>';
+    }).join('');
+  }
+}
+
 function rS(srcs){
   if(!srcs)return;
   window._L={};Object.entries(srcs).forEach(([id,s])=>window._L[id]=s.lean_color);
@@ -2306,6 +2531,7 @@ async function ld(){
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
       rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
+      if(_page==='bt')rBT(d);
       if(_page==='sbs')renderSBS(d);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
