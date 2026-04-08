@@ -1136,6 +1136,37 @@ def cluster_topics(all_arts):
             raw_clusters.append([i])
             centroids.append(dict(vec))
 
+    # ── Post-processing merge pass ────────────────────────────────────────────
+    # Greedy clustering can produce false splits when the same story is covered
+    # from two angles (e.g. "Oil slides after Iran ceasefire" vs "US-Iran agree
+    # to ceasefire") — the first article seeds each cluster with different vocab,
+    # so subsequent articles reinforce the split instead of merging.
+    # After the greedy pass, merge any two clusters whose centroids are similar
+    # enough (≥ MERGE_THRESHOLD) — these almost certainly represent one story.
+    MERGE_THRESHOLD = 0.20
+    changed = True
+    while changed:
+        changed = False
+        n_cl = len(centroids)
+        for i in range(n_cl):
+            for j in range(i + 1, n_cl):
+                if _cosine(centroids[i], centroids[j]) >= MERGE_THRESHOLD:
+                    # Merge j into i
+                    raw_clusters[i].extend(raw_clusters[j])
+                    # Recompute centroid i as mean of all constituent TF-IDF vecs
+                    merged_vec: dict = {}
+                    for idx in raw_clusters[i]:
+                        for k, v in tfidf_vecs[idx].items():
+                            merged_vec[k] = merged_vec.get(k, 0.0) + v
+                    n_arts = len(raw_clusters[i])
+                    centroids[i] = {k: v / n_arts for k, v in merged_vec.items()}
+                    raw_clusters.pop(j)
+                    centroids.pop(j)
+                    changed = True
+                    break
+            if changed:
+                break
+
     clusters = []
     tier1 = {s["id"] for s in SOURCES if s["tier"]==1}
 
