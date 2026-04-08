@@ -695,7 +695,8 @@ def fetch_liberal_reddit():
         "User-Agent": "TrendingInRealTime/1.0 (editorial research bot; contact cwilliams@dwventures.com)",
         "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
-    all_posts = []
+    # Collect up to 8 posts per subreddit, then interleave so all 4 subs are represented
+    per_sub = {sub: [] for sub in SUBREDDITS}
     seen_titles = set()
     for sub in SUBREDDITS:
         try:
@@ -708,6 +709,8 @@ def fetch_liberal_reddit():
             resp.raise_for_status()
             feed = feedparser.parse(resp.content)
             for entry in feed.entries[:25]:
+                if len(per_sub[sub]) >= 8:
+                    break
                 title = (entry.get("title") or "").strip()
                 if not title or len(title) < 10:
                     continue
@@ -727,7 +730,7 @@ def fetch_liberal_reddit():
                 import re as _re
                 ext_urls = _re.findall(r'href="(https?://(?!www\.reddit\.com)[^"]+)"', summary)
                 article_url = ext_urls[0] if ext_urls else link
-                all_posts.append({
+                per_sub[sub].append({
                     "title":     title,
                     "url":       article_url,
                     "subreddit": sub,
@@ -736,7 +739,15 @@ def fetch_liberal_reddit():
         except Exception as ex:
             print(f"  Liberal Reddit RSS ({sub}) error: {ex}")
 
-    result = all_posts[:30]
+    # Round-robin interleave so all subreddits appear throughout the list
+    all_posts = []
+    max_len = max((len(v) for v in per_sub.values()), default=0)
+    for i in range(max_len):
+        for sub in SUBREDDITS:
+            if i < len(per_sub[sub]):
+                all_posts.append(per_sub[sub][i])
+
+    result = all_posts[:32]
     if result:
         _LIB_REDDIT_CACHE = {"data": result, "fetched_at": now}
         print(f"  Liberal Reddit RSS: {len(result)} posts across {len(SUBREDDITS)} subreddits")
