@@ -1415,7 +1415,7 @@ def refresh_data():
         r'|newsletter'             # newsletter signups
         r'|site\s+information'     # "Site Information Navigation"
         r'|navigation$'            # ends with "Navigation"
-        r'|–\s+top\s+stories$'     # "Source Name – Top Stories"
+        r'|[-–]\s*top\s+stories'    # "Source Name - Top Stories" or "– Top Stories" (hyphen or em-dash)
         r'|subscribe\b'            # subscribe prompts
         r'|sign\s+up\b'            # sign up prompts
         r'|^new!\s'                # "NEW! ..." promos
