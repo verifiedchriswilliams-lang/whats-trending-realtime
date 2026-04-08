@@ -1590,6 +1590,16 @@ def index():
     resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
 
+@app.route('/bluetrends')
+def bluetrends():
+    from flask import make_response
+    # Serve the main app with ?view=bt so JS auto-switches to Blue Trends on load
+    page = HTML.replace('/*__API_KEY__*/', f'const _API_KEY="{_SESSION_TOKEN}";', 1)
+    page = page.replace('let _n=Date.now()', 'const _INIT_VIEW="bt";let _n=Date.now()', 1)
+    resp = make_response(page, 200)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp
+
 @app.route('/privacy')
 def privacy():
     return ("""<!DOCTYPE html>
@@ -2053,7 +2063,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="drw-bt" onclick="switchPage('bt');closeDrawer();return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">water_drop</span>
+      <span class="ms" style="color:#1d9bf0">thermometer</span>
       <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
     </a>
   </nav>
@@ -2086,7 +2096,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="nav-bt" onclick="switchPage('bt');return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">water_drop</span>
+      <span class="ms" style="color:#1d9bf0">thermometer</span>
       <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
     </a>
   </nav>
@@ -2567,6 +2577,7 @@ function closeDrawer(){
   document.getElementById('mob-hbg-icon').textContent='menu';
 }
 
+if(typeof _INIT_VIEW!=='undefined'&&_INIT_VIEW)switchPage(_INIT_VIEW);
 ld();
 </script></body></html>"""
 
