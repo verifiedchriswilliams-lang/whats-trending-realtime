@@ -655,7 +655,7 @@ def fetch_bluesky_trends():
     try:
         r = requests.get(
             "https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrendingTopics",
-            params={"limit": 25},
+            params={"limit": 20},
             timeout=12,
             headers={"User-Agent": "TrendingInRealTime/1.0 (editorial research tool)"},
         )
@@ -2458,18 +2458,20 @@ function rBT(d){
   if(!bskyEl||!redEl)return;
 
   // Bluesky trending topics
-  const topics=d.bluesky_trends||[];
+  const topics=(d.bluesky_trends||[]).slice(0,20);
   if(!topics.length){
     bskyEl.innerHTML='<div class="bt-loading">Bluesky trending data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
   } else {
     bskyEl.innerHTML=topics.map((t,i)=>{
       const cnt=t.postCount?'<span>'+fmtK(t.postCount)+' posts</span>':'';
-      const tag=t.topic&&t.topic!==t.displayName?'<span style="color:#1d9bf0;font-size:10px">'+e(t.topic)+'</span>':'';
+      // Link to Bluesky search — use hashtag URL if topic starts with #, else plain search
+      const searchQ=t.topic||t.displayName;
+      const searchUrl='https://bsky.app/search?q='+encodeURIComponent(searchQ);
       return '<div class="bt-item">'
         +'<div class="bt-rank">'+(i+1)+'</div>'
         +'<div class="bt-body">'
-        +'<div class="bt-title" style="font-weight:600;color:#1d9bf0">'+e(t.displayName)+'</div>'
-        +(cnt||tag?'<div class="bt-meta">'+cnt+tag+'</div>':'')
+        +'<div class="bt-title" style="font-weight:600"><a href="'+searchUrl+'" target="_blank" rel="noopener" style="color:#1d9bf0;text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+e(t.displayName)+'</a></div>'
+        +(cnt?'<div class="bt-meta">'+cnt+'</div>':'')
         +'</div></div>';
     }).join('');
   }
