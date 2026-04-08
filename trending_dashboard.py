@@ -655,7 +655,7 @@ def fetch_bluesky_trends():
     try:
         r = requests.get(
             "https://public.api.bsky.app/xrpc/app.bsky.unspecced.getTrendingTopics",
-            params={"limit": 20},
+            params={"limit": 25},
             timeout=12,
             headers={"User-Agent": "TrendingInRealTime/1.0 (editorial research tool)"},
         )
@@ -2468,7 +2468,10 @@ function rBT(d){
   if(!bskyEl||!redEl)return;
 
   // Bluesky trending topics
-  const topics=(d.bluesky_trends||[]).slice(0,20);
+  const topics=(d.bluesky_trends||[]);
+  // Update subtitle with actual count
+  const bskySubEl=bskyEl.closest('.bt-col')&&bskyEl.closest('.bt-col').querySelector('.bt-col-sub');
+  if(bskySubEl&&topics.length)bskySubEl.textContent=topics.length+' topic'+(topics.length===1?'':'s')+' trending on Bluesky right now';
   if(!topics.length){
     bskyEl.innerHTML='<div class="bt-loading">Bluesky trending data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
   } else {
