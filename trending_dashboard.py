@@ -2105,7 +2105,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="drw-bt" onclick="switchPage('bt');closeDrawer();return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">sentiment_very_dissatisfied</span>
+      <span class="ms" style="color:#1d9bf0">mood_bad</span>
       <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
     </a>
   </nav>
@@ -2138,7 +2138,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="nav-bt" onclick="switchPage('bt');return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">sentiment_very_dissatisfied</span>
+      <span class="ms" style="color:#1d9bf0">mood_bad</span>
       <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
     </a>
   </nav>
