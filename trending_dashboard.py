@@ -678,10 +678,10 @@ def fetch_bluesky_trends():
 
 
 def fetch_liberal_reddit():
-    """Fetch hot posts from liberal subreddits via Reddit's public JSON API.
+    """Fetch hot posts from liberal subreddits via Reddit's public RSS feeds.
+    Uses feedparser (same library as all 15 news sources) — no OAuth, no API key.
     Subreddits: politics, progressive, liberal, democrats.
-    No API key required; uses a descriptive User-Agent per Reddit policy.
-    Returns list of dicts sorted by score: {title, url, score, subreddit, permalink, num_comments}
+    Returns list of dicts: {title, url, subreddit, permalink}
     Cache: 30 minutes."""
     global _LIB_REDDIT_CACHE
     now = time.time()
@@ -692,54 +692,56 @@ def fetch_liberal_reddit():
 
     SUBREDDITS = ["politics", "progressive", "liberal", "democrats"]
     hdrs = {
-        "User-Agent": "TrendingInRealTime/1.0 (editorial research; contact cwilliams@dwventures.com)",
-        "Accept": "application/json",
+        "User-Agent": "TrendingInRealTime/1.0 (editorial research bot; contact cwilliams@dwventures.com)",
+        "Accept": "application/rss+xml, application/xml, text/xml, */*",
     }
     all_posts = []
     seen_titles = set()
     for sub in SUBREDDITS:
         try:
-            r = requests.get(
-                f"https://www.reddit.com/r/{sub}/hot.json",
-                params={"limit": 25, "t": "day"},
-                timeout=12,
+            resp = requests.get(
+                f"https://www.reddit.com/r/{sub}/hot.rss",
+                params={"limit": 25},
+                timeout=15,
                 headers=hdrs,
             )
-            r.raise_for_status()
-            data = r.json()
-            for child in data.get("data", {}).get("children", []):
-                p = child.get("data", {})
-                title = p.get("title", "").strip()
+            resp.raise_for_status()
+            feed = feedparser.parse(resp.content)
+            for entry in feed.entries[:25]:
+                title = (entry.get("title") or "").strip()
                 if not title or len(title) < 10:
                     continue
-                # Light dedup: skip if we've already seen a very similar title
+                # Reddit RSS wraps titles like: "r/politics: Some headline" — strip prefix
+                if title.lower().startswith(f"r/{sub}:"):
+                    title = title[len(f"r/{sub}:"):].strip()
+                if not title or len(title) < 10:
+                    continue
                 title_key = title[:50].lower()
                 if title_key in seen_titles:
                     continue
                 seen_titles.add(title_key)
-                # Skip pinned mod/admin posts
-                if p.get("stickied") or p.get("distinguished") == "moderator":
-                    continue
-                url = p.get("url", "")
-                permalink = "https://www.reddit.com" + p.get("permalink", "")
+                link = entry.get("link", "")
+                # RSS link is the reddit thread; try to get external article URL from summary
+                summary = entry.get("summary", "")
+                # Extract first href from summary HTML as the article URL if it's external
+                import re as _re
+                ext_urls = _re.findall(r'href="(https?://(?!www\.reddit\.com)[^"]+)"', summary)
+                article_url = ext_urls[0] if ext_urls else link
                 all_posts.append({
-                    "title":        title,
-                    "url":          url if url.startswith("http") else permalink,
-                    "score":        p.get("score", 0),
-                    "subreddit":    sub,
-                    "permalink":    permalink,
-                    "num_comments": p.get("num_comments", 0),
+                    "title":     title,
+                    "url":       article_url,
+                    "subreddit": sub,
+                    "permalink": link,
                 })
         except Exception as ex:
-            print(f"  Liberal Reddit ({sub}) error: {ex}")
+            print(f"  Liberal Reddit RSS ({sub}) error: {ex}")
 
-    all_posts.sort(key=lambda x: x["score"], reverse=True)
     result = all_posts[:30]
     if result:
         _LIB_REDDIT_CACHE = {"data": result, "fetched_at": now}
-        print(f"  Liberal Reddit: {len(result)} posts across {len(SUBREDDITS)} subreddits")
+        print(f"  Liberal Reddit RSS: {len(result)} posts across {len(SUBREDDITS)} subreddits")
     else:
-        print("  Liberal Reddit: no posts retrieved")
+        print("  Liberal Reddit RSS: no posts retrieved")
     return _LIB_REDDIT_CACHE["data"]
 
 
@@ -2480,16 +2482,14 @@ function rBT(d){
   } else {
     redEl.innerHTML=posts.map((p,i)=>{
       const clr=subColors[p.subreddit]||'#ff4500';
-      const score=p.score?fmtK(p.score)+' pts':'';
-      const cmts=p.num_comments?p.num_comments+' comments':'';
+      const hasExt=p.url&&p.url!==p.permalink;
       return '<div class="bt-item">'
         +'<div class="bt-rank" style="color:#ff4500">'+(i+1)+'</div>'
         +'<div class="bt-body">'
-        +'<div class="bt-title"><a href="'+e(p.url)+'" target="_blank" rel="noopener">'+e(p.title)+'</a></div>'
+        +'<div class="bt-title"><a href="'+e(hasExt?p.url:p.permalink)+'" target="_blank" rel="noopener">'+e(p.title)+'</a></div>'
         +'<div class="bt-meta">'
         +'<span style="background:'+clr+'18;color:'+clr+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px">r/'+e(p.subreddit)+'</span>'
-        +(score?'<span>'+score+'</span>':'')
-        +(cmts?'<a href="'+e(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--ink-l);text-decoration:none">'+cmts+'</a>':'')
+        +(hasExt?'<a href="'+e(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--ink-l);font-size:10px;text-decoration:none">discussion →</a>':'')
         +'</div></div></div>';
     }).join('');
   }
