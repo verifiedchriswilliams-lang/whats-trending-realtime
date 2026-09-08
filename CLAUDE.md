@@ -236,14 +236,6 @@ Two-column view showing what's generating engagement on the left side of the pol
 - Deep-link: `trendinginrealtime.com/bluetrends` routes directly to this view via server-side injection of `_INIT_VIEW="bt"` into the HTML before serving.
 - Nav icon: `mood_bad` (Material Symbols), blue (`#1d9bf0`)
 
-### Google Trends US sidebar — NOT SHIPPED
-`fetch_google_trends()` exists in `trending_dashboard.py` (official RSS,
-`trendingsearches/daily/rss?geo=US`, 2h cache, 4h backoff) but it is **dead code**:
-`refresh_data()` never calls it, nothing writes it to `data_store`, and no UI panel
-renders it. Earlier revisions of this file described the sidebar as a live feature —
-it has never shipped. Either wire it up or delete the function; do not cite it as a
-working source.
-
 ### Live Source Feed (Source Headlines grid)
 - All 18 news sources displayed with their top 8 headlines
 - Color-coded by political lean
@@ -328,6 +320,7 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 
 ### Completed
 - [x] **Facebook dead-code + token removal** — deleted `fetch_facebook_engagement()` (never called by `refresh_data()`), the `/debug/fb` route, and the `/debug/memo` route. All three embedded a hardcoded Facebook app token in publicly deployed code; `/debug/fb` also exposed it via an unauthenticated endpoint. See "Rotate the Facebook token" below.
+- [x] **Google Trends removed** — `fetch_google_trends()`, `_gt_cache` and `TRENDS_RSS` deleted. The function was never called by `refresh_data()`, never written to `data_store`, and never rendered, despite earlier revisions of this file describing a "Google Trends US sidebar" as a shipped feature. There is no Google Trends signal in the app; do not cite one.
 - [x] **Live source QA script** — `scripts/qa_sources.py` checks all 18 RSS feeds, 15 homepage scrapes, and every supplemental API in one pass; exits non-zero if any source is empty.
 - [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet).
 - [x] **Google Stitch design refresh** — full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
@@ -363,9 +356,8 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
 - [ ] **Drudge siren** — visual alert when a story is Drudge's top link
 - [ ] **foxbusiness scrape** — add to SCRAPE_SOURCES (currently missing from scrape config)
-- [ ] **Google Trends: wire up or delete** — `fetch_google_trends()` is dead code (see "Google Trends US sidebar — NOT SHIPPED"). Either call it from `refresh_data()`, store it in `data_store`, and add a sidebar panel, or remove the function and its `_gt_cache`.
 - [ ] **Delete `trending_dashboard_v2.py`** — stale 15-source predecessor of the current single-file app. Not imported, not served, not referenced by `Procfile`. Dead weight that confuses source-count audits.
-- [ ] **Fix `run.sh`** — installs `pytrends` (unused; Google Trends moved to plain RSS) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
+- [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
 
 ---
 

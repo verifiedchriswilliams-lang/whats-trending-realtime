@@ -92,9 +92,6 @@ def check_supplemental():
         ("Memeorandum",    td.fetch_memeorandum,    3),
         ("Bluesky",        td.fetch_bluesky_trends, 3),
         ("Liberal Reddit", td.fetch_liberal_reddit, 8),
-        # Defined in trending_dashboard.py but NOT wired into refresh_data().
-        # Checked here so we know whether the feed still works before rewiring it.
-        ("Google Trends*", td.fetch_google_trends,  10),
     ]
     failures = []
     for name, fn, low in checks:
@@ -105,11 +102,10 @@ def check_supplemental():
         except Exception as ex:
             n, res = -1, str(ex)
         c, v = _verdict(n, low)
-        # Twitter/Google Trends failing is a known-flaky cloud-IP issue, not a regression.
-        if n <= 0 and name not in ("Twitter/X", "Google Trends*"):
+        # Twitter/X failing is a known-flaky cloud-IP issue, not a regression.
+        if n <= 0 and name != "Twitter/X":
             failures.append(name)
         print(f"{name:<16}{n:>5}{time.time()-t:>6.1f}  {c}[{v}]{OFF}")
-    print(f"\n{DIM}* Google Trends is dead code — never called by refresh_data().{OFF}")
     return failures
 
 

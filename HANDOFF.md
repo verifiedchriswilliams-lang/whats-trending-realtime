@@ -114,7 +114,6 @@ Run a quick `feedparser.parse(url)` on each to confirm they're still returning e
   AT Protocol changelog or try `app.bsky.unspecced.getTrends` as fallback.
 - **Twitter/X trends** — `getdaytrends.com` and `trends24.in` both block cloud IPs
   intermittently. If both fail, graceful "unavailable" message shows. Low priority.
-- **Google Trends RSS** — historically stable; verify it still returns 25 entries.
 - **Drudge scraper** — Drudge has changed markup before; verify links are being parsed.
 
 ### Railway / Infrastructure
@@ -239,5 +238,5 @@ Two items in this document were wrong when it was written:
    never rendered — despite CLAUDE.md describing a "Google Trends US sidebar" as a
    shipped feature and listing it #5 in the editorial reading order. The real
    composition is 18 news RSS + 8 supplemental (Bluesky, 4 subreddits, Drudge,
-   Twitter/X, Memeorandum) = 26. Deciding whether to wire Google Trends up or delete
-   it is now a backlog item in CLAUDE.md.
+   Twitter/X, Memeorandum) = 26. `fetch_google_trends()`, `_gt_cache` and `TRENDS_RSS`
+   were deleted in session 1 — there is no Google Trends signal in the app.

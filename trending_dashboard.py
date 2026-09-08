@@ -28,9 +28,6 @@ except ImportError:
 # Session token — set once at startup, embedded in main page, required for /api/data
 _SESSION_TOKEN = secrets.token_hex(16)
 
-# Google Trends via official public RSS (no API key, no rate limits)
-TRENDS_RSS = "https://trends.google.com/trends/trendingsearches/daily/rss?geo=US"
-
 # Per-source homepage scraping config: CSS selectors for headline extraction
 SCRAPE_SOURCES = {
     "foxnews":    "https://www.foxnews.com",
@@ -184,9 +181,6 @@ data_lock = threading.Lock()
 # Each entry stores the last 4 heat scores so the sparkline draws a real curve.
 _heat_history = {}  # frozenset(source_ids) → [heat1, heat2, heat3, heat4]
 
-# Google Trends cache — only re-fetch every 2 hours, back off 4h on failure
-_gt_cache = {"data": [], "fetched_at": 0, "next_retry": 0}
-
 # Blue Trends caches — 30-minute TTL, same cadence as main refresh
 _BLUESKY_CACHE    = {"data": [], "fetched_at": 0}
 _LIB_REDDIT_CACHE = {"data": [], "fetched_at": 0}
@@ -237,49 +231,6 @@ def fetch_source(source):
                          "feed_position": i})
         return source["id"], arts
     except: return source["id"], []
-
-def fetch_google_trends():
-    """Fetch Google Trends US via official public RSS feed (no API key, no rate limits)."""
-    global _gt_cache
-    now = time.time()
-    # Serve cache if data exists and is fresh (< 2 hours)
-    if _gt_cache["data"] and now - _gt_cache["fetched_at"] < 7200:
-        return _gt_cache["data"], _gt_cache["fetched_at"]
-    # Back off if we failed recently (4-hour cooldown after failure)
-    if now < _gt_cache["next_retry"]:
-        print(f"  Google Trends: in backoff, next retry in {int((_gt_cache['next_retry']-now)/60)}m")
-        return _gt_cache["data"], _gt_cache["fetched_at"]
-    try:
-        # feedparser alone sends no User-Agent so Google silently blocks it.
-        # Fetch the raw bytes with requests first, then hand to feedparser.
-        raw = None
-        if HAS_SCRAPE:
-            try:
-                resp = requests.get(TRENDS_RSS, timeout=15, headers={
-                    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
-                })
-                print(f"  Google Trends HTTP {resp.status_code}")
-                if resp.status_code == 200:
-                    raw = resp.content
-                else:
-                    raise Exception(f"HTTP {resp.status_code}")
-            except Exception as he:
-                print(f"  Google Trends requests error: {he}")
-        feed = feedparser.parse(raw or TRENDS_RSS)
-        if feed.bozo and not feed.entries:
-            raise Exception(f"RSS parse failed: {getattr(feed,'bozo_exception','unknown')}")
-        result = [e.get("title","").strip() for e in feed.entries if e.get("title","").strip()][:25]
-        if not result:
-            raise Exception(f"RSS returned 0 entries (feed.bozo={feed.bozo})")
-        _gt_cache = {"data": result, "fetched_at": now, "next_retry": 0}
-        print(f"  Google Trends RSS: {len(result)} trends fetched")
-        return result, now
-    except Exception as ex:
-        print(f"  Google Trends RSS error: {ex} — backing off 4h")
-        _gt_cache["next_retry"] = now + 14400  # don't retry for 4 hours
-        return _gt_cache["data"], _gt_cache["fetched_at"]
-
 
 def scrape_homepage(sid, url):
     """Scrape a news source homepage and return headlines in editorial order.
@@ -1201,7 +1152,7 @@ def compute_alignment(all_arts, topics):
 
 def refresh_data():
     ts = datetime.now().strftime('%H:%M:%S')
-    print(f"\n[{ts}] Fetching {len(SOURCES)} sources + Google Trends + homepage scrapes...")
+    print(f"\n[{ts}] Fetching {len(SOURCES)} sources + homepage scrapes...")
     all_arts = {}
     # Run RSS fetch + homepage scraping concurrently
     with ThreadPoolExecutor(max_workers=20) as ex:
