@@ -129,15 +129,12 @@ def check_prod():
     t = time.time()
     try:
         with urllib.request.urlopen(PROD_URL + "/", timeout=30) as r:
-            body = r.read().decode("utf-8", "replace")
+            r.read()
         code, sec = r.status, time.time() - t
         c = GREEN if code == 200 else RED
         print(f"{'homepage':<18}{code:>5}{sec:>6.1f}s  {c}[{'ok' if code==200 else 'FAIL'}]{OFF}")
         if code != 200:
             failures.append(f"prod homepage HTTP {code}")
-        elif "Scanning" in body:
-            # The splash only persists when the first refresh cycle hasn't finished.
-            print(f"{DIM}  note: loading overlay present — container may be cold-starting{OFF}")
     except Exception as ex:
         print(f"{'homepage':<18}{'---':>5}{time.time()-t:>6.1f}s  {RED}[FAIL]{OFF} {ex}")
         failures.append("prod homepage unreachable")
@@ -156,6 +153,11 @@ def check_prod():
         print(f"{'/debug/refresh':<18}{'---':>5}{sec:>6.1f}s  {RED}[FAIL]{OFF} {data['error']}")
         print(DIM + str(data.get("traceback", ""))[:1200] + OFF)
         return failures + ["prod refresh raised"]
+
+    # last_updated is None until the first refresh cycle finishes — the real cold-start tell.
+    # (The loading overlay markup is in the static HTML on every response, so it proves nothing.)
+    if not data.get("last_updated"):
+        print(f"{DIM}  note: last_updated is empty — container is cold-starting{OFF}")
 
     live = data.get("sources_live", 0)
     total = len(td.SOURCES)
