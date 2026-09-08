@@ -2,7 +2,7 @@
 
 ## Project Purpose
 
-A real-time editorial intelligence tool for the Daily Wire's editorial team. It aggregates RSS feeds from 15 major news sources plus Bluesky, liberal Reddit subreddits, Drudge, Twitter/X trends, and Google Trends (23 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and surfaces a Daily Wire Coverage Alignment score — showing editors which top trending stories they are and aren't covering.
+A real-time editorial intelligence tool for the Daily Wire's editorial team. It aggregates RSS feeds from 18 major news sources plus Bluesky, liberal Reddit subreddits, Drudge, Twitter/X trends, and Google Trends (26 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and surfaces a Daily Wire Coverage Alignment score — showing editors which top trending stories they are and aren't covering.
 
 **Target audience:** Conservative Americans 25–65. The editorial philosophy is "Daily Mail for American conservatives without the tabloid streak" — credibility of NYT/WaPo with a conservative perspective.
 
@@ -22,7 +22,7 @@ CLAUDE.md               ← this file
 **Stack:**
 - Python 3.13 (Railway auto-detected — do NOT add runtime.txt, it breaks the build)
 - Flask for HTTP serving
-- feedparser for RSS ingestion (15 news sources + 4 Reddit subreddits, concurrent via ThreadPoolExecutor)
+- feedparser for RSS ingestion (18 news sources + 4 Reddit subreddits, concurrent via ThreadPoolExecutor)
 - requests + BeautifulSoup4 for homepage scraping (13 sources)
 - Google Trends via official public RSS feed (no API key, no rate limits)
 - Bluesky AT Protocol public API (`app.bsky.unspecced.getTrendingTopics`, no auth required)
@@ -118,7 +118,7 @@ DW articles older than 12 hours are excluded from matching (prevents yesterday's
 
 ---
 
-## Data Sources (15 news RSS + 8 supplemental = 23 total)
+## Data Sources (18 news RSS + 8 supplemental = 26 total)
 
 ### Tier 1 — Editorial/Homepage Feeds
 | ID | Name | RSS Feed | Lean |
@@ -155,6 +155,15 @@ DW articles older than 12 hours are excluded from matching (prevents yesterday's
 
 **Note on Fox Business:** Previously used `feeds.foxbusiness.com/foxbusiness/latest` (raw chronological) — the most-recently published articles became RSS heroes regardless of editorial prominence. Switched to Google News RSS (site:foxbusiness.com) which ranks by engagement/prominence, consistent with how we handle Fox News, CNN, AP, and Reuters.
 
+### Tier 3 — Additional Sources (added post-launch)
+| ID | Name | RSS Feed | Lean |
+|---|---|---|---|
+| cbsnews | CBS News | cbsnews.com/latest/rss/main (direct) | Center-Left |
+| washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Right |
+| freepress | The Free Press | thefp.com/feed (direct) | Center-Right |
+
+**CBS News** and **Washington Examiner** are in `SCRAPE_SOURCES` — homepage scraping and synthetic injection enabled. **The Free Press** is RSS-only (not in `SCRAPE_SOURCES`), no homepage cross-verification.
+
 ### Supplemental Sources (Blue Trends + Social Velocity)
 | Source | Method | Notes |
 |---|---|---|
@@ -178,7 +187,7 @@ The app uses a **fixed left sidebar** for navigation (no top nav bar). The sideb
 
 **Sidebar nav items (top to bottom):**
 1. **Topic Intelligence** (`local_fire_department`) — Top Trending Topics dashboard (main view)
-2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the 23-source headline grid on the Dashboard page
+2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
 3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Drudge/Twitter sidebar on the Dashboard page
 4. **Side by Side** (`compare_arrows`) — trending vs DW editorial picks comparison page
 5. **Last Hour** (`schedule`) — recent articles page, with live article count badge
@@ -234,7 +243,7 @@ Two-column view showing what's generating engagement on the left side of the pol
 - "X min ago" / "Xh ago" label shows cache age
 
 ### Live Source Feed (Source Headlines grid)
-- All 15 news sources displayed with their top 8 headlines
+- All 18 news sources displayed with their top 8 headlines
 - Color-coded by political lean
 - Editorial picks (scrape-confirmed) shown first per source
 - Source names link to each outlet's homepage
