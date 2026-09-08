@@ -40,14 +40,11 @@ SCRAPE_SOURCES = {
     "washtimes":  "https://www.washingtontimes.com",
     "cbsnews":    "https://www.cbsnews.com",
     "washexam":   "https://www.washingtonexaminer.com",
-    "wapo":       "https://www.washingtonpost.com",
-    "wsj":        "https://www.wsj.com",
+    # Verified Sept 2026: wapo (read timeout), wsj (401 paywall), axios, politico and
+    # natreview (403) all refuse server-side scraping, so they are RSS-only.
     "bbc":        "https://www.bbc.com/news",
     "npr":        "https://www.npr.org",
-    "axios":      "https://www.axios.com",
     "usatoday":   "https://www.usatoday.com",
-    "politico":   "https://www.politico.com",
-    "natreview":  "https://www.nationalreview.com",
 }
 
 SOURCES = [
@@ -69,12 +66,12 @@ SOURCES = [
     # Added Sept 2026 for the general-market rebalance. All eight need a
     # scripts/qa_sources.py run to confirm the feed URLs are still correct.
     {"id":"wapo",       "name":"Washington Post",  "rss":"https://feeds.washingtonpost.com/rss/national",            "lean":"left",         "tier":1},
-    {"id":"wsj",        "name":"Wall Street Journal","rss":"https://feeds.a.dj.com/rss/RSSWorldNews.xml",             "lean":"center-right", "tier":1},
+    {"id":"wsj",        "name":"Wall Street Journal","rss":"https://news.google.com/rss/search?q=site:wsj.com&ceid=US:en&hl=en-US&gl=US", "lean":"center-right", "tier":1},
     {"id":"bbc",        "name":"BBC News",         "rss":"https://feeds.bbci.co.uk/news/rss.xml",                    "lean":"center",       "tier":1},
-    {"id":"npr",        "name":"NPR",              "rss":"https://feeds.npr.org/1001/rss.xml",                       "lean":"center-left",  "tier":1},
+    {"id":"npr",        "name":"NPR",              "rss":"https://news.google.com/rss/search?q=site:npr.org&ceid=US:en&hl=en-US&gl=US", "lean":"center-left", "tier":1},
     {"id":"axios",      "name":"Axios",            "rss":"https://api.axios.com/feed/",                              "lean":"center",       "tier":2},
-    {"id":"usatoday",   "name":"USA Today",        "rss":"https://rssfeeds.usatoday.com/usatoday-NewsTopStories",    "lean":"center",       "tier":2},
-    {"id":"politico",   "name":"Politico",         "rss":"https://rss.politico.com/politics-news.xml",               "lean":"center-left",  "tier":2},
+    {"id":"usatoday",   "name":"USA Today",        "rss":"https://news.google.com/rss/search?q=site:usatoday.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":2},
+    {"id":"politico",   "name":"Politico",         "rss":"https://news.google.com/rss/search?q=site:politico.com&ceid=US:en&hl=en-US&gl=US", "lean":"center-left", "tier":2},
     {"id":"natreview",  "name":"National Review",  "rss":"https://www.nationalreview.com/feed/",                     "lean":"right",        "tier":2},
 ]
 
@@ -203,9 +200,17 @@ def parse_pub_date(entry):
     except: pass
     return None
 
+# A bare User-Agent plus a short Accept is a recognisable bot fingerprint: NPR
+# returns 403 to it and 200 to the full set below. Keep these in sync with the
+# headers in scrape_homepage().
 _RSS_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-    'Accept': 'application/rss+xml, application/xml, text/xml, */*',
+    'Accept': 'application/rss+xml, application/xml, text/xml, application/xhtml+xml, text/html;q=0.9, */*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Sec-Fetch-Dest': 'document',
+    'Sec-Fetch-Mode': 'navigate',
+    'Sec-Fetch-Site': 'none',
+    'Upgrade-Insecure-Requests': '1',
 }
 
 def fetch_source(source):
@@ -663,6 +668,9 @@ def fetch_bluesky_trends():
         return _BLUESKY_CACHE["data"]
 
 
+_REDDIT_DELAY       = 2.0   # seconds between subreddit requests
+_REDDIT_RETRY_DELAY = 5.0   # extra pause before retrying a 429
+
 _REDDIT_HDRS = {
     "User-Agent": "TrendingInRealTime/2.0 (news aggregator; +https://www.trendinginrealtime.com)",
     "Accept": "application/rss+xml, application/xml, text/xml, */*",
@@ -689,10 +697,20 @@ def _fetch_reddit_set(subreddits, cache, label):
 
     per_sub = {sub: [] for sub in subreddits}
     seen_titles = set()
-    for sub in subreddits:
+    for i, sub in enumerate(subreddits):
         try:
+            # Reddit 429s aggressively. With two sets of four subreddits per cycle
+            # an unthrottled loop reliably loses most of the second set, so space the
+            # requests out and give a 429 one retry after a longer pause. Cost is a few
+            # seconds on a 30-minute cycle.
+            if i:
+                time.sleep(_REDDIT_DELAY)
             resp = requests.get(f"https://www.reddit.com/r/{sub}/hot.rss",
                                 params={"limit": 25}, timeout=15, headers=_REDDIT_HDRS)
+            if resp.status_code == 429:
+                time.sleep(_REDDIT_RETRY_DELAY)
+                resp = requests.get(f"https://www.reddit.com/r/{sub}/hot.rss",
+                                    params={"limit": 25}, timeout=15, headers=_REDDIT_HDRS)
             resp.raise_for_status()
             feed = feedparser.parse(resp.content)
             for entry in feed.entries[:25]:

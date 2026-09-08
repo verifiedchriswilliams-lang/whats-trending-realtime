@@ -137,18 +137,18 @@ Sources are chosen for reputation and balanced across the political spectrum:
 | ap | AP News | Google News RSS (site:apnews.com) | Center | 1 |
 | reuters | Reuters | Google News RSS (site:reuters.com) | Center | 1 |
 | bbc | BBC News | feeds.bbci.co.uk/news/rss.xml | Center | 1 |
-| npr | NPR | feeds.npr.org/1001/rss.xml | Center-Left | 1 |
+| npr | NPR | Google News RSS (site:npr.org) | Center-Left | 1 |
 | nytimes | New York Times | rss.nytimes.com nyt/HomePage | Left | 1 |
 | wapo | Washington Post | feeds.washingtonpost.com/rss/national | Left | 1 |
-| wsj | Wall Street Journal | feeds.a.dj.com/rss/RSSWorldNews.xml | Center-Right | 1 |
+| wsj | Wall Street Journal | Google News RSS (site:wsj.com) | Center-Right | 1 |
 | cnn | CNN | Google News RSS (site:cnn.com) | Left | 1 |
 | nbcnews | NBC News | feeds.nbcnews.com nbcnews/public/news | Left | 1 |
 | foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right | 1 |
 | nypost | NY Post | nypost.com/feed | Right | 1 |
 | cbsnews | CBS News | cbsnews.com/latest/rss/main | Center-Left | 2 |
-| politico | Politico | rss.politico.com/politics-news.xml | Center-Left | 2 |
+| politico | Politico | Google News RSS (site:politico.com) | Center-Left | 2 |
 | axios | Axios | api.axios.com/feed | Center | 2 |
-| usatoday | USA Today | rssfeeds.usatoday.com/usatoday-NewsTopStories | Center | 2 |
+| usatoday | USA Today | Google News RSS (site:usatoday.com) | Center | 2 |
 | thehill | The Hill | thehill.com/homenews/feed | Center | 2 |
 | washtimes | Washington Times | washingtontimes.com/rss/headlines/news | Right | 2 |
 | washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Right | 2 |
@@ -161,11 +161,25 @@ Sources are chosen for reputation and balanced across the political spectrum:
 Breitbart and Townhall (opinion/aggregation rather than original reporting), Fox Business
 (vertical duplicate of Fox News), Sky News (UK-centric; homepage scrape also 403s).
 
-**Added in the same pass, all needing a `scripts/qa_sources.py` run to confirm feed URLs:**
-Washington Post, Wall Street Journal, BBC News, NPR, Axios, USA Today, Politico,
-National Review.
+**Added in the same pass** (all verified live Sept 2026): Washington Post, Wall Street
+Journal, BBC News, NPR, Axios, USA Today, Politico, National Review.
 
-**Note on Google News RSS sources** (cnn, ap, reuters, washexam): titles arrive with a
+**Feed URLs corrected during that verification:**
+- **WSJ** — every `feeds.a.dj.com` feed is frozen at 27 Jan 2025, so the 48h cutoff
+  discarded all of it. Now Google News RSS.
+- **USA Today** — `rssfeeds.usatoday.com` 301s every path to the homepage; the RSS
+  service is retired. Now Google News RSS.
+- **Politico** — `politics-news.xml` is 404. `politics.xml` is live but carries only
+  ~2 items inside the 48h window. Now Google News RSS for volume.
+- **NPR** — `feeds.npr.org` fingerprints the **TLS handshake**, not headers: curl gets
+  200, python-requests gets 403 with byte-identical headers. No header change fixes it
+  and Railway runs the same stack. Now Google News RSS.
+
+**Eight of twenty sources now use Google News RSS** (cnn, ap, reuters, washexam, wsj,
+npr, usatoday, politico). That makes the unstripped `" - Publisher"` suffix a bigger
+clustering problem than it was — see the note below.
+
+**Note on Google News RSS sources:** titles arrive with a
 `" - Publisher"` suffix. `best_label()` strips it from the *display label only* — the raw
 title still carries the suffix into TF-IDF, so publisher names pollute the clustering
 vocabulary for those sources. Known issue, not yet fixed.
@@ -184,7 +198,7 @@ articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
 | Source | Method | Feeds | Notes |
 |---|---|---|---|
 | Bluesky | AT Protocol `getTrendingTopics` (no auth) | Blue Trends | Cache: 30 min. |
-| Truth Social | Mastodon `/api/v1/trends` | Red Trends | **Unverified** — may sit behind bot protection. Degrades to "unavailable". Cache: 30 min. |
+| Truth Social | Mastodon `/api/v1/trends` | Red Trends | **BLOCKED (verified Sept 2026)** — returns a 403 Cloudflare challenge page to server requests. The panel always renders "unavailable". Needs replacing or removing. |
 | r/politics, r/progressive, r/liberal, r/democrats | Reddit RSS `/hot.rss` | Blue Trends | Up to 8 posts per sub |
 | r/Conservative, r/Republican, r/AskConservatives, r/tuesday | Reddit RSS `/hot.rss` | Red Trends | Up to 8 posts per sub |
 | Drudge Report | HTML scrape | Social Velocity | Cache: 30 min. |
@@ -192,7 +206,11 @@ articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
 | Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Social Velocity | Stored in the `reddit_posts` key of `data_store` and reuses `_REDDIT_CACHE` — a legacy name from when that slot held Reddit. Cache: 30 min. |
 
 **Reddit fetch strategy:** `_fetch_reddit_set()` serves both the liberal and conservative
-sets. Each subreddit fetches up to 25 RSS entries, caps at 8 posts, then interleaves
+sets. Requests are spaced `_REDDIT_DELAY` (2s) apart with one retry after
+`_REDDIT_RETRY_DELAY` (5s) on a 429. Without that throttle, eight subreddits per cycle
+reliably lost most of the second set — conservative Reddit returned 0 posts because the
+liberal fetch had already spent the budget. Expect ~46s for both sets, and the occasional
+429 to survive the retry. Each subreddit fetches up to 25 RSS entries, caps at 8 posts, then interleaves
 round-robin so every subreddit is represented. Max 32 posts. No OAuth — public RSS via
 feedparser. Reddit rate-limits aggressively (429) and often serves only some subreddits on
 a given cycle; partial results are normal and the log line reports which subs actually
