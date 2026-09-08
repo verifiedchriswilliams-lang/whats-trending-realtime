@@ -33,17 +33,21 @@ SCRAPE_SOURCES = {
     "foxnews":    "https://www.foxnews.com",
     "cnn":        "https://www.cnn.com",
     "nytimes":    "https://www.nytimes.com",
-    "dailymail":  "https://www.dailymail.co.uk",
     "nypost":     "https://nypost.com",
     "ap":         "https://apnews.com",
     "nbcnews":    "https://www.nbcnews.com",
-    "breitbart":  "https://www.breitbart.com",
     "thehill":    "https://thehill.com",
     "washtimes":  "https://www.washingtontimes.com",
-    "townhall":   "https://townhall.com",
-    "skynews":    "https://news.sky.com",
     "cbsnews":    "https://www.cbsnews.com",
     "washexam":   "https://www.washingtonexaminer.com",
+    "wapo":       "https://www.washingtonpost.com",
+    "wsj":        "https://www.wsj.com",
+    "bbc":        "https://www.bbc.com/news",
+    "npr":        "https://www.npr.org",
+    "axios":      "https://www.axios.com",
+    "usatoday":   "https://www.usatoday.com",
+    "politico":   "https://www.politico.com",
+    "natreview":  "https://www.nationalreview.com",
 }
 
 SOURCES = [
@@ -51,22 +55,27 @@ SOURCES = [
     {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/latest", "lean":"right", "tier":1, "rss_limit":50},
     {"id":"cnn",        "name":"CNN",               "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US",  "lean":"left", "tier":1},
     {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
-    {"id":"dailymail",  "name":"Daily Mail",        "rss":"https://www.dailymail.co.uk/news/index.rss",               "lean":"center-right", "tier":1},
     {"id":"nypost",     "name":"NY Post",           "rss":"https://nypost.com/feed/",                                 "lean":"right",        "tier":1},
     {"id":"ap",         "name":"AP News",           "rss":"https://news.google.com/rss/search?q=site:apnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
     {"id":"reuters",    "name":"Reuters",           "rss":"https://news.google.com/rss/search?q=site:reuters.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
     # Tier 2 — strong opinion/political feeds
-    {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
-    {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
     {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/homenews/feed/",                        "lean":"center",       "tier":2},
     {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
-    {"id":"foxbusiness","name":"Fox Business",      "rss":"https://news.google.com/rss/search?q=site:foxbusiness.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
-    {"id":"townhall",   "name":"Townhall",          "rss":"https://townhall.com/rss/tipsheet",                        "lean":"right",        "tier":2},
     # Tier 3 — new additions
     {"id":"cbsnews",    "name":"CBS News",          "rss":"https://www.cbsnews.com/latest/rss/main",                  "lean":"center-left",  "tier":2},
     {"id":"washexam",   "name":"Washington Examiner","rss":"https://news.google.com/rss/search?q=site:washingtonexaminer.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
     {"id":"freepress",  "name":"The Free Press",    "rss":"https://www.thefp.com/feed",                               "lean":"center-right", "tier":2},
+    # Added Sept 2026 for the general-market rebalance. All eight need a
+    # scripts/qa_sources.py run to confirm the feed URLs are still correct.
+    {"id":"wapo",       "name":"Washington Post",  "rss":"https://feeds.washingtonpost.com/rss/national",            "lean":"left",         "tier":1},
+    {"id":"wsj",        "name":"Wall Street Journal","rss":"https://feeds.a.dj.com/rss/RSSWorldNews.xml",             "lean":"center-right", "tier":1},
+    {"id":"bbc",        "name":"BBC News",         "rss":"https://feeds.bbci.co.uk/news/rss.xml",                    "lean":"center",       "tier":1},
+    {"id":"npr",        "name":"NPR",              "rss":"https://feeds.npr.org/1001/rss.xml",                       "lean":"center-left",  "tier":1},
+    {"id":"axios",      "name":"Axios",            "rss":"https://api.axios.com/feed/",                              "lean":"center",       "tier":2},
+    {"id":"usatoday",   "name":"USA Today",        "rss":"https://rssfeeds.usatoday.com/usatoday-NewsTopStories",    "lean":"center",       "tier":2},
+    {"id":"politico",   "name":"Politico",         "rss":"https://rss.politico.com/politics-news.xml",               "lean":"center-left",  "tier":2},
+    {"id":"natreview",  "name":"National Review",  "rss":"https://www.nationalreview.com/feed/",                     "lean":"right",        "tier":2},
 ]
 
 LEAN = {
@@ -77,8 +86,9 @@ LEAN = {
     "center-left":  {"label":"Ctr-Left",  "color":"#1D4ED8"},
 }
 
-SOURCE_ORDER = ["foxnews","nypost","breitbart","washtimes","townhall",
-                "ap","reuters","thehill","skynews","cnn","nytimes","nbcnews","dailymail","foxbusiness"]
+SOURCE_ORDER = ["foxnews","nypost","wsj","washtimes","washexam","natreview","freepress",
+                "ap","reuters","bbc","axios","usatoday","thehill",
+                "nytimes","wapo","npr","politico","nbcnews","cbsnews","cnn"]
 
 STOP_WORDS = {
     # --- Function words ---
@@ -345,17 +355,6 @@ def scrape_homepage(sid, url):
                 if h:
                     add(h.get_text(separator=' ', strip=True), _nearest_href(h))
 
-        # --- Breitbart: hero story + story listing grid ---
-        if sid == 'breitbart':
-            for div in soup.find_all(['div', 'section'],
-                                      class_=lambda c: c and any(x in str(c) for x in
-                                      ['top-story', 'hero', 'primary-stories', 'main-column'])):
-                for h in div.find_all(['h1', 'h2', 'h3']):
-                    add(h.get_text(separator=' ', strip=True), _nearest_href(h))
-            for article in soup.find_all('article'):
-                h = article.find(['h1', 'h2', 'h3'])
-                if h:
-                    add(h.get_text(separator=' ', strip=True), _nearest_href(h))
 
         # --- NY Times: article elements (homepage RSS already editorial-ordered,
         #     but targeted scraping improves URL capture for synthetic injection) ---
@@ -365,13 +364,6 @@ def scrape_homepage(sid, url):
                 if h:
                     add(h.get_text(separator=' ', strip=True), _nearest_href(h))
 
-        # --- Sky News: article list items ---
-        if sid == 'skynews':
-            for article in soup.find_all(['article', 'li'],
-                                          class_=lambda c: c and 'sdc-article' in str(c)):
-                h = article.find(['h3', 'h2'])
-                if h:
-                    add(h.get_text(separator=' ', strip=True), _nearest_href(h))
 
         # ── Generic scan: all sources — h1/h2/h3 in document order ───────────
         # URL capture now runs here too (not just Fox), so all scraped headings
@@ -767,9 +759,9 @@ def extract_keywords(title):
 
 # Preferred source order for choosing the most readable cluster headline label.
 # AP/Reuters/NYT give clean, neutral, descriptive headlines.
-_LABEL_SRC_PREF = ["ap","reuters","nytimes","nbcnews","cnn","foxnews","thehill",
-                   "skynews","washtimes","nypost","foxbusiness",
-                   "breitbart","townhall","dailymail"]
+_LABEL_SRC_PREF = ["ap","reuters","bbc","npr","nytimes","wapo","wsj","nbcnews","cbsnews",
+                   "usatoday","axios","politico","cnn","thehill","foxnews","washtimes",
+                   "washexam","nypost","natreview","freepress"]
 
 def best_label(kw, articles):
     """Return the most representative real headline from the cluster.
@@ -799,11 +791,12 @@ def best_label(kw, articles):
 
     title = (best_art or articles[0])["title"]
     # Strip trailing "- Source Name" appended by Google News RSS
-    title = re.sub(r'\s*[-–]\s*(Reuters|AP News|CNN|Fox News|NBC News|The Hill'
-                   r'|Washington Times|Breitbart|Townhall|Sky News'
-                   r'|NY Post|Daily Mail|Fox Business)\s*$',
+    title = re.sub(r'\s*[-–]\s*(Reuters|AP News|Associated Press|CNN|Fox News|NBC News'
+                   r'|CBS News|BBC News|BBC|NPR|The New York Times|The Washington Post'
+                   r'|The Wall Street Journal|USA TODAY|USA Today|Axios|Politico|The Hill'
+                   r'|Washington Times|Washington Examiner|washingtonexaminer\.com'
+                   r'|National Review|The Free Press|NY Post|New York Post)\s*$',
                    '', title, flags=re.IGNORECASE).strip()
-    return title
 
 # ── Story category classification ──────────────────────────────────────────
 _INTL_KW = {
@@ -1152,12 +1145,12 @@ def refresh_data():
     # path (≥ 2 path segments) to filter out section pages and nav links.
     #
     # Sources excluded from injection:
-    #   dailymail — homepage dominated by celebrity/lifestyle, not top news
     #   reuters   — homepage blocked (0 scrape data), auto-skipped by url_map check
-    #   thehill   — JS-rendered homepage (403), auto-skipped
-    #   foxbusiness — JS-rendered homepage, auto-skipped
+    #   thehill, washtimes — homepage returns 403, auto-skipped by url_map check
+    # Any source whose scrape yields no url_map is skipped automatically, so this
+    # set is only for sources that scrape fine but whose homepage mix is unreliable.
     INJECT_LIMIT    = 10
-    SKIP_INJECT     = {'dailymail'}   # sources whose homepage mix makes injection unreliable
+    SKIP_INJECT     = set()
 
     # Junk filter for synthetic injection — blocks nav elements, promos, and ads
     # that pass the URL quality gate (depth ≥ 2) but aren't actual news headlines.
@@ -1753,7 +1746,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 }
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 26 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 28 sources · Building intelligence report…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
@@ -1935,8 +1928,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
-const SO=['nytimes','foxnews','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart','cbsnews','washexam','freepress'];
-const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH',cbsnews:'CBS',washexam:'EXAM',freepress:'FP'};
+const SO=['ap','reuters','bbc','nytimes','wapo','wsj','npr','cnn','nbcnews','cbsnews','politico','axios','usatoday','thehill','foxnews','nypost','washtimes','washexam','natreview','freepress'];
+const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',thehill:'HILL',washtimes:'WT',cbsnews:'CBS',washexam:'EXAM',freepress:'FP',wapo:'WAPO',wsj:'WSJ',bbc:'BBC',npr:'NPR',axios:'AXIOS',usatoday:'USAT',politico:'POL',natreview:'NR'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg, scrollTo){
   _page=pg;
