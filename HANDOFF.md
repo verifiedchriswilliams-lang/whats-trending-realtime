@@ -149,7 +149,7 @@ for first data cycle to complete. The `loading: True` flag controls the splash s
 Call `/debug/refresh` (GET) to force a synchronous refresh and see any exceptions.
 
 **Auth:** A `_SESSION_TOKEN` is generated at startup and injected into the HTML. All
-`/api/data` calls require this token in the `X-Session-Token` header. This is a
+`/api/data` calls require this token in the `X-Dashboard-Key` header. This is a
 lightweight anti-scraping measure, not real auth. No user login exists.
 
 **Clustering constants to know:**
@@ -170,7 +170,7 @@ INJECT_LIMIT = 10             # synthetic injection position cap
 | `/bluetrends` | Blue Trends page direct link (server-injects `_INIT_VIEW="bt"`) |
 | `/privacy` | Required for Meta app (keep, do not delete) |
 | `/robots.txt` | Standard robots |
-| `/api/data` | JSON data feed (requires X-Session-Token header) |
+| `/api/data` | JSON data feed (requires X-Dashboard-Key header) |
 | `/api/refresh` | POST — trigger async refresh |
 | `/debug/refresh` | GET — synchronous refresh + error dump (keep for debugging) |
 | ~~`/debug/fb`~~ | ✅ DELETED in session 1 |

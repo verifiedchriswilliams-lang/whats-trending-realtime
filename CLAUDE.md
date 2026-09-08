@@ -401,7 +401,7 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 | Reuters | ⚠️ Moderate | ❌ Blocked | Reuters homepage blocks scraping. Google News RSS articles unverified — pass on age alone. No synthetic injection (url_map empty). |
 | NBC News | ✅ Excellent | ✅ Excellent | Direct RSS + very tight scrape positions 2-13. Best scraper performance. Synthetic injection ~3 articles/cycle. |
 | The Hill | ✅ Good | ❌ 403 | Switched to homenews/feed/ (news-only). Homepage returns **HTTP 403**, not JS-rendering as previously documented. Possibly fixable with better request headers — see `scripts/probe_403.py`. |
-| Washington Times | ✅ Good | ❌ 403 | **Regression (Sept 2026):** homepage scrape now returns HTTP 403; previously worked at positions 4-37 with ~6 injections/cycle. See `scripts/probe_403.py`. |
+| Washington Times | ❌ 403 | ❌ 403 | **Regression (Sept 2026):** both the RSS feed and the homepage scrape now return HTTP 403 to servers. Confirmed failing from Railway in production (19/20 sources live, washtimes the only empty one), not just from sandboxed environments. It still works from a residential connection. Needs a Google News RSS fallback like the other blocked sources, or removal. See `scripts/probe_403.py`. |
 | CBS News | ❓ Unverified | ❓ Unverified | Direct RSS (`cbsnews.com/latest/rss/main`). In `SCRAPE_SOURCES`. Added post-launch, never QA'd — run `scripts/qa_sources.py`. |
 | Washington Examiner | ❓ Unverified | ❓ Unverified | Google News RSS (site:washingtonexaminer.com). In `SCRAPE_SOURCES`. Added post-launch, never QA'd. |
 | The Free Press | ❓ Unverified | ➖ N/A | Direct RSS (`thefp.com/feed`). Not in `SCRAPE_SOURCES`. Never QA'd. |
