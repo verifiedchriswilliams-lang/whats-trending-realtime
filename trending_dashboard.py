@@ -37,7 +37,6 @@ SCRAPE_SOURCES = {
     "nypost":     "https://nypost.com",
     "ap":         "https://apnews.com",
     "nbcnews":    "https://www.nbcnews.com",
-    "dailywire":  "https://www.dailywire.com",
     "breitbart":  "https://www.breitbart.com",
     "thehill":    "https://thehill.com",
     "washtimes":  "https://www.washingtontimes.com",
@@ -57,7 +56,6 @@ SOURCES = [
     {"id":"ap",         "name":"AP News",           "rss":"https://news.google.com/rss/search?q=site:apnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
     {"id":"reuters",    "name":"Reuters",           "rss":"https://news.google.com/rss/search?q=site:reuters.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
     {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
-    {"id":"dailywire",  "name":"Daily Wire",        "rss":"https://www.dailywire.com/feeds/rss.xml",                  "lean":"right",        "tier":1},
     # Tier 2 — strong opinion/political feeds
     {"id":"breitbart",  "name":"Breitbart",         "rss":"https://www.breitbart.com/feed/",                          "lean":"right",        "tier":2},
     {"id":"skynews",    "name":"Sky News",          "rss":"https://feeds.skynews.com/feeds/rss/home.xml",             "lean":"center",       "tier":2},
@@ -79,7 +77,7 @@ LEAN = {
     "center-left":  {"label":"Ctr-Left",  "color":"#1D4ED8"},
 }
 
-SOURCE_ORDER = ["foxnews","nypost","dailywire","breitbart","washtimes","townhall",
+SOURCE_ORDER = ["foxnews","nypost","breitbart","washtimes","townhall",
                 "ap","reuters","thehill","skynews","cnn","nytimes","nbcnews","dailymail","foxbusiness"]
 
 STOP_WORDS = {
@@ -299,13 +297,6 @@ def scrape_homepage(sid, url):
         # These run BEFORE the generic h1/h2/h3 scan so editorial sections get
         # the lowest (best) position numbers in the ordered list.
         # Each targeted block captures both headline text AND article URLs.
-
-        # --- Daily Wire: editorial 'Top Stories' widget (topStoryTextContainer h3) ---
-        if sid == 'dailywire':
-            for div in soup.find_all('div', class_=lambda c: c and 'topStoryTextContainer' in c):
-                h3 = div.find('h3')
-                if h3:
-                    add(h3.get_text(separator=' ', strip=True), _nearest_href(h3))
 
         # --- Fox News: div.big-top (hero) + div.thumbs-2-7 (editorial grid) ---
         # Fox is server-side rendered — BeautifulSoup can parse the full layout.
@@ -777,7 +768,7 @@ def extract_keywords(title):
 # Preferred source order for choosing the most readable cluster headline label.
 # AP/Reuters/NYT give clean, neutral, descriptive headlines.
 _LABEL_SRC_PREF = ["ap","reuters","nytimes","nbcnews","cnn","foxnews","thehill",
-                   "skynews","washtimes","nypost","foxbusiness","dailywire",
+                   "skynews","washtimes","nypost","foxbusiness",
                    "breitbart","townhall","dailymail"]
 
 def best_label(kw, articles):
@@ -810,7 +801,7 @@ def best_label(kw, articles):
     # Strip trailing "- Source Name" appended by Google News RSS
     title = re.sub(r'\s*[-–]\s*(Reuters|AP News|CNN|Fox News|NBC News|The Hill'
                    r'|Washington Times|Breitbart|Townhall|Sky News'
-                   r'|Daily Wire|NY Post|Daily Mail|Fox Business)\s*$',
+                   r'|NY Post|Daily Mail|Fox Business)\s*$',
                    '', title, flags=re.IGNORECASE).strip()
     return title
 
@@ -1087,68 +1078,6 @@ def cluster_topics(all_arts):
 
     clusters.sort(key=lambda x: -x["heat_score"])
     return clusters[:20]
-
-def compute_alignment(all_arts, topics):
-    dw_all = all_arts.get("dailywire", [])
-    # Only count DW articles published in the last 12 hours as "covering" a topic.
-    # 6 hours was too tight — a 7h-old story is still same-day news for a daily
-    # editorial cycle. 12 hours prevents yesterday's coverage from suppressing today's
-    # DW Gap badge while still catching genuine same-day assignment opportunities.
-    twelve_hours_ago = datetime.now(timezone.utc) - timedelta(hours=12)
-    dw = [a for a in dw_all if a.get("pub_ts") and
-          datetime.fromisoformat(a["pub_ts"]) > twelve_hours_ago]
-    if not dw:
-        dw = dw_all  # fall back to all articles if feed has no timestamps (weekend lull)
-    dw_kws = set()
-    if dw:
-        for a in dw: dw_kws.update(extract_keywords(a["title"]))
-
-    def dw_covers(topic):
-        """True if Daily Wire is covering this topic cluster.
-        Checks ALL keywords from ALL articles in the cluster — not just the label.
-        This prevents false gaps when DW uses different framing than the cluster seed."""
-        # Gather every keyword from every article in the cluster
-        cluster_kws = set()
-        for a in topic.get("articles", []):
-            cluster_kws.update(extract_keywords(a["title"]))
-        # Also check the display label parts
-        for w in topic["keyword"].lower().split():
-            if len(w) > 3: cluster_kws.add(w)
-        # 1. Exact keyword intersection
-        shared = cluster_kws & dw_kws
-        if shared: return True, shared
-        # 2. Prefix-aware match: catches olympic/olympics, transgender/trans, etc.
-        #    Two keywords match if they share a common 5-char prefix (lightweight stemming).
-        for ck in cluster_kws:
-            if len(ck) < 5: continue
-            pfx = ck[:5]
-            for dk in dw_kws:
-                if len(dk) >= 5 and dk[:5] == pfx:
-                    return True, {ck}
-        # 3. Substring fallback: cluster keyword appears inside a DW article title
-        for a in dw:
-            title_lower = a["title"].lower()
-            for kw in cluster_kws:
-                if len(kw) > 4 and kw in title_lower:
-                    return True, {kw}
-        return False, set()
-
-    top10, covered, details = topics[:10], 0, []
-    covered_set = set()
-    for t in top10:
-        ok, matched_kws = dw_covers(t)
-        covered += int(ok)
-        if ok: covered_set.add(t["keyword"])
-        match = next((a["title"] for a in dw
-                      if any(kw in a["title"].lower() for kw in matched_kws)), None) if matched_kws else None
-        details.append({"topic":t["keyword"],"covered":ok,"dw_article":match,"heat_score":t["heat_score"]})
-    score = round(covered/len(top10)*100) if top10 else 0
-    grade = "A" if score>=80 else "B" if score>=60 else "C" if score>=40 else "D"
-    # Attach coverage flag to ALL topics (not just top 10)
-    for t in topics:
-        ok, _ = dw_covers(t)
-        t["dw_covered"] = ok
-    return {"score":score,"grade":grade,"covered":covered,"total":len(top10),"details":details,"covered_set":list(covered_set)}
 
 def refresh_data():
     ts = datetime.now().strftime('%H:%M:%S')
@@ -1475,19 +1404,21 @@ def privacy():
 h1{font-size:24px;margin-bottom:8px}h2{font-size:18px;margin-top:32px}</style></head>
 <body>
 <h1>Privacy Policy</h1>
-<p><strong>Last updated: March 31, 2026</strong></p>
-<p>TrendingInRealTime.com is an internal editorial intelligence dashboard operated by Daily Wire Ventures.
-This application is not a public-facing consumer product and is accessible only to authorized Daily Wire editorial staff.</p>
+<p><strong>Last updated: September 8, 2026</strong></p>
+<p>TrendingInRealTime.com is a publicly accessible news dashboard. It aggregates
+publicly published headlines from major news outlets and public trending-topic feeds,
+clusters them by story, and shows which stories are gaining coverage across sources.</p>
 <h2>Data Collection</h2>
 <p>This application does not collect, store, or share any personal data from users.
 No user accounts are created. No personal information is transmitted to third parties.</p>
-<h2>Facebook API Usage</h2>
-<p>This application uses the Facebook Graph API solely to retrieve publicly available engagement
-metrics (share counts, reactions) on published news article URLs. No user data, profile information,
-or private content is accessed. All data retrieved is publicly available information.</p>
-<h2>Cookies</h2>
-<p>This application uses a single session cookie for internal authentication purposes only.
-No tracking or advertising cookies are used.</p>
+<h2>Sources</h2>
+<p>All content is retrieved from publicly available RSS feeds, public homepages, and public
+APIs published by the news outlets and platforms themselves. No private, paywalled, or
+user-specific content is accessed. Headlines link back to the original publisher.</p>
+<h2>Cookies and Storage</h2>
+<p>This application sets no cookies. A short-lived token is embedded in the page to rate-limit
+automated scraping of the data endpoint. No tracking or advertising cookies are used, and no
+analytics profile is built.</p>
 <h2>Contact</h2>
 <p>For questions about this privacy policy, contact: cwilliams@dwventures.com</p>
 </body></html>""", 200, {'Content-Type': 'text/html; charset=utf-8'})
@@ -1718,16 +1649,9 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   /* Main pages: remove sidebar offset, add top padding for mob-hdr */
   .main{margin-left:0;padding-top:56px;padding-bottom:76px}
   .lh-page{margin-left:0!important;padding-top:56px!important;padding-bottom:76px!important}
-  .sbs-page{margin-left:0!important;padding:56px 16px 76px!important}
   .cgrid{grid-template-columns:1fr}
   .fab{display:none}
   .mob-nav{display:flex}
-  /* Side by Side: stack columns vertically */
-  .sbs-hdr{flex-direction:column!important;align-items:flex-start!important;gap:4px!important}
-  .sbs-hdr h2{font-size:22px!important}
-  .sbs-grid{display:block!important;grid-template-columns:unset!important}
-  .sbs-divider{display:none!important}
-  .sbs-grid>div+div+div{margin-top:28px!important;padding-top:20px!important;border-top:2px solid var(--surface-top)!important}
 }
 
 /* ── sec-hdr: stack on mobile, hide decorative date/badge ─────────────── */
@@ -1795,26 +1719,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 @media(max-width:1024px){.lh-page{margin-left:0}}
 
 /* SIDE BY SIDE PAGE */
-.sbs-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none}
-.sbs-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
-.sbs-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
-.sbs-hdr p{font-size:12px;color:var(--ink-l);margin:0}
-.sbs-grid{display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start}
-.sbs-divider{background:var(--surface-top);align-self:stretch;margin:0 28px}
-.sbs-col-hd{padding-bottom:10px;border-bottom:2px solid var(--navy);margin-bottom:2px}
-.sbs-col-title{font-family:'Newsreader',Georgia,serif;font-size:17px;font-weight:700;color:var(--navy-d);display:block}
-.sbs-col-sub{font-size:10px;color:var(--ink-l);text-transform:uppercase;letter-spacing:.6px;display:block;margin-top:3px}
-.sbs-row{display:flex;align-items:flex-start;gap:14px;padding:11px 0;border-bottom:1px solid var(--surface-low)}
-.sbs-row:last-child{border-bottom:none}
-.sbs-rank{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;color:var(--red);min-width:30px;line-height:1.1;flex-shrink:0}
-.sbs-body{}
-.sbs-hl{font-family:'Newsreader',Georgia,serif;font-size:14px;color:var(--ink);line-height:1.45}
-.sbs-hl a{color:var(--ink);text-decoration:none}
-.sbs-hl a:hover{color:var(--red);text-decoration:underline}
-.sbs-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.sbs-badge{display:inline-flex;align-items:center;font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px}
-.sbs-dw-yes{background:rgba(21,128,61,.1);color:#15803D}
-.sbs-top{background:var(--surface-top);color:var(--navy-d)}
 
 /* BLUE TRENDS PAGE */
 .bt-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none}
@@ -1881,9 +1785,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false">
       <span class="ms">trending_up</span><span>Social Velocity</span>
     </a>
-    <a href="#" class="sb-lnk" id="drw-sbs" onclick="switchPage('sbs');closeDrawer();return false">
-      <span class="ms">compare_arrows</span><span>Side by Side</span>
-    </a>
     <a href="#" class="sb-lnk" id="drw-lh" onclick="switchPage('lh');closeDrawer();return false">
       <span class="ms">schedule</span>
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
@@ -1913,9 +1814,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     </a>
     <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false">
       <span class="ms">trending_up</span><span>Social Velocity</span>
-    </a>
-    <a href="#" class="sb-lnk" id="nav-sbs" onclick="switchPage('sbs');return false">
-      <span class="ms">compare_arrows</span><span>Side by Side</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
       <span class="ms">schedule</span>
@@ -1985,30 +1883,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   </div>
 </main>
 
-<div class="sbs-page" id="sbs-page">
-  <div class="sbs-hdr">
-    <h2>Side by Side</h2>
-    <p>Cross-source trending vs. Daily Wire editorial picks</p>
-  </div>
-  <div class="sbs-grid">
-    <div>
-      <div class="sbs-col-hd">
-        <span class="sbs-col-title">What's Trending</span>
-        <span class="sbs-col-sub">Top 10 by cross-source heat score</span>
-      </div>
-      <div id="sbs-left"><div style="padding:20px;color:var(--ink-l);font-size:13px">Loading…</div></div>
-    </div>
-    <div class="sbs-divider"></div>
-    <div>
-      <div class="sbs-col-hd">
-        <span class="sbs-col-title">Daily Wire Top Stories</span>
-        <span class="sbs-col-sub">Editorial picks · refreshed each cycle</span>
-      </div>
-      <div id="sbs-right"><div style="padding:20px;color:var(--ink-l);font-size:13px">Loading…</div></div>
-    </div>
-  </div>
-</div>
-
 <div class="lh-page" id="lh-page">
   <div class="lh-hdr">
     <h2>Last Hour</h2>
@@ -2052,9 +1926,6 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false">
     <span class="ms">trending_up</span><span>Social</span>
   </a>
-  <a href="#" class="mob-nav-item" id="mob-sbs" onclick="switchPage('sbs');return false">
-    <span class="ms">compare_arrows</span><span>Side by Side</span>
-  </a>
   <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false">
     <span class="ms">schedule</span><span>Last Hour</span>
     <span class="mob-lh-badge" id="mob-lh-badge">0</span>
@@ -2064,13 +1935,12 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
 
 <script>
-const SO=['nytimes','foxnews','dailywire','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart','cbsnews','washexam','freepress'];
-const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',dailywire:'DW',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH',cbsnews:'CBS',washexam:'EXAM',freepress:'FP'};
+const SO=['nytimes','foxnews','dailymail','ap','thehill','washtimes','reuters','nbcnews','cnn','townhall','skynews','foxbusiness','nypost','breitbart','cbsnews','washexam','freepress'];
+const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',dailymail:'DM',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',breitbart:'BB',skynews:'SKY',thehill:'HILL',washtimes:'WT',foxbusiness:'FOXB',townhall:'TH',cbsnews:'CBS',washexam:'EXAM',freepress:'FP'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg, scrollTo){
   _page=pg;
   document.querySelector('.main').style.display=pg==='dash'?'block':'none';
-  document.getElementById('sbs-page').style.display=pg==='sbs'?'block':'none';
   document.getElementById('lh-page').style.display=pg==='lh'?'block':'none';
   document.getElementById('bt-page').style.display=pg==='bt'?'block':'none';
 
@@ -2078,7 +1948,6 @@ function switchPage(pg, scrollTo){
   const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
                   : scrollTo==='social-velocity-section' ? 'nav-social'
                   : pg==='dash' ? 'nav-topics'
-                  : pg==='sbs'  ? 'nav-sbs'
                   : pg==='lh'   ? 'nav-lh'
                   : pg==='bt'   ? 'nav-bt' : '';
   document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
@@ -2088,7 +1957,6 @@ function switchPage(pg, scrollTo){
   const activeMob = scrollTo==='live-feed-section' ? 'mob-live'
                   : scrollTo==='social-velocity-section' ? 'mob-social'
                   : pg==='dash' ? 'mob-topics'
-                  : pg==='sbs'  ? 'mob-sbs'
                   : pg==='lh'   ? 'mob-lh'
                   : pg==='bt'   ? 'mob-bt' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
@@ -2097,13 +1965,11 @@ function switchPage(pg, scrollTo){
   const activeDrw = scrollTo==='live-feed-section' ? 'drw-live'
                   : scrollTo==='social-velocity-section' ? 'drw-social'
                   : pg==='dash' ? 'drw-topics'
-                  : pg==='sbs'  ? 'drw-sbs'
                   : pg==='lh'   ? 'drw-lh'
                   : pg==='bt'   ? 'drw-bt' : '';
   document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeDrw){const el=document.getElementById(activeDrw);if(el)el.classList.add('act');}
 
-  if(pg==='sbs'&&_lastData)renderSBS(_lastData);
   if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
   if(pg==='bt'&&_lastData)rBT(_lastData);
 
@@ -2156,21 +2022,6 @@ function rLH(arts){
     html+=older.map(renderItem).join('');
   }
   el.innerHTML=html;
-}
-function renderSBS(d){
-  const topics=(d.trending_topics||[]).slice(0,10);
-  const dwArts=((d.sources||{}).dailywire||{}).articles||[];
-  const rk=i=>(i<9?'0':'')+(i+1);
-  document.getElementById('sbs-left').innerHTML=topics.length?topics.map((t,i)=>{
-    const dwOn=(t.sources||[]).includes('dailywire')||t.dw_covered;
-    const badge=dwOn?'<span class="sbs-badge sbs-dw-yes" title="Daily Wire is covering this story">\u2713 DW</span>':'';
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl">'+e(t.topic||t.keyword)+'</div><div class="sbs-meta">'+catBadge(t.category)+'<span>'+t.source_count+' source'+(t.source_count!==1?'s':'')+'</span><span>Signal '+t.heat_score+'</span>'+badge+'</div></div></div>';
-  }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">No trending data yet.</div>';
-  document.getElementById('sbs-right').innerHTML=dwArts.length?dwArts.slice(0,10).map((a,i)=>{
-    const isTop=a.scrape_position&&a.scrape_position<=5;
-    const age=a.pub_ts?'<span>'+ta(a.pub_ts)+'</span>':'';
-    return '<div class="sbs-row"><span class="sbs-rank">'+rk(i)+'</span><div class="sbs-body"><div class="sbs-hl"><a href="'+e(a.link)+'" target="_blank">'+e(a.title)+'</a></div><div class="sbs-meta">'+catBadge(a.category)+(isTop?'<span class="sbs-badge sbs-top">Top Story</span>':'')+age+'</div></div></div>';
-  }).join(''):'<div style="padding:20px;color:var(--ink-l);font-size:13px">Daily Wire articles loading…</div>';
 }
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
@@ -2373,7 +2224,6 @@ async function ld(){
       _lastTs=d.last_updated;
       rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
       if(_page==='bt')rBT(d);
-      if(_page==='sbs')renderSBS(d);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
       const lhBadge=document.getElementById('lh-badge');
