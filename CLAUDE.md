@@ -3,8 +3,8 @@
 ## Project Purpose
 
 A real-time news dashboard for a general audience. It aggregates RSS feeds from 20 major
-news outlets — balanced across right, center, and left — plus Bluesky, Truth Social,
-liberal and conservative Reddit, Drudge, Twitter/X trends, and Memeorandum (33 sources
+news outlets — balanced across right, center, and left — plus
+liberal and conservative Reddit, Twitter/X trends, and Memeorandum (30 sources
 total) every 30 minutes, clusters stories by specific topic (not generic keywords), and
 ranks them by how widely and prominently they are being covered.
 
@@ -41,7 +41,6 @@ CLAUDE.md               ← this file
 - feedparser for RSS ingestion (18 news sources + 4 Reddit subreddits, concurrent via ThreadPoolExecutor)
 - requests + BeautifulSoup4 for homepage scraping (13 sources)
 - Memeorandum political aggregator via HTML scrape (surfaces stories driving pundit conversation)
-- Bluesky AT Protocol public API (`app.bsky.unspecced.getTrendingTopics`, no auth required)
 - Reddit RSS feeds for 4 liberal subreddits (politics, progressive, liberal, democrats) via feedparser
 - gunicorn for production serving (via Procfile)
 - Railway for hosting, GitHub for version control
@@ -125,7 +124,7 @@ This replaced a naive approach that keyed history by cluster label text, which b
 
 ---
 
-## Data Sources (20 news RSS + 13 supplemental = 33 total)
+## Data Sources (20 news RSS + 10 supplemental = 30 total)
 
 Sources are chosen for reputation and balanced across the political spectrum:
 **7 right / 6 center / 7 left.** `lean` drives the colour coding throughout the UI.
@@ -197,13 +196,29 @@ articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
 
 | Source | Method | Feeds | Notes |
 |---|---|---|---|
-| Bluesky | AT Protocol `getTrendingTopics` (no auth) | Blue Trends | Cache: 30 min. |
-| Truth Social | Mastodon `/api/v1/trends` | Red Trends | **BLOCKED (verified Sept 2026)** — returns a 403 Cloudflare challenge page to server requests. The panel always renders "unavailable". Needs replacing or removing. |
 | r/politics, r/progressive, r/liberal, r/democrats | Reddit RSS `/hot.rss` | Blue Trends | Up to 8 posts per sub |
 | r/Conservative, r/Republican, r/AskConservatives, r/tuesday | Reddit RSS `/hot.rss` | Red Trends | Up to 8 posts per sub |
-| Drudge Report | HTML scrape | Social Velocity | Cache: 30 min. |
-| Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | Social Velocity | Both may block cloud IPs. getdaytrends currently parses 0 — fallback is carrying it. |
+| Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | Social Velocity | getdaytrends currently parses 0 — the fallback is carrying it. |
 | Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Social Velocity | Stored in the `reddit_posts` key of `data_store` and reuses `_REDDIT_CACHE` — a legacy name from when that slot held Reddit. Cache: 30 min. |
+
+**Removed Sept 2026:** Bluesky, Drudge Report and Truth Social.
+- **Drudge** is a single hand-curated, historically right-leaning feed — a poor fit for a
+  politically balanced product.
+- **Truth Social** returns a 403 Cloudflare challenge to server requests, so its panel
+  could never render.
+- **Bluesky** went with them: once Truth Social was gone it had no counterpart, and
+  removing both makes the two trend pages single-column Reddit views that are symmetric
+  by construction rather than by pairing one platform against another.
+
+**On Memeorandum's balance:** sampled live (Sept 2026), its front page carried NYT (42
+links) alongside Washington Examiner (35) and Newsmax (27), Fox News (18) alongside The
+New Republic (18); classified links ran 149 left / 118 right. It is algorithmic rather
+than curated — it tracks what political writers are linking to and clusters commentary
+from both sides under each story — which is why it stays balanced without being balanced
+by hand. Caveat: it tracks *political punditry* specifically, so it skews toward what the
+commentariat is fixated on rather than general news. That is a genre skew, not a partisan
+one.
+
 
 **Reddit fetch strategy:** `_fetch_reddit_set()` serves both the liberal and conservative
 sets. Requests are spaced `_REDDIT_DELAY` (2s) apart with one retry after
@@ -227,10 +242,10 @@ The app uses a **fixed left sidebar** for navigation (no top nav bar). The sideb
 **Sidebar nav items (top to bottom):**
 1. **Topic Intelligence** (`local_fire_department`) — Top Trending Topics dashboard (main view)
 2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
-3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Drudge/Twitter sidebar on the Dashboard page
+3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Twitter/Memeorandum sidebar on the Dashboard page
 4. **Last Hour** (`schedule`) — recent articles page, with live article count badge
-5. **Blue Trends** (`forum`, blue `#1D4ED8`) — Bluesky trending + liberal Reddit hot posts. Deep-link: `/bluetrends`
-6. **Red Trends** (`forum`, red `#C41230`) — Truth Social trending + conservative Reddit hot posts. Deep-link: `/redtrends`
+5. **Blue Trends** (`forum`, blue `#1D4ED8`) — hot posts from liberal subreddits. Deep-link: `/bluetrends`
+6. **Red Trends** (`forum`, red `#C41230`) — hot posts from conservative subreddits. Deep-link: `/redtrends`
 
 Blue and Red Trends use the **identical `forum` glyph**, differing only in colour. This is
 deliberate: symmetry is structural, so neither side carries a positive or negative
@@ -260,33 +275,22 @@ The **LIVE indicator + countdown to refresh** lives in the sidebar between the I
 - Auto-refreshes with the main data pipeline
 
 ### Social Velocity sidebar
-- **Drudge** tab: top headline links scraped from Drudge Report
 - **Twitter** tab: US trending topics. Primary source: getdaytrends.com (server-rendered). Fallback: trends24.in. Both may be intermittent from cloud IPs.
 
 **Note:** Facebook tab was removed. Meta's Graph API (`Page Public Content Access` feature) requires App Review and is incompatible with the Facebook Login app type — not feasible for public page engagement data without a full app rebuild.
 
 ### Blue Trends (`/bluetrends`) and Red Trends (`/redtrends`)
 
-Two symmetric pages, same layout and same code path — a platform trending panel on the
-left, a Reddit panel on the right. Red Trends reuses the `.bt-*` CSS classes so both pages
-stay visually identical by construction.
+Two symmetric single-column pages showing hot Reddit posts from each side. They share the
+`.bt-*` CSS classes and one `rdPosts()` renderer, so they cannot drift apart.
 
-#### Blue Trends page (`/bluetrends`)
-Two-column view showing what's generating engagement on the left side of the political spectrum.
+- **Blue Trends:** r/politics, r/progressive, r/liberal, r/democrats
+- **Red Trends:** r/Conservative, r/Republican, r/AskConservatives, r/tuesday
+- Both interleave round-robin so every subreddit is represented.
+- Posts link to the external article when the RSS summary contains one, with a
+  "discussion →" link to the Reddit thread; otherwise straight to the thread.
+- Nav icons are the identical `forum` glyph, differing only in colour.
 
-- **Left column — Bluesky Trending:** Top topics from Bluesky's public AT Protocol API. Each topic is a clickable link to `bsky.app/search?q=...`. Subtitle dynamically shows actual count ("X topics trending on Bluesky right now") since the API typically returns ~10 curated topics regardless of the limit=25 request.
-- **Right column — Liberal Reddit Hot:** Hot posts from r/politics, r/progressive, r/liberal, and r/democrats, interleaved round-robin. Posts link to the external article URL (extracted from RSS summary HTML) when available, otherwise to the Reddit thread.
-- Deep-link: `trendinginrealtime.com/bluetrends` routes directly to this view via server-side injection of `_INIT_VIEW="bt"` into the HTML before serving.
-- Nav icon: `forum` (Material Symbols), blue (`#1D4ED8`)
-
-#### Red Trends page (`/redtrends`)
-- **Left column — Truth Social Trending:** Mastodon-style `/api/v1/trends`. **Unverified** —
-  if the host blocks non-browser clients this panel shows "unavailable" the way the
-  Twitter/X panel does. If QA confirms it is permanently blocked, replace the signal or
-  drop the column and rebalance both pages.
-- **Right column — Conservative Reddit Hot:** r/Conservative, r/Republican,
-  r/AskConservatives, r/tuesday, interleaved round-robin.
-- Nav icon: `forum` (Material Symbols), red (`#C41230`)
 
 ### Live Source Feed (Source Headlines grid)
 - All 20 news sources displayed with their top 8 headlines
@@ -364,12 +368,17 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 | National Review | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
 
 ### Other Known Issues
+- **Multi-line regex replacements in this file are dangerous.** A `re.sub` over
+  `best_label()`'s Google News suffix block once consumed one line too many and deleted
+  its `return title`, so every cluster label silently became `None`. It passed a syntax
+  check and an app-boot check, and only live QA with real clusters caught it. After any
+  multi-line edit to a function, run a refresh and confirm `trending_topics[].topic` is
+  populated.
 - **Rotate the Facebook token.** The removed code embedded app token `1491126469205088|…` in the repo and served it from the public `/debug/fb` endpoint. Deleting the code does **not** invalidate the token, and it remains in git history. Rotate/revoke it in the Meta app dashboard.
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
 - **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
 - **Post-merge threshold tuning:** `MERGE_THRESHOLD = 0.20` was chosen to catch same-story false splits. If unrelated stories start merging, raise it toward 0.25. If splits persist, lower it toward 0.15.
 - **Twitter/X trends:** getdaytrends.com and trends24.in may block cloud server IPs intermittently. Shows "unavailable" gracefully when both fail.
-- **Bluesky topic count:** The `getTrendingTopics` API appears to return ~10 curated topics regardless of the `limit=25` parameter — this is a server-side cap on Bluesky's end, not a code issue. The subtitle dynamically reflects the actual count returned.
 - **SIMILARITY_THRESHOLD tuning:** 0.28 is the current setting. After a full day of news cycles, this may need adjustment — raise if unrelated stories are still merging, lower if related stories are splitting into separate clusters.
 
 ---
@@ -402,24 +411,21 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [x] **Topbar removal** — "Editorial Intelligence" header bar eliminated; LIVE indicator + countdown moved into sidebar above nav items (`.sb-live`). All page containers start at `top:0`, reclaiming 64px of vertical space.
 - [x] **DW alignment prefix matching** — added 5-char prefix matching step between exact and substring fallback. Fixes `olympic`/`olympics`, `transgender`/`trans`, and similar root-word variants where DW's framing uses a different inflection.
 - [x] **Facebook tab removed** — Meta's Graph API requires App Review for `Page Public Content Access` and is incompatible with the Facebook Login app type. Removed from Social Velocity sidebar entirely.
-- [x] **Blue Trends page** — new page at `/bluetrends` (also deep-linkable as `trendinginrealtime.com/bluetrends`) showing Bluesky trending topics (left column) and Liberal Reddit hot posts from r/politics, r/progressive, r/liberal, r/democrats (right column). Nav icon: `mood_bad` (Material Symbols).
-- [x] **Bluesky trending topics** — `fetch_bluesky_trends()` calls `app.bsky.unspecced.getTrendingTopics` (no auth, limit=25). Each topic links to `bsky.app/search?q=...`. Subtitle shows dynamic count. Cache: 30 min.
+- [x] **Blue Trends page** — `/bluetrends`, hot posts from r/politics, r/progressive, r/liberal, r/democrats.
 - [x] **Liberal Reddit hot posts** — `fetch_liberal_reddit()` fetches RSS from 4 subreddits via feedparser. Round-robin interleave ensures all 4 subs always appear (cap: 8 per sub). External article URLs extracted from RSS summary HTML when available.
-- [x] **Loading screen source count** — now "Scanning 33 sources" (20 news RSS + 13 supplemental: Bluesky, Truth Social, 4 liberal + 4 conservative subreddits, Drudge, Twitter/X, Memeorandum).
+- [x] **Loading screen source count** — now "Scanning 30 sources" (20 news RSS + 10 supplemental: 4 liberal + 4 conservative subreddits, Twitter/X, Memeorandum).
 - [x] **General-market pivot (Sept 2026)** — removed Daily Wire, `compute_alignment()` (dead code), the Side by Side page and its nav in all three surfaces, and the DW framing from `/privacy`.
 - [x] **20-source rebalance** — 7 right / 6 center / 7 left. Dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review.
-- [x] **Red Trends page** — `/redtrends`, mirroring Blue Trends. Truth Social trending + conservative Reddit, reusing the `.bt-*` classes.
+- [x] **Red Trends page** — `/redtrends`, mirroring Blue Trends: conservative Reddit, sharing the `.bt-*` classes and the `rdPosts()` renderer.
 - [x] **Symmetric trend iconography** — both pages use the `forum` glyph, differing only in colour. Replaces the editorialising `mood_bad` on Blue Trends.
 - [x] **Generalised Reddit fetcher** — `_fetch_reddit_set()` serves both sets; the log now reports which subreddits actually returned posts instead of always printing the full count.
 
 ### Backlog
 - [ ] **Email digest** — daily 8am summary of top 10 trending + DW alignment score
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
-- [ ] **Drudge siren** — visual alert when a story is Drudge's top link
 - [ ] **Verify the 8 new feeds** — run `scripts/qa_sources.py` and fix any wrong URLs
 - [ ] **Fix the 403 scrapes** — run `scripts/probe_403.py`; The Hill and Washington Times are blocked
 - [ ] **Strip Google News suffixes before TF-IDF** — currently stripped only in `best_label()`, so publisher names pollute the clustering vocabulary for cnn/ap/reuters/washexam
-- [ ] **Confirm or replace Truth Social** — if `/api/v1/trends` is blocked, Red Trends loses its platform panel and the two pages stop being symmetric
 - [ ] **Velocity in ranking** — heat score has no time term; ranking is magnitude only, and the Jaccard source-set matcher loses history exactly when a story is growing fastest. Deferred by product decision, revisit later.
 - [ ] **Delete `trending_dashboard_v2.py`** — stale 15-source predecessor of the current single-file app. Not imported, not served, not referenced by `Procfile`. Dead weight that confuses source-count audits.
 - [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
@@ -443,5 +449,5 @@ The dashboard is built for a fast scan. Suggested reading order:
 1. Top trending topics (highest heat score = broadest, most prominent coverage)
 2. Velocity sparkline and the ▲/▼ delta — which stories are gaining or losing coverage
 3. Last Hour tab — anything breaking in the last 60 minutes that hasn't clustered yet
-4. Social Velocity sidebar (Drudge / Twitter / Memeorandum) — stories RSS may miss
+4. Social Velocity sidebar (Twitter / Memeorandum) — stories RSS may miss
 5. Blue Trends and Red Trends — what's generating engagement on each side
