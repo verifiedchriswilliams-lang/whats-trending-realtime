@@ -234,6 +234,37 @@ returned posts.
 
 ---
 
+## Design system (2030 redesign)
+
+Source of truth: `docs/design/DESIGNSYSTEM.md`, with artboards in `docs/design/artboards/`.
+**Phase 1 is implemented** — the visual language, applied to the existing layout. Phases 2
+and 3 (structural, and new capability) are not started.
+
+**Phase 1, shipped:**
+- **One typeface.** Instrument Sans replaces Newsreader and Inter. No serif, no mono.
+- **No icon font.** Material Symbols is gone — 25 icon spans removed, and with them a
+  328KB font and its ligature fragility. Every icon sat beside a text label already. Do
+  not reintroduce icons where a word will do.
+- **OKLCH token palette** on `:root`. Legacy token names (`--surface`, `--ink-m`, …) are
+  kept as aliases pointing at the new tokens, so existing rules inherit the palette
+  without being rewritten. Write new rules against the new names: `--bg`, `--sf`, `--ink`,
+  `--ink2`, `--ink3`, `--ll`, `--lc`, `--lr`, `--lo`, `--acc`, `--hair`, `--lift`.
+- **Lean colours hold constant lightness and chroma**, varying only hue. Previously
+  `right` (`#C41230`) was visibly darker and heavier than `left` (`#1D4ED8`), and
+  `center-left` shared `left`'s exact hex, so those two tiers were indistinguishable. The
+  palette no longer editorialises. If you add a lean tier, match L and C and change only H.
+- **No ALL-CAPS micro-labels.** 14 `text-transform:uppercase` rules removed; 9–10px caps
+  became 13px sentence case. Category labels are full words, not `Natl`/`Biz`.
+- **Tabular numerals** on `body`, so the Signal column stops jittering between refreshes.
+- **Rising velocity is green** (`--acc`), not red — a story gaining coverage should not
+  read as a warning. Falling stays neutral grey. Never red.
+- **No gradient fills**, and category badges no longer use eight saturated pill colours.
+
+**Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
+take the hover-raised plane; source chips are still bordered boxes rather than coverage
+dots; there is no hero and no Coverage gap section; and the fixed sidebar remains where
+the design has a single scrolling column.
+
 ## UI Features
 
 ### Navigation

@@ -75,12 +75,20 @@ SOURCES = [
     {"id":"natreview",  "name":"National Review",  "rss":"https://www.nationalreview.com/feed/",                     "lean":"right",        "tier":2},
 ]
 
+# Lean colours hold constant lightness (0.62) and chroma (0.075) and differ only in
+# hue, so no lean reads as heavier, darker or more negative than another. Center sits
+# at the same lightness with near-zero chroma. See docs/design/DESIGNSYSTEM.md.
+#
+# The UI groups these into the three display buckets the design uses:
+#   left  = left + center-left      center = center      right = right + center-right
+# Previously "left" and "center-left" shared the same hex, so those tiers were
+# indistinguishable, and right (#C41230) was visibly darker than left (#1D4ED8).
 LEAN = {
-    "right":        {"label":"Right",     "color":"#C41230"},
-    "center-right": {"label":"Ctr-Right", "color":"#B45309"},
-    "center":       {"label":"Center",    "color":"#374151"},
-    "left":         {"label":"Left",      "color":"#1D4ED8"},
-    "center-left":  {"label":"Ctr-Left",  "color":"#1D4ED8"},
+    "right":        {"label":"Right",        "color":"oklch(0.62 0.075 35)"},
+    "center-right": {"label":"Center-right", "color":"oklch(0.62 0.075 35)"},
+    "center":       {"label":"Center",       "color":"oklch(0.66 0.012 90)"},
+    "left":         {"label":"Left",         "color":"oklch(0.62 0.075 255)"},
+    "center-left":  {"label":"Center-left",  "color":"oklch(0.62 0.075 255)"},
 }
 
 SOURCE_ORDER = ["foxnews","nypost","wsj","washtimes","washexam","natreview","freepress",
@@ -1420,48 +1428,80 @@ HTML = r"""<!DOCTYPE html>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23BA032A'/><polyline points='4,24 10,16 16,20 22,10 28,6' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='6' r='2.5' fill='white'/></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600;6..72,700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --navy:#1A2744;--navy-d:#0d1b37;--white:#fff;
-  --ink:#191c1e;--ink-m:#45464d;--ink-l:#75777e;
-  --red:#BA032A;--green:#14532D;
-  --surface:#f8f9fb;--surface-low:#f2f4f6;--surface-ctr:#eceef0;
-  --surface-high:#e6e8ea;--surface-top:#e0e3e5;--surface-0:#ffffff;
-  --border:#c5c6ce;--sh:rgba(13,27,55,.07);
+  /* 2030 design system — see docs/design/DESIGNSYSTEM.md.
+     Phase 1 retunes the palette in place: the legacy token names are kept so every
+     existing rule inherits the new values without being rewritten. Layout is unchanged. */
+
+  /* Ground and surfaces */
+  --bg:oklch(0.972 0.004 85);
+  --sf:oklch(1 0 0);
+  --surface:var(--bg);
+  --surface-0:var(--sf);
+  --surface-low:oklch(0.958 0.004 85);
+  --surface-ctr:oklch(0.944 0.004 85);
+  --surface-high:oklch(0.930 0.004 85);
+  --surface-top:oklch(0.916 0.004 85);
+
+  /* Ink — --ink3 is the 4.5:1 contrast floor; nothing under 15px goes lighter */
+  --ink:oklch(0.22 0.008 70);
+  --ink2:oklch(0.44 0.008 70);
+  --ink3:oklch(0.53 0.007 70);
+  --ink-m:var(--ink2);
+  --ink-l:var(--ink3);
+  --navy:var(--ink);
+  --navy-d:var(--ink);
+  --white:#fff;
+
+  /* Lean hues hold constant lightness and chroma; only H changes, so no lean
+     reads as heavier or more negative than another. */
+  --ll:oklch(0.62 0.075 255);
+  --lc:oklch(0.66 0.012 90);
+  --lr:oklch(0.62 0.075 35);
+  --lo:oklch(0.89 0.004 80);
+
+  /* Accent: live indicator and rising velocity only */
+  --acc:oklch(0.55 0.11 158);
+  --green:var(--acc);
+  --red:var(--ink);
+
+  --hair:oklch(0.2 0.01 70 / 0.09);
+  --border:var(--hair);
+  --sh:oklch(0.3 0.01 70 / .07);
+  --lift:inset 0 1px 0 oklch(1 0 0 / .8), 0 14px 44px oklch(0.3 0.01 70 / .07);
 }
 *{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}
-body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sans-serif;font-size:14px;line-height:1.5;min-height:100vh}
-.ms{font-family:'Material Symbols Outlined';font-style:normal;font-weight:400;font-size:20px;line-height:1;letter-spacing:normal;text-transform:none;white-space:nowrap;display:inline-block;-webkit-font-smoothing:antialiased}
+body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-ui,-apple-system,sans-serif;font-size:15.5px;line-height:1.5;min-height:100vh;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 
 /* LOADING OVERLAY */
 #ov{position:fixed;inset:0;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:9999;transition:opacity .5s}
 #ov.h{opacity:0;pointer-events:none}
 .spin{width:40px;height:40px;border:3px solid rgba(255,255,255,.15);border-top-color:#fff;border-radius:50%;animation:sp .85s linear infinite;margin-bottom:16px}
 @keyframes sp{to{transform:rotate(360deg)}}
-.ov-ttl{font-family:'Newsreader',Georgia,serif;font-size:22px;color:#fff;margin-bottom:6px}
+.ov-ttl{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;color:#fff;margin-bottom:6px}
 .ov-sub{font-size:12px;color:rgba(255,255,255,.45)}
 
 .live-dot{width:7px;height:7px;border-radius:50%;background:var(--red);animation:lp 2s infinite;box-shadow:0 0 8px rgba(186,3,42,.6)}
 @keyframes lp{0%,100%{opacity:1}50%{opacity:.2}}
 .sb-live{display:flex;align-items:center;gap:8px;padding:8px 10px;margin-bottom:12px;background:rgba(186,3,42,.06);border-radius:4px;border:1px solid rgba(186,3,42,.12)}
 .sb-live-pill{display:flex;align-items:center;gap:5px}
-.sb-live-txt{font-size:9px;font-weight:800;letter-spacing:2px;color:var(--red);text-transform:uppercase}
+.sb-live-txt{font-size:13px;font-weight:500;color:var(--acc);}
 .sb-live-time{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums;margin-left:auto}
 
 /* LEFT SIDEBAR */
 .sidebar{position:fixed;top:0;left:0;bottom:0;width:256px;z-index:90;display:flex;flex-direction:column;padding:16px;background:#f2f4f6;border-right:1px solid var(--surface-top);overflow-y:auto}
 .sb-brand{display:flex;align-items:center;gap:12px;padding:8px;margin-bottom:24px}
-.sb-icon{width:40px;height:40px;border-radius:2px;background:var(--navy);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.sb-title{font-family:'Newsreader',Georgia,serif;font-size:17px;color:var(--navy-d);line-height:1.2}
-.sb-sub{font-size:9px;color:var(--ink-l);text-transform:uppercase;letter-spacing:1.5px;margin-top:1px}
+.sb-icon{width:40px;height:40px;border-radius:12px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:17px;color:var(--navy-d);line-height:1.2}
+.sb-sub{font-size:13px;color:var(--ink3);margin-top:2px}
 .sb-nav{display:flex;flex-direction:column;gap:2px;flex:1}
 .sb-lnk{display:flex;align-items:center;gap:10px;padding:8px 12px;font-size:13px;font-weight:500;color:var(--ink-m);text-decoration:none;border-radius:4px;transition:all .15s}
 .sb-lnk.act{background:#fff;color:var(--navy-d);font-weight:600;box-shadow:0 1px 3px var(--sh)}
 .sb-lnk:hover:not(.act){background:rgba(0,0,0,.04);color:var(--ink)}
 .sb-footer{border-top:1px solid var(--surface-top);padding-top:16px;margin-top:16px;display:flex;flex-direction:column;gap:2px}
-.sb-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;margin-bottom:8px;background:linear-gradient(180deg,var(--navy) 0%,#000 100%);color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:13px;font-weight:700;font-family:'Inter',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);width:100%;transition:opacity .15s}
+.sb-btn{display:flex;align-items:center;justify-content:center;gap:8px;padding:10px;margin-bottom:8px;background:var(--ink);color:#fff;border:none;border-radius:2px;cursor:pointer;font-size:13px;font-weight:700;font-family:'Instrument Sans',sans-serif;box-shadow:0 2px 8px rgba(0,0,0,.25);width:100%;transition:opacity .15s}
 .sb-btn:hover{opacity:.9}
 .sb-meta{padding:5px 12px;font-size:11px;color:var(--ink-l);display:flex;align-items:center;gap:6px}
 
@@ -1471,18 +1511,18 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
-.sec-title{font-family:'Newsreader',Georgia,serif;font-size:30px;font-weight:700;color:var(--navy-d);line-height:1.1}
+.sec-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;color:var(--navy-d);line-height:1.1}
 .sec-sub{font-size:13px;color:var(--ink-l);margin-top:4px}
-.bdg{padding:3px 8px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:800;letter-spacing:.5px;font-family:'Inter',sans-serif;color:var(--ink-m)}
+.bdg{padding:3px 8px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:800;letter-spacing:.5px;font-family:'Instrument Sans',sans-serif;color:var(--ink-m)}
 
 /* TRENDING TABLE */
 .tbl-wrap{background:var(--surface-top);padding:2px;border-radius:3px;overflow-x:auto;margin-bottom:28px}
 .tbl-inner{background:var(--surface-0);border-radius:3px;overflow:visible;box-shadow:0 1px 4px var(--sh)}
 .topics-tbl{width:100%;border-collapse:collapse;table-layout:fixed}
-.topics-tbl thead th{padding:10px 16px;font-size:9px;font-weight:800;color:var(--ink-l);text-transform:uppercase;letter-spacing:1.5px;background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Inter',sans-serif}
+.topics-tbl thead th{padding:10px 16px;font-size:13px;font-weight:400;color:var(--ink3);background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Instrument Sans',sans-serif}
 .topics-tbl thead th.tc{text-align:center}
 .topics-tbl thead th.tr2{text-align:right}
-.th-r{width:56px}.th-s{width:108px}.th-v{width:112px}.th-g{width:80px}
+.th-r{width:104px}.th-s{width:108px}.th-v{width:112px}.th-g{width:80px}
 .topics-tbl td{overflow:hidden}
 .t-row{cursor:pointer;transition:background .1s}
 .t-row:hover td{background:rgba(0,0,0,.015)}
@@ -1490,78 +1530,72 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .x-row{display:none}
 .x-row.open{display:table-row}
 .x-row td{padding:0;border-bottom:1px solid var(--surface-high)}
-.rn{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;text-align:center;display:block}
+.rn{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:center;display:block}
 .rn-h{color:var(--red)}.rn-n{color:var(--ink-l)}
-.rn-cat{display:flex;flex-direction:column;align-items:center;margin-top:4px;gap:2px}
-.t-hl{font-family:'Newsreader',Georgia,serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
-.t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Inter',sans-serif}
+.rn-cat{display:flex;flex-direction:column;align-items:flex-start;margin-top:4px;gap:2px;font-size:12px;line-height:1.3;white-space:normal;word-break:normal}
+.t-hl{font-family:'Instrument Sans',system-ui,sans-serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
+.t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Instrument Sans',sans-serif}
 .t-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
-.tag{padding:2px 7px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-family:'Inter',sans-serif;color:var(--ink-m)}
+.tag{padding:2px 7px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:700;letter-spacing:.4px;font-family:'Instrument Sans',sans-serif;color:var(--ink-m)}
 .tag.brk{background:rgba(186,3,42,.1);color:var(--red);animation:lp 1.5s infinite}
 .tag.age{background:var(--surface-low);color:var(--ink-l);border:1px solid var(--surface-high)}
 .tag.lead{background:var(--navy);color:#fff}
-.tag.cat{border-radius:2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
-.tag.cat-natl{background:#EFF6FF;color:#1D4ED8}
-.tag.cat-intl{background:#F0FDFA;color:#0F766E}
-.tag.cat-sport{background:#F0FDF4;color:#15803D}
-.tag.cat-ent{background:#FFF7ED;color:#C2410C}
-.tag.cat-biz{background:#F5F3FF;color:#6D28D9}
-.tag.cat-crime{background:#FEF2F2;color:#991B1B}
-.tag.cat-tech{background:#EEF2FF;color:#4338CA}
-.tag.cat-health{background:#FDF2F8;color:#BE185D}
+.tag.cat{border-radius:2px;font-size:9px;font-weight:700;letter-spacing:.4px}
+.tag.cat-natl,.tag.cat-intl,.tag.cat-sport,.tag.cat-ent,.tag.cat-biz,
+.tag.cat-crime,.tag.cat-tech,.tag.cat-health{background:none;color:var(--ink3);padding:0}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
-.chip{width:26px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;font-family:'Inter',sans-serif;flex-shrink:0}
+.chip{width:26px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;font-family:'Instrument Sans',sans-serif;flex-shrink:0}
 .chip.hero{outline:2px solid var(--navy);outline-offset:1px}
-.sig-n{font-family:'Newsreader',Georgia,serif;font-size:22px;font-weight:700;text-align:right;color:var(--ink);display:block}
-.sig-d{font-size:10px;font-weight:700;text-align:right;font-family:'Inter',sans-serif;display:block;margin-top:1px}
+.sig-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:right;color:var(--ink);display:block}
+.sig-d{font-size:10px;font-weight:700;text-align:right;font-family:'Instrument Sans',sans-serif;display:block;margin-top:1px}
 .ei-c{font-size:10px;color:var(--ink-l);display:block;text-align:right;margin-top:3px}
 .x-inner{padding:8px 16px 8px 80px;background:var(--surface-low)}
 .a-row{padding:6px 0;border-bottom:1px solid var(--surface-high);font-size:12px}
 .a-row:last-child{border-bottom:none}
-.a-src{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--ink-l);font-family:'Inter',sans-serif;margin-bottom:2px}
-.a-row a{font-family:'Newsreader',Georgia,serif;color:var(--navy-d);text-decoration:none}
+.a-src{font-size:9px;font-weight:700;letter-spacing:.5px;color:var(--ink-l);font-family:'Instrument Sans',sans-serif;margin-bottom:2px}
+.a-row a{font-family:'Instrument Sans',system-ui,sans-serif;color:var(--navy-d);text-decoration:none}
 .a-row a:hover{color:var(--red);text-decoration:underline}
 .a-hero{border-left:3px solid var(--navy);padding-left:8px;margin-left:-8px;background:rgba(13,27,55,.03)}
 
 /* LIVE SOURCE FEED */
 .feed-hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px}
-.feed-hdr h3{font-family:'Newsreader',Georgia,serif;font-size:20px;font-weight:700;color:var(--ink);white-space:nowrap}
+.feed-hdr h3{font-family:'Instrument Sans',system-ui,sans-serif;font-size:20px;font-weight:700;color:var(--ink);white-space:nowrap}
 .feed-div{height:1px;flex:1;background:var(--surface-high)}
 .src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:10px}
 .sc{background:var(--surface-0);border:1px solid var(--surface-high);border-top:3px solid;border-radius:3px;overflow:hidden}
 .sc-hd{padding:8px 12px;border-bottom:1px solid var(--surface-low);display:flex;align-items:center;justify-content:space-between}
-.sc-nm{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.8px;font-family:'Inter',sans-serif;color:var(--ink)}
-.sc-ln{font-size:8px;font-weight:700;padding:2px 6px;border-radius:2px;font-family:'Inter',sans-serif}
+.sc-nm{font-size:10px;font-weight:800;letter-spacing:.8px;font-family:'Instrument Sans',sans-serif;color:var(--ink)}
+.sc-ln{font-size:8px;font-weight:700;padding:2px 6px;border-radius:2px;font-family:'Instrument Sans',sans-serif}
 .sc-art{padding:7px 12px;border-bottom:1px solid var(--surface-low);font-size:12px;line-height:1.45}
 .sc-art:last-child{border-bottom:none}
-.sc-art a{font-family:'Newsreader',Georgia,serif;color:var(--ink);text-decoration:none}
+.sc-art a{font-family:'Instrument Sans',system-ui,sans-serif;color:var(--ink);text-decoration:none}
 .sc-art a:hover{color:var(--red);text-decoration:underline}
-.sc-empty{padding:16px 12px;font-size:12px;color:var(--ink-l);font-style:italic;font-family:'Newsreader',Georgia,serif}
+.sc-empty{padding:16px 12px;font-size:12px;color:var(--ink-l);font-style:italic;font-family:'Instrument Sans',system-ui,sans-serif}
 
 /* RIGHT PANEL */
 .panel{background:var(--surface-ctr);border:1px solid rgba(0,0,0,.05);border-radius:3px;overflow:hidden}
 .panel-hd{padding:14px 16px;border-bottom:1px solid var(--surface-high);display:flex;align-items:center;gap:8px}
-.panel-hd h3{font-family:'Newsreader',Georgia,serif;font-size:18px;font-weight:700}
+.panel-hd h3{font-family:'Instrument Sans',system-ui,sans-serif;font-size:18px;font-weight:700}
 .stabs{display:flex;border-bottom:2px solid var(--navy);background:var(--surface-0)}
-.stab{flex:1;padding:9px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--ink-l);text-align:center;cursor:pointer;border:none;background:none;transition:all .15s;border-bottom:3px solid transparent;margin-bottom:-2px;font-family:'Inter',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px}
+.stab{flex:1;padding:9px 4px;font-size:10px;font-weight:700;letter-spacing:.7px;color:var(--ink-l);text-align:center;cursor:pointer;border:none;background:none;transition:all .15s;border-bottom:3px solid transparent;margin-bottom:-2px;font-family:'Instrument Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px}
 .stab.active{color:var(--navy-d);border-bottom-color:var(--red)}
 .stab:hover:not(.active){color:var(--ink);background:rgba(0,0,0,.03)}
 .spanel{display:none}.spanel.active{display:block}
 .si{padding:10px 14px;border-bottom:1px solid var(--surface-high)}
 .si:last-child{border-bottom:none}
-.si a{font-family:'Newsreader',Georgia,serif;color:var(--navy-d);text-decoration:none;font-size:13px;line-height:1.4;display:block}
+.si a{font-family:'Instrument Sans',system-ui,sans-serif;color:var(--navy-d);text-decoration:none;font-size:13px;line-height:1.4;display:block}
 .si a:hover{color:var(--red);text-decoration:underline}
-.si-m{font-size:10px;color:var(--ink-l);margin-top:3px;font-family:'Inter',sans-serif}
+.si-m{font-size:10px;color:var(--ink-l);margin-top:3px;font-family:'Instrument Sans',sans-serif}
 .tw-r{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--surface-high)}
 .tw-r:last-child{border-bottom:none}
-.tw-rk{font-family:'Newsreader',Georgia,serif;font-size:13px;font-weight:700;color:var(--red);width:20px;flex-shrink:0}
-.tw-tm{flex:1;font-family:'Inter',sans-serif;font-size:12px;color:var(--ink)}
+.tw-rk{font-family:'Instrument Sans',system-ui,sans-serif;font-size:13px;font-weight:700;color:var(--red);width:20px;flex-shrink:0}
+.tw-tm{flex:1;font-family:'Instrument Sans',sans-serif;font-size:12px;color:var(--ink)}
 .tw-bw{width:32px;flex-shrink:0}
 .tw-bg{height:3px;background:var(--surface-high);border-radius:2px}
 .tw-bf{height:3px;border-radius:2px;background:#1DA1F2}
 
 /* FAB */
-.fab{position:fixed;bottom:24px;right:24px;z-index:80;width:56px;height:56px;border-radius:3px;background:linear-gradient(180deg,var(--navy) 0%,#000 100%);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.3);transition:transform .15s}
+.fab{position:fixed;bottom:24px;right:24px;z-index:80;padding:12px 20px;border-radius:22px;background:var(--ink);color:#fff;border:none;cursor:pointer;font:inherit;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;box-shadow:var(--lift);transition:transform .34s cubic-bezier(.22,.61,.36,1)}
 .fab:hover{transform:scale(1.05)}
 
 /* ── Responsive breakpoints ────────────────────────────────────────────── */
@@ -1572,10 +1606,10 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .mob-hdr-brand{display:flex;align-items:center;gap:9px}
 .mob-hdr-icon{width:30px;height:30px;border-radius:2px;background:var(--navy);
   display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.mob-hdr-title{font-family:'Newsreader',Georgia,serif;font-size:15px;font-weight:700;color:var(--navy-d)}
+.mob-hdr-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:15px;font-weight:700;color:var(--navy-d)}
 .mob-hdr-right{display:flex;align-items:center;gap:10px}
 .mob-live-pill{display:flex;align-items:center;gap:4px}
-.mob-live-txt{font-size:8px;font-weight:800;letter-spacing:1.5px;color:var(--red);text-transform:uppercase}
+.mob-live-txt{font-size:8px;font-weight:800;letter-spacing:1.5px;color:var(--red);}
 .mob-cd{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums}
 .mob-hbg{background:none;border:none;cursor:pointer;padding:4px;color:var(--navy-d);
   display:flex;align-items:center;justify-content:center;border-radius:4px}
@@ -1643,7 +1677,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 .mob-nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
   flex:1;height:100%;font-size:8.5px;font-weight:700;letter-spacing:.03em;
   color:var(--ink-l);text-decoration:none;gap:1px;transition:color .15s;
-  text-transform:uppercase;padding:4px 2px 0;position:relative}
+  padding:4px 2px 0;position:relative}
 .mob-nav-item .ms{font-size:21px;line-height:1}
 .mob-nav-item.active{color:var(--red)}
 .mob-lh-badge{display:none;position:absolute;top:4px;right:calc(50% - 18px);
@@ -1652,22 +1686,22 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 /* ── Last Hour tab ─────────────────────────────────────────────────────── */
 .lh-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none;max-width:900px}
 .lh-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
-.lh-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
+.lh-hdr h2{font-family:'Instrument Sans',system-ui,sans-serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
 .lh-hdr p{font-size:12px;color:var(--ink-l);margin:0}
 .lh-count{font-size:11px;font-weight:700;background:var(--red);color:#fff;border-radius:10px;padding:2px 7px;margin-left:4px;vertical-align:middle}
 .lh-item{padding:11px 0;border-bottom:1px solid var(--surface-low);display:flex;flex-direction:column;gap:4px}
 .lh-item:last-child{border-bottom:none}
-.lh-eyebrow{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.08em}
+.lh-eyebrow{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:800;letter-spacing:.08em}
 .lh-src{padding:2px 6px;border-radius:3px;color:#fff;font-size:9px;font-weight:800;letter-spacing:.04em}
 .lh-time{font-size:10px;color:var(--ink-l)}
-.lh-hl{font-family:'Newsreader',Georgia,serif;font-size:15px;line-height:1.45;color:var(--ink)}
+.lh-hl{font-family:'Instrument Sans',system-ui,sans-serif;font-size:15px;line-height:1.45;color:var(--ink)}
 .lh-hl a{color:inherit;text-decoration:none}
 .lh-hl a:hover{color:var(--red)}
-.lh-fresh{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:var(--red);text-transform:uppercase;letter-spacing:.06em}
+.lh-fresh{display:inline-flex;align-items:center;gap:4px;font-size:9px;font-weight:800;color:var(--red);letter-spacing:.06em}
 .lh-fresh-dot{width:6px;height:6px;border-radius:50%;background:var(--red);animation:pulse 1.4s infinite}
 .lh-signal{display:inline-flex;align-items:center;font-size:9px;font-weight:700;background:var(--navy);color:#fff;border-radius:3px;padding:2px 6px;letter-spacing:.04em}
 .lh-empty{padding:40px 0;text-align:center;color:var(--ink-l);font-size:13px}
-.lh-section-hdr{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.1em;color:var(--ink-l);padding:14px 0 4px;border-top:2px solid var(--surface-top);margin-top:4px}
+.lh-section-hdr{font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--ink-l);padding:14px 0 4px;border-top:2px solid var(--surface-top);margin-top:4px}
 .lh-section-hdr:first-child{border-top:none;padding-top:0}
 @media(max-width:1024px){.lh-page{margin-left:0}}
 
@@ -1676,20 +1710,20 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 /* BLUE TRENDS PAGE */
 .bt-page{margin-left:256px;margin-top:0;padding:28px 28px 40px;min-height:100vh;display:none}
 .bt-hdr{margin-bottom:22px;padding-bottom:16px;border-bottom:2px solid var(--surface-top);display:flex;align-items:baseline;gap:16px}
-.bt-hdr h2{font-family:'Newsreader',Georgia,serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
+.bt-hdr h2{font-family:'Instrument Sans',system-ui,sans-serif;font-size:26px;font-weight:700;color:var(--navy-d);margin:0}
 .bt-hdr p{font-size:12px;color:var(--ink-l);margin:0}
 .bt-grid{display:grid;grid-template-columns:1fr 1px 1fr;gap:0;align-items:start}
 .bt-divider{background:var(--surface-top);align-self:stretch;margin:0 28px}
 .bt-col{}
 .bt-col-hd{display:flex;align-items:flex-start;gap:10px;padding-bottom:10px;border-bottom:2px solid var(--navy);margin-bottom:2px}
 .bt-col-icon{flex-shrink:0;margin-top:2px}
-.bt-col-title{font-family:'Newsreader',Georgia,serif;font-size:17px;font-weight:700;color:var(--navy-d);display:block}
-.bt-col-sub{font-size:10px;color:var(--ink-l);text-transform:uppercase;letter-spacing:.6px;display:block;margin-top:3px}
+.bt-col-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:17px;font-weight:700;color:var(--navy-d);display:block}
+.bt-col-sub{font-size:10px;color:var(--ink-l);letter-spacing:.6px;display:block;margin-top:3px}
 .bt-item{padding:10px 0;border-bottom:1px solid var(--surface-low);display:flex;align-items:flex-start;gap:12px}
 .bt-item:last-child{border-bottom:none}
-.bt-rank{font-family:'Newsreader',Georgia,serif;font-size:20px;font-weight:700;color:#1d9bf0;min-width:28px;flex-shrink:0;line-height:1.2}
+.bt-rank{font-family:'Instrument Sans',system-ui,sans-serif;font-size:20px;font-weight:700;color:#1d9bf0;min-width:28px;flex-shrink:0;line-height:1.2}
 .bt-body{}
-.bt-title{font-family:'Newsreader',Georgia,serif;font-size:14px;color:var(--ink);line-height:1.4}
+.bt-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;color:var(--ink);line-height:1.4}
 .bt-title a{color:var(--ink);text-decoration:none}
 .bt-title a:hover{color:#1d9bf0;text-decoration:underline}
 .bt-meta{font-size:11px;color:var(--ink-l);margin-top:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -1711,14 +1745,14 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
   <div class="mob-hdr-brand">
-    <div class="mob-hdr-icon"><span class="ms" style="color:#fff;font-size:17px">psychology</span></div>
+    <div class="mob-hdr-icon"></div>
     <span class="mob-hdr-title">Intelligence Ops</span>
   </div>
   <div class="mob-hdr-right">
     <div class="mob-live-pill"><span class="live-dot"></span><span class="mob-live-txt">Live</span></div>
     <span class="mob-cd" id="cd-mob"></span>
     <button class="mob-hbg" onclick="toggleDrawer()" aria-label="Open navigation">
-      <span class="ms" id="mob-hbg-icon">menu</span>
+      <span id="mob-hbg-icon">Menu</span>
     </button>
   </div>
 </div>
@@ -1729,33 +1763,35 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 <!-- Mobile nav drawer (slides in from right) -->
 <div class="mob-drawer" id="mob-drawer">
   <nav class="sb-nav" style="gap:4px">
-    <a href="#" class="sb-lnk act" id="drw-topics" onclick="switchPage('dash');closeDrawer();return false">
-      <span class="ms">local_fire_department</span><span>Topic Intelligence</span>
+    <a href="#" class="sb-lnk act" id="drw-topics" onclick="switchPage('dash');closeDrawer();return false"><span>Topic Intelligence</span>
     </a>
-    <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false">
-      <span class="ms">newspaper</span><span>Live Source Feed</span>
+    <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false"><span>Live Source Feed</span>
     </a>
-    <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false">
-      <span class="ms">trending_up</span><span>Social Velocity</span>
+    <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false"><span>Social Velocity</span>
     </a>
     <a href="#" class="sb-lnk" id="drw-lh" onclick="switchPage('lh');closeDrawer();return false">
-      <span class="ms">schedule</span>
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="drw-bt" onclick="switchPage('bt');closeDrawer();return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1D4ED8">forum</span>
-      <span style="color:#1D4ED8;font-weight:600">Blue Trends</span>
+      <span style="color:var(--ll);font-weight:500">Blue Trends</span>
     </a>
     <a href="#" class="sb-lnk" id="drw-rt" onclick="switchPage('rt');closeDrawer();return false">
-      <span class="ms" style="color:#C41230">forum</span>
-      <span style="color:#C41230;font-weight:600">Red Trends</span>
+      <span style="color:var(--lr);font-weight:500">Red Trends</span>
     </a>
   </nav>
 </div>
 
 <aside class="sidebar">
   <div class="sb-brand">
-    <div class="sb-icon"><span class="ms" style="color:#fff;font-size:22px">psychology</span></div>
+    <div class="sb-icon"><svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+      <g fill="#fff">
+        <circle cx="16" cy="5.5" r="2.6"/><circle cx="23.4" cy="8.6" r="2.6"/>
+        <circle cx="26.5" cy="16" r="2.6"/><circle cx="23.4" cy="23.4" r="2.6"/>
+        <circle cx="16" cy="26.5" r="2.6"/>
+      </g><g fill="#fff" opacity=".28">
+        <circle cx="8.6" cy="23.4" r="2.6"/><circle cx="5.5" cy="16" r="2.6"/>
+        <circle cx="8.6" cy="8.6" r="2.6"/>
+      </g></svg></div>
     <div><div class="sb-title">Intelligence Ops</div><div class="sb-sub">Global Newsroom</div></div>
   </div>
   <div class="sb-live">
@@ -1763,32 +1799,26 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     <span class="sb-live-time" id="cd"></span>
   </div>
   <nav class="sb-nav">
-    <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false">
-      <span class="ms">local_fire_department</span><span>Topic Intelligence</span>
+    <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false"><span>Topic Intelligence</span>
     </a>
-    <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false">
-      <span class="ms">newspaper</span><span>Live Source Feed</span>
+    <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false"><span>Live Source Feed</span>
     </a>
-    <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false">
-      <span class="ms">trending_up</span><span>Social Velocity</span>
+    <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social Velocity</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
-      <span class="ms">schedule</span>
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="nav-bt" onclick="switchPage('bt');return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1D4ED8">forum</span>
-      <span style="color:#1D4ED8;font-weight:600">Blue Trends</span>
+      <span style="color:var(--ll);font-weight:500">Blue Trends</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-rt" onclick="switchPage('rt');return false">
-      <span class="ms" style="color:#C41230">forum</span>
-      <span style="color:#C41230;font-weight:600">Red Trends</span>
+      <span style="color:var(--lr);font-weight:500">Red Trends</span>
     </a>
   </nav>
   <div class="sb-footer">
-    <button class="sb-btn" onclick="fr()"><span class="ms" style="font-size:16px">refresh</span>Refresh Now</button>
-    <div class="sb-meta"><span class="ms" style="font-size:16px">sensors</span><span id="sc2">Loading…</span></div>
-    <div class="sb-meta"><span class="ms" style="font-size:16px">schedule</span><span id="lu">—</span></div>
+    <button class="sb-btn" onclick="fr()">Refresh Now</button>
+    <div class="sb-meta"><span id="sc2">Loading…</span></div>
+    <div class="sb-meta"><span id="lu">—</span></div>
   </div>
 </aside>
 
@@ -1801,8 +1831,8 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
           <p class="sec-sub">Priority ranked by cross-source heat score · Click any row to expand</p>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <span id="ed" style="font-size:11px;color:var(--ink-l);font-family:'Newsreader',Georgia,serif;font-style:italic"></span>
-          <span class="bdg">24H RANGE</span>
+          <span id="ed" style="font-size:11px;color:var(--ink-l);font-family:'Instrument Sans',system-ui,sans-serif;font-style:italic"></span>
+          <span class="bdg">Last 24 hours</span>
         </div>
       </div>
       <div class="tbl-wrap">
@@ -1830,10 +1860,10 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
     </section>
     <aside>
       <div class="panel" id="social-velocity-section">
-        <div class="panel-hd"><span class="ms" style="color:var(--red)">trending_up</span><h3>Social Velocity</h3></div>
+        <div class="panel-hd"><h3>Social Velocity</h3></div>
         <div class="stabs">
-          <button class="stab active" onclick="switchTab('tw')"><span class="ms" style="font-size:14px">tag</span>Twitter</button>
-          <button class="stab" onclick="switchTab('re')"><span class="ms" style="font-size:14px">hub</span>Memo</button>
+          <button class="stab active" onclick="switchTab('tw')">Twitter</button>
+          <button class="stab" onclick="switchTab('re')">Memo</button>
         </div>
         <div id="sp-tw" class="spanel active"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
         <div id="sp-re" class="spanel"><div id="rl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
@@ -1880,22 +1910,18 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 
 <!-- Mobile bottom navigation — visible on screens ≤900px -->
 <nav class="mob-nav">
-  <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false">
-    <span class="ms">local_fire_department</span><span>Topics</span>
+  <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false"><span>Topics</span>
   </a>
-  <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false">
-    <span class="ms">newspaper</span><span>Sources</span>
+  <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false"><span>Sources</span>
   </a>
-  <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false">
-    <span class="ms">trending_up</span><span>Social</span>
+  <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social</span>
   </a>
-  <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false">
-    <span class="ms">schedule</span><span>Last Hour</span>
+  <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false"><span>Last Hour</span>
     <span class="mob-lh-badge" id="mob-lh-badge">0</span>
   </a>
 </nav>
 
-<button class="fab" onclick="fr()" title="Refresh data"><span class="ms" style="font-size:24px">refresh</span></button>
+<button class="fab" onclick="fr()" title="Refresh data">Refresh</button>
 
 <script>
 const SO=['ap','reuters','bbc','nytimes','wapo','wsj','npr','cnn','nbcnews','cbsnews','politico','axios','usatoday','thehill','foxnews','nypost','washtimes','washexam','natreview','freepress'];
@@ -2020,13 +2046,13 @@ function spark(delta,heat,history){
   if(delta>0){
     const rise=Math.min(delta/(heat||1)*160,24);
     const p='M0 '+(h-pad)+' L22 '+(h-pad-rise*.25)+' L44 '+(h-pad-rise*.55)+' L66 '+(h-pad-rise*.82)+' L'+w+' '+Math.max(pad,h-pad-rise);
-    return '<span title="Gaining momentum — heat score rose +'+delta+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#BA032A" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+    return '<span title="Gaining momentum — heat score rose +'+delta+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="oklch(0.55 0.11 158)" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
   }
   const drop=Math.min(Math.abs(delta)/(heat||1)*160,24);
   const p='M0 '+pad+' L22 '+(pad+drop*.25)+' L44 '+(pad+drop*.55)+' L66 '+(pad+drop*.82)+' L'+w+' '+Math.min(h-pad,pad+drop);
-  return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="#c5c6ce" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
+  return '<span title="Losing momentum — heat score fell '+Math.abs(delta)+' points since last refresh."><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="oklch(0.53 0.007 70)" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
 }
-const _CAT_LABEL={'national':'Natl','international':'Intl','sports':'Sport','entertainment':'Ent','business':'Biz','crime':'Crime','technology':'Tech','health':'Health'};
+const _CAT_LABEL={'national':'National','international':'International','sports':'Sports','entertainment':'Entertainment','business':'Business','crime':'Crime','technology':'Technology','health':'Health'};
 const _CAT_CLS={'national':'cat-natl','international':'cat-intl','sports':'cat-sport','entertainment':'cat-ent','business':'cat-biz','crime':'cat-crime','technology':'cat-tech','health':'cat-health'};
 function catBadge(cats){
   const arr=Array.isArray(cats)?cats:[cats||'national'];
@@ -2198,12 +2224,12 @@ function toggleDrawer(){
   const dr=document.getElementById('mob-drawer'),ov=document.getElementById('mob-overlay'),ic=document.getElementById('mob-hbg-icon');
   const open=dr.classList.toggle('open');
   ov.classList.toggle('open',open);
-  ic.textContent=open?'close':'menu';
+  ic.textContent=open?'Close':'Menu';
 }
 function closeDrawer(){
   document.getElementById('mob-drawer').classList.remove('open');
   document.getElementById('mob-overlay').classList.remove('open');
-  document.getElementById('mob-hbg-icon').textContent='menu';
+  document.getElementById('mob-hbg-icon').textContent='Menu';
 }
 
 if(typeof _INIT_VIEW!=='undefined'&&_INIT_VIEW)switchPage(_INIT_VIEW);
