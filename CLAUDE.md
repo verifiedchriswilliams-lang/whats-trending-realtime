@@ -264,7 +264,15 @@ python3 scripts/qa_sources.py            # RSS + scrapes + supplemental APIs
 python3 scripts/qa_sources.py --rss      # RSS feeds only
 python3 scripts/qa_sources.py --scrape   # homepage scrapes only
 python3 scripts/qa_sources.py --supp     # supplemental APIs only
+python3 scripts/qa_sources.py --prod     # live Railway deployment health
 ```
+
+`--prod` is the exception to the network requirement below: it only talks to
+www.trendinginrealtime.com, so it works anywhere that host is reachable. It hits
+`/debug/refresh` (forces a synchronous refresh, no session token needed) and reports
+`sources_live` out of 18 plus `last_updated` — the fastest way to answer "is Railway
+still serving, and is it serving real data?" Allow up to ~2 minutes; it runs a full
+fetch cycle.
 Prints article/headline counts per source and exits non-zero if any source came back
 empty. Run this after any feed change and before a deploy — it catches a dead feed in
 seconds, whereas the dashboard silently renders a source with zero articles.
