@@ -1,10 +1,26 @@
-# TrendingInRealTime.com — Editorial Intelligence Dashboard
+# TrendingInRealTime.com — Real-Time News Dashboard
 
 ## Project Purpose
 
-A real-time editorial intelligence tool for the Daily Wire's editorial team. It aggregates RSS feeds from 18 major news sources plus Bluesky, liberal Reddit subreddits, Drudge, Twitter/X trends, and Memeorandum (26 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and surfaces a Daily Wire Coverage Alignment score — showing editors which top trending stories they are and aren't covering.
+A real-time news dashboard for a general audience. It aggregates RSS feeds from 20 major
+news outlets — balanced across right, center, and left — plus Bluesky, Truth Social,
+liberal and conservative Reddit, Drudge, Twitter/X trends, and Memeorandum (33 sources
+total) every 30 minutes, clusters stories by specific topic (not generic keywords), and
+ranks them by how widely and prominently they are being covered.
 
-**Target audience:** Conservative Americans 25–65. The editorial philosophy is "Daily Mail for American conservatives without the tabloid streak" — credibility of NYT/WaPo with a conservative perspective.
+**Target audience:** General market, mass consumption. The goal is that a reader can open
+the page and see, at a glance, what is happening in the world right now and which stories
+are gaining coverage across the press.
+
+**Editorial stance:** None. Sources are chosen for reputation and balanced across the
+political spectrum. The Red Trends and Blue Trends pages are symmetric by design — neither
+carries a positive or negative connotation. They simply show what is generating engagement
+on each side.
+
+> **History (Sept 2026 pivot):** This was previously an internal Daily Wire editorial
+> intelligence tool built to show that newsroom which trending stories it was and was not
+> covering. The Daily Wire source, the Coverage Alignment score, and the Side by Side
+> comparison page were removed in that pivot. Do not reintroduce a home-team framing.
 
 ---
 
@@ -41,7 +57,7 @@ CLAUDE.md               ← this file
 - `article_count` = total articles in the cluster
 - `hero_count` = outlets where this story was RSS position 0–1 OR appeared on scraped homepage (pos ≤ 8)
 - `double_confirmed` = outlets where story is BOTH RSS position 0–1 AND scraped from homepage
-- `editorial_spotlight` = outlets where scraped homepage position is 1–3 (editors are actively leading with this story; for Daily Wire this maps to their "Top Stories" section)
+- `editorial_spotlight` = outlets where scraped homepage position is 1–3 (editors are actively leading with this story)
 
 ### Story Clustering — TF-IDF Cosine Similarity (IMPORTANT — do not revert this logic)
 
@@ -84,7 +100,7 @@ Matched articles are marked `scrape_confirmed=True`. In the expanded article vie
 - `✓` = scrape confirmed (appeared on homepage)
 - `★✓` = double-confirmed (both RSS position AND scraped homepage)
 
-**Source card ordering:** Editorial picks (scrape_position set) appear first, then RSS chronological. For Daily Wire, `topStoryTextContainer` h3s are targeted first to capture editorial Top Stories in correct order.
+**Source card ordering:** Editorial picks (scrape_position set) appear first, then RSS chronological.
 
 ### Synthetic Article Injection
 When a source's RSS pool misses editorially pinned stories (Fox's chronological feed, CNN's sparse pool, etc.), articles are injected from scraped homepage headlines that weren't matched to any RSS article.
@@ -106,77 +122,82 @@ This replaced a naive approach that keyed history by cluster label text, which b
 
 `_heat_history = {}` stores up to 4 readings per frozenset(source_ids). The `spark()` JS function draws a real multi-point curve from this array.
 
-### Daily Wire Alignment Score
-Checks what % of the top 10 trending topics Daily Wire is covering. Checks ALL keywords from ALL cluster articles vs DW's RSS (not just the cluster label). Results shown as A/B/C/D grade + per-topic ✓/✗ breakdown.
-
-**Matching uses three layers (in order):**
-1. **Exact keyword intersection** — shared words after stop-word filtering
-2. **Prefix-aware match** — two keywords match if they share a 5-character prefix (lightweight stemming). Catches `olympic`/`olympics`, `transgender`/`trans`, and similar root-word variants where DW files under a shorter/longer form
-3. **Substring fallback** — cluster keyword (>4 chars) appears as a substring anywhere in a DW article title
-
-DW articles older than 12 hours are excluded from matching (prevents yesterday's coverage from suppressing a DW Gap badge for today's story).
 
 ---
 
-## Data Sources (18 news RSS + 8 supplemental = 26 total)
+## Data Sources (20 news RSS + 13 supplemental = 33 total)
 
-### Tier 1 — Editorial/Homepage Feeds
-| ID | Name | RSS Feed | Lean |
+Sources are chosen for reputation and balanced across the political spectrum:
+**7 right / 6 center / 7 left.** `lean` drives the colour coding throughout the UI.
+
+### News Outlets
+
+| ID | Name | RSS Feed | Lean | Tier |
+|---|---|---|---|---|
+| ap | AP News | Google News RSS (site:apnews.com) | Center | 1 |
+| reuters | Reuters | Google News RSS (site:reuters.com) | Center | 1 |
+| bbc | BBC News | feeds.bbci.co.uk/news/rss.xml | Center | 1 |
+| npr | NPR | feeds.npr.org/1001/rss.xml | Center-Left | 1 |
+| nytimes | New York Times | rss.nytimes.com nyt/HomePage | Left | 1 |
+| wapo | Washington Post | feeds.washingtonpost.com/rss/national | Left | 1 |
+| wsj | Wall Street Journal | feeds.a.dj.com/rss/RSSWorldNews.xml | Center-Right | 1 |
+| cnn | CNN | Google News RSS (site:cnn.com) | Left | 1 |
+| nbcnews | NBC News | feeds.nbcnews.com nbcnews/public/news | Left | 1 |
+| foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right | 1 |
+| nypost | NY Post | nypost.com/feed | Right | 1 |
+| cbsnews | CBS News | cbsnews.com/latest/rss/main | Center-Left | 2 |
+| politico | Politico | rss.politico.com/politics-news.xml | Center-Left | 2 |
+| axios | Axios | api.axios.com/feed | Center | 2 |
+| usatoday | USA Today | rssfeeds.usatoday.com/usatoday-NewsTopStories | Center | 2 |
+| thehill | The Hill | thehill.com/homenews/feed | Center | 2 |
+| washtimes | Washington Times | washingtontimes.com/rss/headlines/news | Right | 2 |
+| washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Right | 2 |
+| natreview | National Review | nationalreview.com/feed | Right | 2 |
+| freepress | The Free Press | thefp.com/feed | Center-Right | 2 |
+
+**Per-source limit:** 20 articles from RSS (Fox News: 50, via `rss_limit`).
+
+**Removed in the Sept 2026 rebalance:** Daily Wire (audience pivot), Daily Mail (tabloid),
+Breitbart and Townhall (opinion/aggregation rather than original reporting), Fox Business
+(vertical duplicate of Fox News), Sky News (UK-centric; homepage scrape also 403s).
+
+**Added in the same pass, all needing a `scripts/qa_sources.py` run to confirm feed URLs:**
+Washington Post, Wall Street Journal, BBC News, NPR, Axios, USA Today, Politico,
+National Review.
+
+**Note on Google News RSS sources** (cnn, ap, reuters, washexam): titles arrive with a
+`" - Publisher"` suffix. `best_label()` strips it from the *display label only* — the raw
+title still carries the suffix into TF-IDF, so publisher names pollute the clustering
+vocabulary for those sources. Known issue, not yet fixed.
+
+**Note on Fox News:** History of feed changes: originally `foxnews/national` (crime beat),
+then Google News RSS, now `feeds.foxnews.com/foxnews/latest` with a 50-article pool to
+catch editorially pinned "LIVE UPDATES" hero stories that never refresh to position 0 in a
+chronological feed. Paired with Fox-specific targeted scraping of `div.big-top` and
+`div.thumbs-2-7`. Fox IS server-side rendered — BeautifulSoup parses the full layout.
+
+**Note on CNN and AP:** Both use Google News RSS. CNN's direct feed returned only 2
+articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
+
+### Supplemental Sources
+
+| Source | Method | Feeds | Notes |
 |---|---|---|---|
-| foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right |
-| cnn | CNN | Google News RSS (site:cnn.com) | Left |
-| nytimes | New York Times | nyt/HomePage | Left |
-| dailymail | Daily Mail | news/index | Center-Right |
-| nypost | NY Post | nypost.com/feed | Right |
-| ap | AP News | Google News RSS (site:apnews.com) | Center |
-| reuters | Reuters | Google News RSS (site:reuters.com) | Center |
-| nbcnews | NBC News | nbcnews/public/news | Left |
-| dailywire | Daily Wire | dailywire.com/rss | Right |
+| Bluesky | AT Protocol `getTrendingTopics` (no auth) | Blue Trends | Cache: 30 min. |
+| Truth Social | Mastodon `/api/v1/trends` | Red Trends | **Unverified** — may sit behind bot protection. Degrades to "unavailable". Cache: 30 min. |
+| r/politics, r/progressive, r/liberal, r/democrats | Reddit RSS `/hot.rss` | Blue Trends | Up to 8 posts per sub |
+| r/Conservative, r/Republican, r/AskConservatives, r/tuesday | Reddit RSS `/hot.rss` | Red Trends | Up to 8 posts per sub |
+| Drudge Report | HTML scrape | Social Velocity | Cache: 30 min. |
+| Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | Social Velocity | Both may block cloud IPs. getdaytrends currently parses 0 — fallback is carrying it. |
+| Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Social Velocity | Stored in the `reddit_posts` key of `data_store` and reuses `_REDDIT_CACHE` — a legacy name from when that slot held Reddit. Cache: 30 min. |
 
-**Note on Fox News:** History of feed changes: originally used `feeds.foxnews.com/foxnews/national` (crime beat only), then switched to Google News RSS (site:foxnews.com) to get engagement-ranked content. Google News RSS was dropped after QA confirmed it fails to surface Fox's editorially pinned "LIVE UPDATES" hero stories (published once, updated in-place — never refreshed to position 0 in a chronological feed). Final fix: switched back to `feeds.foxnews.com/foxnews/latest` with a 50-article pool (`rss_limit: 50` in source config) to maximize the chance of catching pinned hero stories regardless of publish age. Paired with Fox-specific targeted scraping of `div.big-top` (hero) and `div.thumbs-2-7` (editorial grid) so cross-verification correctly maps scraped editorial positions 1-10 to the right RSS articles. Fox IS server-side rendered — BeautifulSoup can parse the full editorial layout from raw HTML without JavaScript.
+**Reddit fetch strategy:** `_fetch_reddit_set()` serves both the liberal and conservative
+sets. Each subreddit fetches up to 25 RSS entries, caps at 8 posts, then interleaves
+round-robin so every subreddit is represented. Max 32 posts. No OAuth — public RSS via
+feedparser. Reddit rate-limits aggressively (429) and often serves only some subreddits on
+a given cycle; partial results are normal and the log line reports which subs actually
+returned posts.
 
-**Note on CNN:** Previously used `rss.cnn.com/rss/cnn_topstories.rss` — consistently returned only 2 articles from Railway (feed reliability issue). Switched to Google News RSS (site:cnn.com) which returns ~20 articles ranked by engagement/prominence.
-
-**Note on AP News:** Previously used `feeds.apnews.com/rss/apf-topnews` — Railway DNS fails to resolve `feeds.apnews.com` (`[Errno -5] No address associated with hostname`). Switched to Google News RSS (site:apnews.com) which resolves correctly and returns ~17 engagement-ranked articles.
-
-### Tier 2 — Opinion/Political Feeds
-| ID | Name | RSS Feed | Lean |
-|---|---|---|---|
-| breitbart | Breitbart | breitbart.com/feed | Right |
-| skynews | Sky News | skynews/home | Center |
-| thehill | The Hill | thehill/homenews/feed | Center |
-| washtimes | Washington Times | washingtontimes/news | Right |
-| foxbusiness | Fox Business | Google News RSS (site:foxbusiness.com) | Right |
-| townhall | Townhall | townhall.com/rss/tipsheet | Right |
-
-**Per-source limit:** 20 articles from RSS. Scraped homepage adds cross-verification layer and reorders source card to show editorial picks first.
-
-**Note on The Hill:** Previously used `thehill.com/feed/` which mixes news, opinion, and tipsheet posts in reverse-chronological order — tipsheets frequently claimed the top RSS positions (fp=0,1) over real news stories. Switched to `thehill.com/homenews/feed/` which is news-only and better reflects editorial priorities.
-
-**Note on Fox Business:** Previously used `feeds.foxbusiness.com/foxbusiness/latest` (raw chronological) — the most-recently published articles became RSS heroes regardless of editorial prominence. Switched to Google News RSS (site:foxbusiness.com) which ranks by engagement/prominence, consistent with how we handle Fox News, CNN, AP, and Reuters.
-
-### Tier 3 — Additional Sources (added post-launch)
-| ID | Name | RSS Feed | Lean |
-|---|---|---|---|
-| cbsnews | CBS News | cbsnews.com/latest/rss/main (direct) | Center-Left |
-| washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Right |
-| freepress | The Free Press | thefp.com/feed (direct) | Center-Right |
-
-**CBS News** and **Washington Examiner** are in `SCRAPE_SOURCES` — homepage scraping and synthetic injection enabled. **The Free Press** is RSS-only (not in `SCRAPE_SOURCES`), no homepage cross-verification.
-
-### Supplemental Sources (Blue Trends + Social Velocity)
-| Source | Method | Notes |
-|---|---|---|
-| Bluesky | AT Protocol API (`getTrendingTopics`, limit=25, no auth) | Returns up to ~10 curated trending topics regardless of limit — server-side cap. Cache: 30 min. |
-| r/politics | Reddit RSS (`/hot.rss`) | Liberal-leaning, up to 8 posts per cycle |
-| r/progressive | Reddit RSS (`/hot.rss`) | Explicitly progressive, up to 8 posts per cycle |
-| r/liberal | Reddit RSS (`/hot.rss`) | Explicitly liberal, up to 8 posts per cycle |
-| r/democrats | Reddit RSS (`/hot.rss`) | Explicitly Democratic, up to 8 posts per cycle |
-| Drudge Report | HTML scrape | Top headline links. Cache: 30 min. |
-| Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | US trending topics. Both may block cloud IPs intermittently. |
-| Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Top political stories driving pundit conversation. Stored in the `reddit_posts` key of `data_store` and reuses `_REDDIT_CACHE` — a legacy name from when that slot held Reddit. Renders in the Social Velocity sidebar. Cache: 30 min. |
-
-**Reddit fetch strategy:** Each subreddit fetches up to 25 RSS entries, caps at 8 posts per sub, then interleaves round-robin (politics[0] → progressive[0] → liberal[0] → democrats[0] → politics[1] → …) so all four subreddits always appear in the feed. Max 32 posts total. No OAuth or API key — uses public RSS via feedparser.
 
 ---
 
@@ -189,16 +210,20 @@ The app uses a **fixed left sidebar** for navigation (no top nav bar). The sideb
 1. **Topic Intelligence** (`local_fire_department`) — Top Trending Topics dashboard (main view)
 2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
 3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Drudge/Twitter sidebar on the Dashboard page
-4. **Side by Side** (`compare_arrows`) — trending vs DW editorial picks comparison page
-5. **Last Hour** (`schedule`) — recent articles page, with live article count badge
-6. **Blue Trends** (`mood_bad`, blue) — Bluesky trending topics + Liberal Reddit hot posts. Also accessible at `/bluetrends` as a deep-link.
+4. **Last Hour** (`schedule`) — recent articles page, with live article count badge
+5. **Blue Trends** (`forum`, blue `#1D4ED8`) — Bluesky trending + liberal Reddit hot posts. Deep-link: `/bluetrends`
+6. **Red Trends** (`forum`, red `#C41230`) — Truth Social trending + conservative Reddit hot posts. Deep-link: `/redtrends`
+
+Blue and Red Trends use the **identical `forum` glyph**, differing only in colour. This is
+deliberate: symmetry is structural, so neither side carries a positive or negative
+connotation. The previous `mood_bad` (frowning face) on Blue Trends editorialised and was
+removed. Do not reintroduce asymmetric iconography.
 
 The **LIVE indicator + countdown to refresh** lives in the sidebar between the Intelligence Ops logo and the nav items (`.sb-live` element). There is no top header bar — content starts at the very top of the viewport.
 
 ### Dashboard — Top Trending Topics
 - Ranked by heat score (highest first)
 - **"Lead at X outlets"** navy badge: story was hero at that many outlets (RSS + scrape verified). Hover tooltip lists the outlets.
-- **"● DW Gap"** pulsing red badge: story is in top 10 but Daily Wire isn't covering it
 - Source dots: colored by political lean, larger with outline ring = hero/lead position
 - Green ▲ / Red ▼ delta badge: trajectory vs previous refresh (heat score change)
 - Velocity sparkline: small 4-point chart showing heat score over last 4 refreshes (Jaccard-matched)
@@ -207,12 +232,6 @@ The **LIVE indicator + countdown to refresh** lives in the sidebar between the I
 - Article age shown inline ("14m ago", "3h ago") from parsed pub_ts. Hover for exact timestamp.
 - **Breaking** orange badge: article published within last 90 minutes
 
-### Side by Side
-- Left column: top 10 trending topics by heat score (source count + signal)
-- Right column: top 10 Daily Wire articles (editorial picks first, then RSS)
-- Green **✓ DW** badge on left when Daily Wire is covering that trending topic. Hover shows DW article title.
-- No red gap badge — absence of the green check is signal enough
-- DW articles show **Top Story** badge for editorial picks (scrape_position ≤ 5)
 
 ### Last Hour
 - All articles published in the last 60 minutes across all 15 outlets, chronological (newest first)
@@ -228,24 +247,35 @@ The **LIVE indicator + countdown to refresh** lives in the sidebar between the I
 
 **Note:** Facebook tab was removed. Meta's Graph API (`Page Public Content Access` feature) requires App Review and is incompatible with the Facebook Login app type — not feasible for public page engagement data without a full app rebuild.
 
-### Blue Trends page (`/bluetrends`)
+### Blue Trends (`/bluetrends`) and Red Trends (`/redtrends`)
+
+Two symmetric pages, same layout and same code path — a platform trending panel on the
+left, a Reddit panel on the right. Red Trends reuses the `.bt-*` CSS classes so both pages
+stay visually identical by construction.
+
+#### Blue Trends page (`/bluetrends`)
 Two-column view showing what's generating engagement on the left side of the political spectrum.
 
 - **Left column — Bluesky Trending:** Top topics from Bluesky's public AT Protocol API. Each topic is a clickable link to `bsky.app/search?q=...`. Subtitle dynamically shows actual count ("X topics trending on Bluesky right now") since the API typically returns ~10 curated topics regardless of the limit=25 request.
 - **Right column — Liberal Reddit Hot:** Hot posts from r/politics, r/progressive, r/liberal, and r/democrats, interleaved round-robin. Posts link to the external article URL (extracted from RSS summary HTML) when available, otherwise to the Reddit thread.
 - Deep-link: `trendinginrealtime.com/bluetrends` routes directly to this view via server-side injection of `_INIT_VIEW="bt"` into the HTML before serving.
-- Nav icon: `mood_bad` (Material Symbols), blue (`#1d9bf0`)
+- Nav icon: `forum` (Material Symbols), blue (`#1D4ED8`)
+
+#### Red Trends page (`/redtrends`)
+- **Left column — Truth Social Trending:** Mastodon-style `/api/v1/trends`. **Unverified** —
+  if the host blocks non-browser clients this panel shows "unavailable" the way the
+  Twitter/X panel does. If QA confirms it is permanently blocked, replace the signal or
+  drop the column and rebalance both pages.
+- **Right column — Conservative Reddit Hot:** r/Conservative, r/Republican,
+  r/AskConservatives, r/tuesday, interleaved round-robin.
+- Nav icon: `forum` (Material Symbols), red (`#C41230`)
 
 ### Live Source Feed (Source Headlines grid)
-- All 18 news sources displayed with their top 8 headlines
+- All 20 news sources displayed with their top 8 headlines
 - Color-coded by political lean
 - Editorial picks (scrape-confirmed) shown first per source
 - Source names link to each outlet's homepage
 
-### Daily Wire Coverage Alignment
-- Circular gauge showing % of top 10 trends covered
-- Grade A/B/C/D
-- Per-topic ✓/✗ breakdown with DW article title when matched
 
 ---
 
@@ -297,21 +327,23 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 | Fox News | ✅ Good | ✅ Good | Direct RSS (feeds.foxnews.com/foxnews/latest, 50 articles). Fox IS server-side rendered — BeautifulSoup parses the full editorial layout. Targeted scraper hits `div.big-top` (hero) + `div.thumbs-2-7` (editorial grid) first, so positions 1-10 are Fox's actual top stories. MAX_VALID_SCRAPE_POS=80 blocks footer anchor links (pos 90-150). Synthetic injection typically ~9 articles/cycle. |
 | CNN | ✅ Good | ✅ Good | Google News RSS (site:cnn.com) — ~20 articles. Switched from direct RSS which returned only 2 articles from Railway. Synthetic injection typically ~2 articles/cycle. |
 | NY Times | ✅ Excellent | ✅ Excellent | Direct homepage RSS feed + tight scrape positions 11-44. Best source setup. Synthetic injection ~3 articles/cycle. |
-| Daily Mail | ✅ Good | ⚠️ Partial | Only ~20% of RSS articles scrape-confirmed because /news/index.rss is the news section but Daily Mail homepage is dominated by lifestyle/celebrity. Expected behavior. Excluded from synthetic injection (SKIP_INJECT). |
 | NY Post | ✅ Good | ✅ Good | Direct RSS + scrape positions 7-90. Synthetic injection ~7 articles/cycle. |
 | AP News | ✅ Good | ✅ Good | Google News RSS (site:apnews.com) — ~17 articles. Switched from direct RSS which fails Railway DNS (`feeds.apnews.com` not resolving). Synthetic injection ~9 articles/cycle. |
 | Reuters | ⚠️ Moderate | ❌ Blocked | Reuters homepage blocks scraping. Google News RSS articles unverified — pass on age alone. No synthetic injection (url_map empty). |
 | NBC News | ✅ Excellent | ✅ Excellent | Direct RSS + very tight scrape positions 2-13. Best scraper performance. Synthetic injection ~3 articles/cycle. |
-| Daily Wire | ✅ Excellent | ✅ Excellent | Direct RSS + topStoryTextContainer targeting captures actual editorial Top Stories (positions 1-5). |
-| Breitbart | ✅ Good | ✅ Good | Direct RSS + scrape positions 1-51. Synthetic injection ~4 articles/cycle. |
-| Sky News | ✅ Good | ✅ Good | Direct RSS (home feed) + scrape positions 16-66. Synthetic injection ~1 article/cycle. |
-| The Hill | ✅ Good | ❌ JS-rendered | Switched to homenews/feed/ (news-only). Homepage is JS-rendered, so 0 scrape confirmations expected. No synthetic injection. |
-| Washington Times | ✅ Excellent | ✅ Excellent | Direct RSS + scrape positions 4-37. Synthetic injection ~6 articles/cycle. |
-| Fox Business | ✅ Good | ❌ JS-rendered | Google News RSS (site:foxbusiness.com). Homepage is JS-rendered — 0 scrape confirmations expected. No synthetic injection. |
-| Townhall | ✅ Good | ✅ Good | Direct RSS (tipsheet) + scrape positions 2-26. Synthetic injection ~3 articles/cycle. |
+| The Hill | ✅ Good | ❌ 403 | Switched to homenews/feed/ (news-only). Homepage returns **HTTP 403**, not JS-rendering as previously documented. Possibly fixable with better request headers — see `scripts/probe_403.py`. |
+| Washington Times | ✅ Good | ❌ 403 | **Regression (Sept 2026):** homepage scrape now returns HTTP 403; previously worked at positions 4-37 with ~6 injections/cycle. See `scripts/probe_403.py`. |
 | CBS News | ❓ Unverified | ❓ Unverified | Direct RSS (`cbsnews.com/latest/rss/main`). In `SCRAPE_SOURCES`. Added post-launch, never QA'd — run `scripts/qa_sources.py`. |
 | Washington Examiner | ❓ Unverified | ❓ Unverified | Google News RSS (site:washingtonexaminer.com). In `SCRAPE_SOURCES`. Added post-launch, never QA'd. |
-| The Free Press | ❓ Unverified | ➖ N/A | Direct RSS (`thefp.com/feed`). **Not** in `SCRAPE_SOURCES` — RSS only, no cross-verification, no synthetic injection. Never QA'd. |
+| The Free Press | ❓ Unverified | ➖ N/A | Direct RSS (`thefp.com/feed`). Not in `SCRAPE_SOURCES`. Never QA'd. |
+| Washington Post | ❓ Unverified | ❓ Unverified | Added Sept 2026. Feed URL unconfirmed. |
+| Wall Street Journal | ❓ Unverified | ❓ Unverified | Added Sept 2026. Feed URL unconfirmed; paywalled site may block scraping. |
+| BBC News | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| NPR | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| Axios | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| USA Today | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| Politico | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| National Review | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
 
 ### Other Known Issues
 - **Rotate the Facebook token.** The removed code embedded app token `1491126469205088|…` in the repo and served it from the public `/debug/fb` endpoint. Deleting the code does **not** invalidate the token, and it remains in git history. Rotate/revoke it in the Meta app dashboard.
@@ -332,7 +364,6 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [x] **Live source QA script** — `scripts/qa_sources.py` checks all 18 RSS feeds, 15 homepage scrapes, and every supplemental API in one pass; exits non-zero if any source is empty.
 - [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet).
 - [x] **Google Stitch design refresh** — full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
-- [x] **Side by Side tab** — trending topics vs Daily Wire editorial picks, side by side.
 - [x] **Last Hour tab** — all articles from last 60 min, newest first, with signal badges and Just Published pulsing indicator.
 - [x] **Possessive stripping + ambient reference filter** — cleaner clustering (legacy from keyword-seed era, some logic still relevant).
 - [x] **Fox News feed fix** — switched from crime-beat `foxnews/national` → Google News RSS → `feeds.foxnews.com/foxnews/latest` (50 articles). Final fix adds Fox-specific targeted scraping of `div.big-top` + `div.thumbs-2-7` to lock editorial positions 1-10 to Fox's actual homepage order.
@@ -345,7 +376,7 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [x] **Duplicate subtitle removal** — trending rows no longer repeat the headline in a gray subtitle below the bold title.
 - [x] **Synthetic article injection (generalized)** — `scrape_homepage()` returns a 3-tuple `(headlines, url_map, orig_map)`. After cross-verification, unmatched scraped headlines at positions 1–10 with valid article URLs are injected as synthetic articles. Junk filter (`_is_junk_injection`) blocks nav headers, ads, promos, and podcast/newsletter links. Applied to all scraped sources except Daily Mail.
 - [x] **Junk injection filter fix** — `[-–]` regex now matches both regular hyphen and em-dash in "Top Stories" pattern. Previously only matched em-dash, allowing "Source Name - Top Stories" section headers to slip through and seed false clusters.
-- [x] **Targeted homepage scrapers** — source-specific CSS selectors run before the generic h1/h2/h3 scan for: Fox News (`div.big-top`, `div.thumbs-2-7`), CNN (`container_lead` divs + `<article>`), Daily Wire (`topStoryTextContainer h3`), NBC News (`<article>`), NY Post (`featured-area`/`top-story` + `article.story`), Breitbart (`top-story`/`hero` + `<article>`), NY Times (`<article>`), Sky News (`sdc-article` list items). Locks editorial positions 1–10 to the source's actual homepage order.
+- [x] **Targeted homepage scrapers** — source-specific CSS selectors run before the generic h1/h2/h3 scan for: Fox News (`div.big-top`, `div.thumbs-2-7`), CNN (`container_lead` divs + `<article>`), NBC News (`<article>`), NY Post (`featured-area`/`top-story` + `article.story`), NY Times (`<article>`). Locks editorial positions 1–10 to the source's actual homepage order.
 - [x] **AP News fix** — switched from direct RSS (Railway DNS failure) to Google News RSS.
 - [x] **CNN fix** — switched from direct RSS (2 articles) to Google News RSS (~20 articles).
 - [x] **Sidebar navigation** — removed top nav bar; all navigation moved to fixed left sidebar using Material Symbols icons.
@@ -356,14 +387,22 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [x] **Blue Trends page** — new page at `/bluetrends` (also deep-linkable as `trendinginrealtime.com/bluetrends`) showing Bluesky trending topics (left column) and Liberal Reddit hot posts from r/politics, r/progressive, r/liberal, r/democrats (right column). Nav icon: `mood_bad` (Material Symbols).
 - [x] **Bluesky trending topics** — `fetch_bluesky_trends()` calls `app.bsky.unspecced.getTrendingTopics` (no auth, limit=25). Each topic links to `bsky.app/search?q=...`. Subtitle shows dynamic count. Cache: 30 min.
 - [x] **Liberal Reddit hot posts** — `fetch_liberal_reddit()` fetches RSS from 4 subreddits via feedparser. Round-robin interleave ensures all 4 subs always appear (cap: 8 per sub). External article URLs extracted from RSS summary HTML when available.
-- [x] **Loading screen source count** — now "Scanning 26 sources" (18 news RSS + 8 supplemental).
+- [x] **Loading screen source count** — now "Scanning 33 sources" (20 news RSS + 13 supplemental: Bluesky, Truth Social, 4 liberal + 4 conservative subreddits, Drudge, Twitter/X, Memeorandum).
+- [x] **General-market pivot (Sept 2026)** — removed Daily Wire, `compute_alignment()` (dead code), the Side by Side page and its nav in all three surfaces, and the DW framing from `/privacy`.
+- [x] **20-source rebalance** — 7 right / 6 center / 7 left. Dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review.
+- [x] **Red Trends page** — `/redtrends`, mirroring Blue Trends. Truth Social trending + conservative Reddit, reusing the `.bt-*` classes.
+- [x] **Symmetric trend iconography** — both pages use the `forum` glyph, differing only in colour. Replaces the editorialising `mood_bad` on Blue Trends.
+- [x] **Generalised Reddit fetcher** — `_fetch_reddit_set()` serves both sets; the log now reports which subreddits actually returned posts instead of always printing the full count.
 
 ### Backlog
-- [ ] **Auth layer** — password protect for Daily Wire editorial team use
 - [ ] **Email digest** — daily 8am summary of top 10 trending + DW alignment score
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
 - [ ] **Drudge siren** — visual alert when a story is Drudge's top link
-- [ ] **foxbusiness scrape** — add to SCRAPE_SOURCES (currently missing from scrape config)
+- [ ] **Verify the 8 new feeds** — run `scripts/qa_sources.py` and fix any wrong URLs
+- [ ] **Fix the 403 scrapes** — run `scripts/probe_403.py`; The Hill and Washington Times are blocked
+- [ ] **Strip Google News suffixes before TF-IDF** — currently stripped only in `best_label()`, so publisher names pollute the clustering vocabulary for cnn/ap/reuters/washexam
+- [ ] **Confirm or replace Truth Social** — if `/api/v1/trends` is blocked, Red Trends loses its platform panel and the two pages stop being symmetric
+- [ ] **Velocity in ranking** — heat score has no time term; ranking is magnitude only, and the Jaccard source-set matcher loses history exactly when a story is growing fastest. Deferred by product decision, revisit later.
 - [ ] **Delete `trending_dashboard_v2.py`** — stale 15-source predecessor of the current single-file app. Not imported, not served, not referenced by `Procfile`. Dead weight that confuses source-count audits.
 - [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
 
@@ -382,11 +421,9 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 
 ## Editorial Context
 
-The dashboard is designed for a 5-minute morning scan by Daily Wire editors. Priority order for reading:
-1. Top 3 trending topics (highest heat score = most cross-source coverage)
-2. Any "● DW Gap" badges on topics 1–10
-3. Daily Wire Alignment grade — if C or D, editors need story assignments
-4. Last Hour tab — catch anything breaking in the last 60 minutes that hasn't clustered yet
-5. Social Velocity sidebar (Drudge / Twitter / Memeorandum) — catches stories RSS may miss
-6. Side by Side tab — quick visual scan of trending vs DW editorial priorities
-7. Blue Trends tab — what's generating engagement on the left; useful for anticipating counter-narrative stories
+The dashboard is built for a fast scan. Suggested reading order:
+1. Top trending topics (highest heat score = broadest, most prominent coverage)
+2. Velocity sparkline and the ▲/▼ delta — which stories are gaining or losing coverage
+3. Last Hour tab — anything breaking in the last 60 minutes that hasn't clustered yet
+4. Social Velocity sidebar (Drudge / Twitter / Memeorandum) — stories RSS may miss
+5. Blue Trends and Red Trends — what's generating engagement on each side

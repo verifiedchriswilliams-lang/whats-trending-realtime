@@ -181,7 +181,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"reddit_posts":[],"bluesky_trends":[],"liberal_reddit":[],"last_hour":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"drudge_links":[],"reddit_posts":[],"bluesky_trends":[],"liberal_reddit":[],"truth_trends":[],"conservative_reddit":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -191,7 +191,9 @@ _heat_history = {}  # frozenset(source_ids) → [heat1, heat2, heat3, heat4]
 
 # Blue Trends caches — 30-minute TTL, same cadence as main refresh
 _BLUESKY_CACHE    = {"data": [], "fetched_at": 0}
+_TRUTH_CACHE      = {"data": [], "fetched_at": 0}
 _LIB_REDDIT_CACHE = {"data": [], "fetched_at": 0}
+_CON_REDDIT_CACHE = {"data": [], "fetched_at": 0}
 
 def parse_pub_date(entry):
     """Parse publication date from a feed entry. Returns UTC datetime or None."""
@@ -575,6 +577,56 @@ def fetch_memeorandum():
         return _REDDIT_CACHE["data"]
 
 
+def fetch_truth_trends():
+    """Fetch trending tags from Truth Social, the right-leaning counterpart to
+    Bluesky on the Red Trends page.
+
+    Truth Social is a Mastodon fork, so it exposes Mastodon's public
+    /api/v1/trends endpoint. UNVERIFIED: this has never been confirmed to work
+    from a server, and the host may sit behind bot protection that refuses
+    non-browser clients. It degrades to an empty list, which the page renders as
+    "unavailable" the same way the Twitter/X panel does.
+    Returns list of dicts: {displayName, topic, postCount}
+    Cache: 30 minutes."""
+    global _TRUTH_CACHE
+    now = time.time()
+    if _TRUTH_CACHE["data"] and now - _TRUTH_CACHE["fetched_at"] < 1800:
+        return _TRUTH_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _TRUTH_CACHE["data"]
+    try:
+        r = requests.get(
+            "https://truthsocial.com/api/v1/trends",
+            params={"limit": 20},
+            timeout=12,
+            headers={"User-Agent": "TrendingInRealTime/2.0 (news aggregator; "
+                                   "+https://www.trendinginrealtime.com)",
+                     "Accept": "application/json"},
+        )
+        r.raise_for_status()
+        topics = []
+        for t in r.json():
+            name = (t.get("name") or "").strip()
+            if not name:
+                continue
+            # Mastodon reports usage under history[0].accounts / .uses
+            hist = t.get("history") or []
+            cnt = 0
+            if hist and isinstance(hist[0], dict):
+                try:
+                    cnt = int(hist[0].get("uses", 0))
+                except (TypeError, ValueError):
+                    cnt = 0
+            topics.append({"displayName": name, "topic": name,
+                           "url": t.get("url", ""), "postCount": cnt})
+        _TRUTH_CACHE = {"data": topics, "fetched_at": now}
+        print(f"  Truth Social trends: {len(topics)} topics")
+        return topics
+    except Exception as ex:
+        print(f"  Truth Social trends error: {ex}")
+        return _TRUTH_CACHE["data"]
+
+
 def fetch_bluesky_trends():
     """Fetch trending topics from Bluesky via their public AT Protocol API.
     No API key required — uses the same endpoint the official Bluesky app uses.
@@ -611,46 +663,45 @@ def fetch_bluesky_trends():
         return _BLUESKY_CACHE["data"]
 
 
-def fetch_liberal_reddit():
-    """Fetch hot posts from liberal subreddits via Reddit's public RSS feeds.
-    Uses feedparser (same library as all 15 news sources) — no OAuth, no API key.
-    Subreddits: politics, progressive, liberal, democrats.
-    Returns list of dicts: {title, url, subreddit, permalink}
-    Cache: 30 minutes."""
-    global _LIB_REDDIT_CACHE
-    now = time.time()
-    if _LIB_REDDIT_CACHE["data"] and now - _LIB_REDDIT_CACHE["fetched_at"] < 1800:
-        return _LIB_REDDIT_CACHE["data"]
-    if not HAS_SCRAPE:
-        return _LIB_REDDIT_CACHE["data"]
+_REDDIT_HDRS = {
+    "User-Agent": "TrendingInRealTime/2.0 (news aggregator; +https://www.trendinginrealtime.com)",
+    "Accept": "application/rss+xml, application/xml, text/xml, */*",
+}
 
-    SUBREDDITS = ["politics", "progressive", "liberal", "democrats"]
-    hdrs = {
-        "User-Agent": "TrendingInRealTime/1.0 (editorial research bot; contact cwilliams@dwventures.com)",
-        "Accept": "application/rss+xml, application/xml, text/xml, */*",
-    }
-    # Collect up to 8 posts per subreddit, then interleave so all 4 subs are represented
-    per_sub = {sub: [] for sub in SUBREDDITS}
+
+def _fetch_reddit_set(subreddits, cache, label):
+    """Fetch hot posts from a set of subreddits via Reddit's public RSS feeds.
+
+    No OAuth, no API key. Collects up to 8 posts per subreddit, then interleaves
+    round-robin so every subreddit is represented rather than the first one
+    filling the list. Returns [{title, url, subreddit, permalink}], max 32.
+    Cache: 30 minutes.
+
+    Reddit rate-limits aggressively (429) and will often serve only some of the
+    subreddits on a given cycle, so partial results are normal and are reported
+    honestly by the log line.
+    """
+    now = time.time()
+    if cache["data"] and now - cache["fetched_at"] < 1800:
+        return cache["data"]
+    if not HAS_SCRAPE:
+        return cache["data"]
+
+    per_sub = {sub: [] for sub in subreddits}
     seen_titles = set()
-    for sub in SUBREDDITS:
+    for sub in subreddits:
         try:
-            resp = requests.get(
-                f"https://www.reddit.com/r/{sub}/hot.rss",
-                params={"limit": 25},
-                timeout=15,
-                headers=hdrs,
-            )
+            resp = requests.get(f"https://www.reddit.com/r/{sub}/hot.rss",
+                                params={"limit": 25}, timeout=15, headers=_REDDIT_HDRS)
             resp.raise_for_status()
             feed = feedparser.parse(resp.content)
             for entry in feed.entries[:25]:
                 if len(per_sub[sub]) >= 8:
                     break
                 title = (entry.get("title") or "").strip()
-                if not title or len(title) < 10:
-                    continue
-                # Reddit RSS wraps titles like: "r/politics: Some headline" — strip prefix
-                if title.lower().startswith(f"r/{sub}:"):
-                    title = title[len(f"r/{sub}:"):].strip()
+                # Reddit RSS wraps titles like "r/politics: Some headline"
+                if title.lower().startswith(f"r/{sub.lower()}:"):
+                    title = title[len(sub) + 3:].strip()
                 if not title or len(title) < 10:
                     continue
                 title_key = title[:50].lower()
@@ -658,36 +709,46 @@ def fetch_liberal_reddit():
                     continue
                 seen_titles.add(title_key)
                 link = entry.get("link", "")
-                # RSS link is the reddit thread; try to get external article URL from summary
-                summary = entry.get("summary", "")
-                # Extract first href from summary HTML as the article URL if it's external
-                import re as _re
-                ext_urls = _re.findall(r'href="(https?://(?!www\.reddit\.com)[^"]+)"', summary)
-                article_url = ext_urls[0] if ext_urls else link
-                per_sub[sub].append({
-                    "title":     title,
-                    "url":       article_url,
-                    "subreddit": sub,
-                    "permalink": link,
-                })
+                # The RSS link is the Reddit thread; prefer the external article
+                # it points to, pulled from the first non-Reddit href in the summary.
+                ext = re.findall(r'href="(https?://(?!www\.reddit\.com)[^"]+)"',
+                                 entry.get("summary", ""))
+                per_sub[sub].append({"title": title, "url": ext[0] if ext else link,
+                                     "subreddit": sub, "permalink": link})
         except Exception as ex:
-            print(f"  Liberal Reddit RSS ({sub}) error: {ex}")
+            print(f"  {label} Reddit RSS (r/{sub}) error: {ex}")
 
-    # Round-robin interleave so all subreddits appear throughout the list
     all_posts = []
-    max_len = max((len(v) for v in per_sub.values()), default=0)
-    for i in range(max_len):
-        for sub in SUBREDDITS:
+    for i in range(max((len(v) for v in per_sub.values()), default=0)):
+        for sub in subreddits:
             if i < len(per_sub[sub]):
                 all_posts.append(per_sub[sub][i])
 
     result = all_posts[:32]
     if result:
-        _LIB_REDDIT_CACHE = {"data": result, "fetched_at": now}
-        print(f"  Liberal Reddit RSS: {len(result)} posts across {len(SUBREDDITS)} subreddits")
+        cache["data"] = result
+        cache["fetched_at"] = now
+        # Report subreddits that actually returned posts, not how many we asked for.
+        live = [sub for sub in subreddits if per_sub[sub]]
+        print(f"  {label} Reddit RSS: {len(result)} posts from "
+              f"{len(live)}/{len(subreddits)} subreddits ({', '.join(live)})")
     else:
-        print("  Liberal Reddit RSS: no posts retrieved")
-    return _LIB_REDDIT_CACHE["data"]
+        print(f"  {label} Reddit RSS: no posts retrieved")
+    return cache["data"]
+
+
+LIBERAL_SUBREDDITS      = ["politics", "progressive", "liberal", "democrats"]
+CONSERVATIVE_SUBREDDITS = ["Conservative", "Republican", "AskConservatives", "tuesday"]
+
+
+def fetch_liberal_reddit():
+    """Hot posts from left-leaning subreddits. Feeds the Blue Trends page."""
+    return _fetch_reddit_set(LIBERAL_SUBREDDITS, _LIB_REDDIT_CACHE, "Liberal")
+
+
+def fetch_conservative_reddit():
+    """Hot posts from right-leaning subreddits. Feeds the Red Trends page."""
+    return _fetch_reddit_set(CONSERVATIVE_SUBREDDITS, _CON_REDDIT_CACHE, "Conservative")
 
 
 # ── TF-IDF COSINE SIMILARITY CLUSTERING ──────────────────────────────────────
@@ -1263,17 +1324,21 @@ def refresh_data():
     if total_injected:
         print(f"  Total synthetic injections: {total_injected} across all sources")
 
-    print("  Fetching Drudge + Twitter/X + Memeorandum + Bluesky + Liberal Reddit...")
+    print("  Fetching Drudge + Twitter/X + Memeorandum + Bluesky + Truth Social + Reddit...")
     drudge_links    = fetch_drudge()
     twitter_trends  = fetch_twitter_trends()
     reddit_posts    = fetch_memeorandum()
     bluesky_trends  = fetch_bluesky_trends()
     liberal_reddit  = fetch_liberal_reddit()
+    truth_trends       = fetch_truth_trends()
+    conservative_reddit = fetch_conservative_reddit()
     print(f"  {'✓' if drudge_links else '✗'} Drudge: {len(drudge_links)} links")
     print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
     print(f"  {'✓' if reddit_posts else '✗'} Memeorandum: {len(reddit_posts)} stories")
     print(f"  {'✓' if bluesky_trends else '✗'} Bluesky: {len(bluesky_trends)} trends")
     print(f"  {'✓' if liberal_reddit else '✗'} Liberal Reddit: {len(liberal_reddit)} posts")
+    print(f"  {'✓' if truth_trends else '✗'} Truth Social: {len(truth_trends)} trends")
+    print(f"  {'✓' if conservative_reddit else '✗'} Conservative Reddit: {len(conservative_reddit)} posts")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1358,7 +1423,7 @@ def refresh_data():
 
     with data_lock:
         data_store.update({"last_updated":datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),"sources":srcs,"trending_topics":topics,
-                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"reddit_posts":reddit_posts,"bluesky_trends":bluesky_trends,"liberal_reddit":liberal_reddit,
+                           "twitter_trends":twitter_trends,"drudge_links":drudge_links,"reddit_posts":reddit_posts,"bluesky_trends":bluesky_trends,"liberal_reddit":liberal_reddit,"truth_trends":truth_trends,"conservative_reddit":conservative_reddit,
                            "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
@@ -1385,6 +1450,16 @@ def bluetrends():
     # Serve the main app with ?view=bt so JS auto-switches to Blue Trends on load
     page = HTML.replace('/*__API_KEY__*/', f'const _API_KEY="{_SESSION_TOKEN}";', 1)
     page = page.replace('let _n=Date.now()', 'const _INIT_VIEW="bt";let _n=Date.now()', 1)
+    resp = make_response(page, 200)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp
+
+@app.route('/redtrends')
+def redtrends():
+    from flask import make_response
+    # Serve the main app with _INIT_VIEW="rt" so JS auto-switches to Red Trends on load
+    page = HTML.replace('/*__API_KEY__*/', f'const _API_KEY="{_SESSION_TOKEN}";', 1)
+    page = page.replace('let _n=Date.now()', 'const _INIT_VIEW="rt";let _n=Date.now()', 1)
     resp = make_response(page, 200)
     resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
@@ -1746,7 +1821,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 }
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 28 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 33 sources · Building intelligence report…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
@@ -1783,8 +1858,12 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="drw-bt" onclick="switchPage('bt');closeDrawer();return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">mood_bad</span>
-      <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
+      <span class="ms" style="color:#1D4ED8">forum</span>
+      <span style="color:#1D4ED8;font-weight:600">Blue Trends</span>
+    </a>
+    <a href="#" class="sb-lnk" id="drw-rt" onclick="switchPage('rt');closeDrawer();return false">
+      <span class="ms" style="color:#C41230">forum</span>
+      <span style="color:#C41230;font-weight:600">Red Trends</span>
     </a>
   </nav>
 </div>
@@ -1813,8 +1892,12 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
     </a>
     <a href="#" class="sb-lnk" id="nav-bt" onclick="switchPage('bt');return false" style="margin-top:4px;border-top:1px solid var(--surface-high);padding-top:10px">
-      <span class="ms" style="color:#1d9bf0">mood_bad</span>
-      <span style="color:#1d9bf0;font-weight:600">Blue Trends</span>
+      <span class="ms" style="color:#1D4ED8">forum</span>
+      <span style="color:#1D4ED8;font-weight:600">Blue Trends</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-rt" onclick="switchPage('rt');return false">
+      <span class="ms" style="color:#C41230">forum</span>
+      <span style="color:#C41230;font-weight:600">Red Trends</span>
     </a>
   </nav>
   <div class="sb-footer">
@@ -1908,6 +1991,30 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
   </div>
 </div>
 
+<div class="bt-page" id="rt-page">
+  <div class="bt-hdr">
+    <h2>Red Trends</h2>
+    <p>What's generating engagement on the right — Truth Social trending topics &amp; top conservative Reddit posts</p>
+  </div>
+  <div class="bt-grid">
+    <div class="bt-col">
+      <div class="bt-col-hd">
+        <span class="bt-col-icon" style="color:#C41230"><span class="ms" style="font-size:18px">tag</span></span>
+        <div><div class="bt-col-title">Truth Social Trending</div><div class="bt-col-sub">Top topics right now on Truth Social</div></div>
+      </div>
+      <div id="rt-truth"><div class="bt-loading">Loading…</div></div>
+    </div>
+    <div class="bt-divider"></div>
+    <div class="bt-col">
+      <div class="bt-col-hd">
+        <span class="bt-col-icon" style="color:#ff4500"><svg width="18" height="18" viewBox="0 0 20 20" fill="currentColor"><circle cx="10" cy="10" r="10"/><path fill="#fff" d="M16.67 10a1.46 1.46 0 0 0-2.47-1 7.12 7.12 0 0 0-3.85-1.23l.65-3.08 2.13.45a1 1 0 1 0 .42-.83l-2.38-.5a.25.25 0 0 0-.3.19l-.73 3.44a7.14 7.14 0 0 0-3.89 1.23 1.46 1.46 0 1 0-1.61 2.39 2.87 2.87 0 0 0 0 .44c0 2.24 2.61 4.06 5.83 4.06s5.83-1.82 5.83-4.06a2.87 2.87 0 0 0 0-.44 1.46 1.46 0 0 0 .27-.06zM7.5 11a1 1 0 1 1 1 1 1 1 0 0 1-1-1zm5.57 2.65a3.53 3.53 0 0 1-2 .46 3.53 3.53 0 0 1-2-.46.25.25 0 0 1 .35-.35 3.08 3.08 0 0 0 1.68.37 3.08 3.08 0 0 0 1.68-.37.25.25 0 0 1 .35.35zm-.07-1.65a1 1 0 1 1 1-1 1 1 0 0 1-1 1z"/></svg></span>
+        <div><div class="bt-col-title">Conservative Reddit Hot</div><div class="bt-col-sub">r/Conservative · r/Republican · r/AskConservatives · r/tuesday</div></div>
+      </div>
+      <div id="rt-reddit"><div class="bt-loading">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
 <!-- Mobile bottom navigation — visible on screens ≤900px -->
 <nav class="mob-nav">
   <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false">
@@ -1936,13 +2043,15 @@ function switchPage(pg, scrollTo){
   document.querySelector('.main').style.display=pg==='dash'?'block':'none';
   document.getElementById('lh-page').style.display=pg==='lh'?'block':'none';
   document.getElementById('bt-page').style.display=pg==='bt'?'block':'none';
+  document.getElementById('rt-page').style.display=pg==='rt'?'block':'none';
 
   // Determine which sidebar nav item is "active" (scroll-to items map back to 'dash')
   const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
                   : scrollTo==='social-velocity-section' ? 'nav-social'
                   : pg==='dash' ? 'nav-topics'
                   : pg==='lh'   ? 'nav-lh'
-                  : pg==='bt'   ? 'nav-bt' : '';
+                  : pg==='bt'   ? 'nav-bt'
+                  : pg==='rt'   ? 'nav-rt' : '';
   document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeNav){const el=document.getElementById(activeNav);if(el)el.classList.add('act');}
 
@@ -1951,7 +2060,8 @@ function switchPage(pg, scrollTo){
                   : scrollTo==='social-velocity-section' ? 'mob-social'
                   : pg==='dash' ? 'mob-topics'
                   : pg==='lh'   ? 'mob-lh'
-                  : pg==='bt'   ? 'mob-bt' : '';
+                  : pg==='bt'   ? 'mob-bt'
+                  : pg==='rt'   ? 'mob-rt' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
   if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
   // Sync drawer nav active state
@@ -1959,12 +2069,14 @@ function switchPage(pg, scrollTo){
                   : scrollTo==='social-velocity-section' ? 'drw-social'
                   : pg==='dash' ? 'drw-topics'
                   : pg==='lh'   ? 'drw-lh'
-                  : pg==='bt'   ? 'drw-bt' : '';
+                  : pg==='bt'   ? 'drw-bt'
+                  : pg==='rt'   ? 'drw-rt' : '';
   document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeDrw){const el=document.getElementById(activeDrw);if(el)el.classList.add('act');}
 
   if(pg==='lh'&&_lastData)rLH(_lastData.last_hour||[]);
   if(pg==='bt'&&_lastData)rBT(_lastData);
+  if(pg==='rt'&&_lastData)rRT(_lastData);
 
   // Scroll to sub-section if requested (e.g. Live Source Feed, Social Velocity)
   if(scrollTo){
@@ -2180,6 +2292,51 @@ function rBT(d){
   }
 }
 
+function rRT(d){
+  const truthEl=document.getElementById('rt-truth');
+  const redEl=document.getElementById('rt-reddit');
+  if(!truthEl||!redEl)return;
+
+  // Truth Social trending topics — mirrors the Bluesky panel on Blue Trends
+  const topics=(d.truth_trends||[]);
+  const tSubEl=truthEl.closest('.bt-col')&&truthEl.closest('.bt-col').querySelector('.bt-col-sub');
+  if(tSubEl&&topics.length)tSubEl.textContent=topics.length+' topic'+(topics.length===1?'':'s')+' trending on Truth Social right now';
+  if(!topics.length){
+    truthEl.innerHTML='<div class="bt-loading">Truth Social trending data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
+  } else {
+    truthEl.innerHTML=topics.map((t,i)=>{
+      const cnt=t.postCount?'<span>'+fmtK(t.postCount)+' posts</span>':'';
+      const url=t.url||('https://truthsocial.com/tags/'+encodeURIComponent((t.topic||t.displayName).replace(/^#/,'')));
+      return '<div class="bt-item">'
+        +'<div class="bt-rank" style="color:#C41230">'+(i+1)+'</div>'
+        +'<div class="bt-body">'
+        +'<div class="bt-title" style="font-weight:600"><a href="'+e(url)+'" target="_blank" rel="noopener" style="color:#C41230;text-decoration:none" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+e(t.displayName)+'</a></div>'
+        +(cnt?'<div class="bt-meta">'+cnt+'</div>':'')
+        +'</div></div>';
+    }).join('');
+  }
+
+  // Conservative Reddit hot posts
+  const posts=d.conservative_reddit||[];
+  const subColors={Conservative:'#C41230',Republican:'#b91c1c',AskConservatives:'#9a3412',tuesday:'#7c2d12'};
+  if(!posts.length){
+    redEl.innerHTML='<div class="bt-loading">Conservative Reddit data unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Will retry next refresh cycle.</span></div>';
+  } else {
+    redEl.innerHTML=posts.map((p,i)=>{
+      const clr=subColors[p.subreddit]||'#ff4500';
+      const hasExt=p.url&&p.url!==p.permalink;
+      return '<div class="bt-item">'
+        +'<div class="bt-rank" style="color:#ff4500">'+(i+1)+'</div>'
+        +'<div class="bt-body">'
+        +'<div class="bt-title"><a href="'+e(hasExt?p.url:p.permalink)+'" target="_blank" rel="noopener">'+e(p.title)+'</a></div>'
+        +'<div class="bt-meta">'
+        +'<span style="background:'+clr+'18;color:'+clr+';font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;letter-spacing:.3px">r/'+e(p.subreddit)+'</span>'
+        +(hasExt?'<a href="'+e(p.permalink)+'" target="_blank" rel="noopener" style="color:var(--ink-l);font-size:10px;text-decoration:none">discussion →</a>':'')
+        +'</div></div></div>';
+    }).join('');
+  }
+}
+
 function rS(srcs){
   if(!srcs)return;
   window._L={};Object.entries(srcs).forEach(([id,s])=>window._L[id]=s.lean_color);
@@ -2217,6 +2374,7 @@ async function ld(){
       _lastTs=d.last_updated;
       rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rDr(d.drudge_links);rS(d.sources);
       if(_page==='bt')rBT(d);
+      if(_page==='rt')rRT(d);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
       const lhBadge=document.getElementById('lh-badge');
