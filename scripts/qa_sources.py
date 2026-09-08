@@ -88,15 +88,10 @@ def check_scrape():
 def check_supplemental():
     print(f"\n{'='*74}\n  SUPPLEMENTAL SOURCES\n{'='*74}")
     checks = [
-        ("Drudge",         td.fetch_drudge,         3),
         ("Twitter/X",      td.fetch_twitter_trends, 5),
         ("Memeorandum",    td.fetch_memeorandum,    3),
-        ("Bluesky",        td.fetch_bluesky_trends, 3),
         ("Liberal Reddit", td.fetch_liberal_reddit, 8),
         ("Conservative Reddit", td.fetch_conservative_reddit, 8),
-        # Unverified: Truth Social may sit behind bot protection. Treated as
-        # optional like Twitter/X so a block does not fail the whole run.
-        ("Truth Social",   td.fetch_truth_trends,   3),
     ]
     failures = []
     for name, fn, low in checks:
@@ -107,8 +102,8 @@ def check_supplemental():
         except Exception as ex:
             n, res = -1, str(ex)
         c, v = _verdict(n, low)
-        # Twitter/X and Truth Social are known-flaky from servers, not regressions.
-        if n <= 0 and name not in ("Twitter/X", "Truth Social"):
+        # Twitter/X is known-flaky from servers, not a regression.
+        if n <= 0 and name != "Twitter/X":
             failures.append(name)
         print(f"{name:<20}{n:>5}{time.time()-t:>6.1f}  {c}[{v}]{OFF}")
     return failures
