@@ -1,5 +1,10 @@
 # TrendingInRealTime.com — Claude Code Handoff
 
+> **Status: session 1 complete (Sept 2026).** Items 1, 3 and 4 below are done — see
+> "Session 1 outcome" at the bottom. Item 2 (verify live sources) is **not** done: it
+> needs real network access. Run `python3 scripts/qa_sources.py` on the Mac.
+> The rest of this file is kept as reference.
+
 This document is the first-session brief for Claude Code. Read CLAUDE.md for the full
 product spec and architecture. This file covers: what's drifted since last active development,
 what needs immediate attention, and how to work in this repo with Claude Code.
@@ -169,8 +174,8 @@ INJECT_LIMIT = 10             # synthetic injection position cap
 | `/api/data` | JSON data feed (requires X-Session-Token header) |
 | `/api/refresh` | POST — trigger async refresh |
 | `/debug/refresh` | GET — synchronous refresh + error dump (keep for debugging) |
-| `/debug/fb` | ⚠️ DELETE — dead Facebook debug route with hardcoded token |
-| `/debug/memo` | 🟡 DELETE — old Memeorandum diagnostic, no longer needed |
+| ~~`/debug/fb`~~ | ✅ DELETED in session 1 |
+| ~~`/debug/memo`~~ | ✅ DELETED in session 1 |
 
 ---
 
@@ -196,3 +201,43 @@ INJECT_LIMIT = 10             # synthetic injection position cap
    articles and scraping correctly; add to per-source QA table in CLAUDE.md
 5. **Assess new feature priorities** — review the backlog in CLAUDE.md and decide
    what the next development phase looks like
+
+---
+
+## Session 1 outcome (Sept 2026)
+
+**Done:**
+- Deleted `fetch_facebook_engagement()`, `_FB_CACHE`, `/debug/fb`, `/debug/memo`.
+  Zero `FB_TOKEN` / `facebook` references remain in `trending_dashboard.py`.
+  Verified: app boots, `/`, `/bluetrends`, `/privacy`, `/robots.txt`, `/debug/refresh`
+  all return 200; the two deleted routes return 404.
+  **Still outstanding — rotate the token.** Deleting the code does not revoke it, and it
+  remains in git history.
+- Loading screen: "Scanning 23 sources" → "Scanning 26 sources".
+- `scripts/qa_sources.py` added — one-pass live check of all RSS feeds, homepage
+  scrapes, and supplemental APIs.
+- CLAUDE.md corrected against the code (see "Corrections" below).
+
+**Not done — needs the Mac:**
+- Live source verification, including the three never-QA'd Tier 3 sources
+  (CBS News, Washington Examiner, The Free Press). Claude Code on the web runs behind
+  an allowlist proxy that blocks every news host, so every source reports FAIL there
+  regardless of its real state. Run `python3 scripts/qa_sources.py` locally.
+- Railway / DNS / billing checks.
+
+## Corrections to this handoff
+
+Two items in this document were wrong when it was written:
+
+1. **"CLAUDE.md source count and tables are out of date."** Already fixed by commit
+   d898a29 (the same commit that added this file). CLAUDE.md already said 18 news
+   sources, 26 total, and already had the Tier 3 table.
+
+2. **The 26-source count was right by accident.** It counted Google Trends, which is
+   dead code, and omitted Memeorandum, which is live. `fetch_google_trends()` is
+   defined but never called by `refresh_data()`, never written to `data_store`, and
+   never rendered — despite CLAUDE.md describing a "Google Trends US sidebar" as a
+   shipped feature and listing it #5 in the editorial reading order. The real
+   composition is 18 news RSS + 8 supplemental (Bluesky, 4 subreddits, Drudge,
+   Twitter/X, Memeorandum) = 26. Deciding whether to wire Google Trends up or delete
+   it is now a backlog item in CLAUDE.md.

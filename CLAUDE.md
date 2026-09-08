@@ -2,7 +2,7 @@
 
 ## Project Purpose
 
-A real-time editorial intelligence tool for the Daily Wire's editorial team. It aggregates RSS feeds from 18 major news sources plus Bluesky, liberal Reddit subreddits, Drudge, Twitter/X trends, and Google Trends (26 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and surfaces a Daily Wire Coverage Alignment score — showing editors which top trending stories they are and aren't covering.
+A real-time editorial intelligence tool for the Daily Wire's editorial team. It aggregates RSS feeds from 18 major news sources plus Bluesky, liberal Reddit subreddits, Drudge, Twitter/X trends, and Memeorandum (26 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and surfaces a Daily Wire Coverage Alignment score — showing editors which top trending stories they are and aren't covering.
 
 **Target audience:** Conservative Americans 25–65. The editorial philosophy is "Daily Mail for American conservatives without the tabloid streak" — credibility of NYT/WaPo with a conservative perspective.
 
@@ -24,7 +24,7 @@ CLAUDE.md               ← this file
 - Flask for HTTP serving
 - feedparser for RSS ingestion (18 news sources + 4 Reddit subreddits, concurrent via ThreadPoolExecutor)
 - requests + BeautifulSoup4 for homepage scraping (13 sources)
-- Google Trends via official public RSS feed (no API key, no rate limits)
+- Memeorandum political aggregator via HTML scrape (surfaces stories driving pundit conversation)
 - Bluesky AT Protocol public API (`app.bsky.unspecced.getTrendingTopics`, no auth required)
 - Reddit RSS feeds for 4 liberal subreddits (politics, progressive, liberal, democrats) via feedparser
 - gunicorn for production serving (via Procfile)
@@ -174,7 +174,7 @@ DW articles older than 12 hours are excluded from matching (prevents yesterday's
 | r/democrats | Reddit RSS (`/hot.rss`) | Explicitly Democratic, up to 8 posts per cycle |
 | Drudge Report | HTML scrape | Top headline links. Cache: 30 min. |
 | Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | US trending topics. Both may block cloud IPs intermittently. |
-| Google Trends | Official RSS (`trendingsearches/daily/rss?geo=US`) | Top 25 US search trends. Cache: 2 hours. |
+| Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Top political stories driving pundit conversation. Stored in the `reddit_posts` key of `data_store` and reuses `_REDDIT_CACHE` — a legacy name from when that slot held Reddit. Renders in the Social Velocity sidebar. Cache: 30 min. |
 
 **Reddit fetch strategy:** Each subreddit fetches up to 25 RSS entries, caps at 8 posts per sub, then interleaves round-robin (politics[0] → progressive[0] → liberal[0] → democrats[0] → politics[1] → …) so all four subreddits always appear in the feed. Max 32 posts total. No OAuth or API key — uses public RSS via feedparser.
 
@@ -236,11 +236,13 @@ Two-column view showing what's generating engagement on the left side of the pol
 - Deep-link: `trendinginrealtime.com/bluetrends` routes directly to this view via server-side injection of `_INIT_VIEW="bt"` into the HTML before serving.
 - Nav icon: `mood_bad` (Material Symbols), blue (`#1d9bf0`)
 
-### Google Trends US sidebar
-- Shows top 25 US search trends via official Google Trends RSS feed
-- `https://trends.google.com/trends/trendingsearches/daily/rss?geo=US`
-- Cached 2 hours, 4-hour backoff on failure
-- "X min ago" / "Xh ago" label shows cache age
+### Google Trends US sidebar — NOT SHIPPED
+`fetch_google_trends()` exists in `trending_dashboard.py` (official RSS,
+`trendingsearches/daily/rss?geo=US`, 2h cache, 4h backoff) but it is **dead code**:
+`refresh_data()` never calls it, nothing writes it to `data_store`, and no UI panel
+renders it. Earlier revisions of this file described the sidebar as a live feature —
+it has never shipped. Either wire it up or delete the function; do not cite it as a
+working source.
 
 ### Live Source Feed (Source Headlines grid)
 - All 18 news sources displayed with their top 8 headlines
@@ -264,13 +266,25 @@ python3 trending_dashboard.py
 # Opens http://localhost:8080 automatically
 ```
 
-### Deploying (Cowork VM → Mac → Railway)
-The VM **cannot** push to GitHub directly (network restriction). Workflow:
-1. Claude edits files and commits from VM
-2. From Mac terminal: `git pull --rebase origin main && git push`
-3. Railway auto-deploys on push to `main`
+### Verifying live sources
+```bash
+python3 scripts/qa_sources.py            # RSS + scrapes + supplemental APIs
+python3 scripts/qa_sources.py --rss      # RSS feeds only
+python3 scripts/qa_sources.py --scrape   # homepage scrapes only
+python3 scripts/qa_sources.py --supp     # supplemental APIs only
+```
+Prints article/headline counts per source and exits non-zero if any source came back
+empty. Run this after any feed change and before a deploy — it catches a dead feed in
+seconds, whereas the dashboard silently renders a source with zero articles.
 
-The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Projects/whats-trending-realtime/` on the Mac. **File overwrites do NOT sync back to Mac** — only new file creation does. The commit+pull workaround handles this.
+**Requires real network access.** Sandboxed environments (Claude Code on the web, CI
+containers on an allowlist proxy) block the outbound hosts and every source reports
+FAIL. Run it on the Mac, or hit `/debug/refresh` on production instead.
+
+### Deploying (Mac → Railway)
+Claude Code runs on the Mac with full git access — commit and `git push` directly.
+Railway auto-deploys on push to `main`. The old Cowork VM workaround
+(`git pull --rebase origin main && git push` from a separate terminal) is obsolete.
 
 ---
 
@@ -295,8 +309,12 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 | Washington Times | ✅ Excellent | ✅ Excellent | Direct RSS + scrape positions 4-37. Synthetic injection ~6 articles/cycle. |
 | Fox Business | ✅ Good | ❌ JS-rendered | Google News RSS (site:foxbusiness.com). Homepage is JS-rendered — 0 scrape confirmations expected. No synthetic injection. |
 | Townhall | ✅ Good | ✅ Good | Direct RSS (tipsheet) + scrape positions 2-26. Synthetic injection ~3 articles/cycle. |
+| CBS News | ❓ Unverified | ❓ Unverified | Direct RSS (`cbsnews.com/latest/rss/main`). In `SCRAPE_SOURCES`. Added post-launch, never QA'd — run `scripts/qa_sources.py`. |
+| Washington Examiner | ❓ Unverified | ❓ Unverified | Google News RSS (site:washingtonexaminer.com). In `SCRAPE_SOURCES`. Added post-launch, never QA'd. |
+| The Free Press | ❓ Unverified | ➖ N/A | Direct RSS (`thefp.com/feed`). **Not** in `SCRAPE_SOURCES` — RSS only, no cross-verification, no synthetic injection. Never QA'd. |
 
 ### Other Known Issues
+- **Rotate the Facebook token.** The removed code embedded app token `1491126469205088|…` in the repo and served it from the public `/debug/fb` endpoint. Deleting the code does **not** invalidate the token, and it remains in git history. Rotate/revoke it in the Meta app dashboard.
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
 - **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
 - **Post-merge threshold tuning:** `MERGE_THRESHOLD = 0.20` was chosen to catch same-story false splits. If unrelated stories start merging, raise it toward 0.25. If splits persist, lower it toward 0.15.
@@ -309,6 +327,8 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **Facebook dead-code + token removal** — deleted `fetch_facebook_engagement()` (never called by `refresh_data()`), the `/debug/fb` route, and the `/debug/memo` route. All three embedded a hardcoded Facebook app token in publicly deployed code; `/debug/fb` also exposed it via an unauthenticated endpoint. See "Rotate the Facebook token" below.
+- [x] **Live source QA script** — `scripts/qa_sources.py` checks all 18 RSS feeds, 15 homepage scrapes, and every supplemental API in one pass; exits non-zero if any source is empty.
 - [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet).
 - [x] **Google Stitch design refresh** — full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
 - [x] **Side by Side tab** — trending topics vs Daily Wire editorial picks, side by side.
@@ -335,7 +355,7 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 - [x] **Blue Trends page** — new page at `/bluetrends` (also deep-linkable as `trendinginrealtime.com/bluetrends`) showing Bluesky trending topics (left column) and Liberal Reddit hot posts from r/politics, r/progressive, r/liberal, r/democrats (right column). Nav icon: `mood_bad` (Material Symbols).
 - [x] **Bluesky trending topics** — `fetch_bluesky_trends()` calls `app.bsky.unspecced.getTrendingTopics` (no auth, limit=25). Each topic links to `bsky.app/search?q=...`. Subtitle shows dynamic count. Cache: 30 min.
 - [x] **Liberal Reddit hot posts** — `fetch_liberal_reddit()` fetches RSS from 4 subreddits via feedparser. Round-robin interleave ensures all 4 subs always appear (cap: 8 per sub). External article URLs extracted from RSS summary HTML when available.
-- [x] **Loading screen source count** — updated from "Scanning 15 sources" to "Scanning 23 sources".
+- [x] **Loading screen source count** — now "Scanning 26 sources" (18 news RSS + 8 supplemental).
 
 ### Backlog
 - [ ] **Auth layer** — password protect for Daily Wire editorial team use
@@ -343,6 +363,9 @@ The Cowork mount at `/sessions/.../mnt/whats-trending-realtime/` maps to `~/Proj
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
 - [ ] **Drudge siren** — visual alert when a story is Drudge's top link
 - [ ] **foxbusiness scrape** — add to SCRAPE_SOURCES (currently missing from scrape config)
+- [ ] **Google Trends: wire up or delete** — `fetch_google_trends()` is dead code (see "Google Trends US sidebar — NOT SHIPPED"). Either call it from `refresh_data()`, store it in `data_store`, and add a sidebar panel, or remove the function and its `_gt_cache`.
+- [ ] **Delete `trending_dashboard_v2.py`** — stale 15-source predecessor of the current single-file app. Not imported, not served, not referenced by `Procfile`. Dead weight that confuses source-count audits.
+- [ ] **Fix `run.sh`** — installs `pytrends` (unused; Google Trends moved to plain RSS) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
 
 ---
 
@@ -364,6 +387,6 @@ The dashboard is designed for a 5-minute morning scan by Daily Wire editors. Pri
 2. Any "● DW Gap" badges on topics 1–10
 3. Daily Wire Alignment grade — if C or D, editors need story assignments
 4. Last Hour tab — catch anything breaking in the last 60 minutes that hasn't clustered yet
-5. Google Trends sidebar — catches search-driven stories RSS may miss
+5. Social Velocity sidebar (Drudge / Twitter / Memeorandum) — catches stories RSS may miss
 6. Side by Side tab — quick visual scan of trending vs DW editorial priorities
 7. Blue Trends tab — what's generating engagement on the left; useful for anticipating counter-narrative stories

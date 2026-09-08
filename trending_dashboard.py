@@ -756,132 +756,6 @@ def fetch_liberal_reddit():
     return _LIB_REDDIT_CACHE["data"]
 
 
-_FB_CACHE = {"data": [], "fetched_at": 0, "backoff_until": 0}
-
-def fetch_facebook_engagement(all_arts):
-    """Fetch Facebook engagement (reactions + shares + comments) for article URLs
-    via the public Facebook Graph API URL endpoint — no API key required.
-    Best signal for which stories are catching fire with the conservative Facebook audience.
-
-    Skips Google News proxy sources (cnn, ap, reuters) since their URLs are google.com redirects.
-    Fox News was previously skipped for the same reason but switched to a direct RSS feed.
-    Fetches engagement for direct article URLs from all other sources concurrently.
-    Falls back to cached data on error with a 1-hour backoff."""
-    global _FB_CACHE
-    now = time.time()
-    if now < _FB_CACHE.get("backoff_until", 0):
-        return _FB_CACHE["data"]
-    if _FB_CACHE["data"] and now - _FB_CACHE["fetched_at"] < 3600:
-        return _FB_CACHE["data"]
-    if not HAS_SCRAPE:
-        return _FB_CACHE["data"]
-
-    # Skip Google News proxy sources — their URLs are google.com redirects.
-    # Reuters still uses Google News RSS (direct feed unavailable), so skip it.
-    # CNN, AP, Fox News removed after switching to direct feeds (direct article URLs).
-    SKIP_SOURCES = {"reuters"}
-    candidates = []
-    for sid, arts in all_arts.items():
-        if sid in SKIP_SOURCES:
-            continue
-        for art in arts[:20]:
-            url = art.get("link", "")
-            if url and url.startswith("http") and "google.com" not in url:
-                candidates.append({
-                    "url":    url,
-                    "title":  art.get("title", ""),
-                    "source": sid,
-                    "pub_ts": art.get("pub_ts", ""),
-                })
-
-    if not candidates:
-        print("  Facebook: no candidates (all sources skipped or no URLs)")
-        return _FB_CACHE.get("data", [])
-
-    # Sort oldest-first so we check articles that have had the most time to
-    # accumulate Facebook shares. Very recent articles (< 30 min) have near-zero
-    # engagement and cause the entire sample to return empty.
-    candidates.sort(key=lambda x: x.get("pub_ts") or "")
-
-    FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
-    first_error = []  # capture first error message for diagnostics
-    first_response = []  # log first raw API response for diagnostics
-
-    def fetch_one(item):
-        try:
-            r = requests.get(
-                f"https://graph.facebook.com/v21.0/?id={item['url']}&fields=engagement&access_token={FB_TOKEN}",
-                timeout=8,
-                headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
-            )
-            data = r.json()
-            # Log the first raw response so Railway logs show what's actually coming back
-            if not first_response:
-                first_response.append({"url": item['url'], "status": r.status_code, "data": data})
-            if "error" in data:
-                if not first_error:
-                    first_error.append(data["error"])
-                return None
-            eng = data.get("engagement", {})
-            total = (eng.get("reaction_count", 0) +
-                     eng.get("share_count", 0) +
-                     eng.get("comment_count", 0))
-            if total >= 10:
-                return {**item,
-                        "fb_total":     total,
-                        "fb_reactions": eng.get("reaction_count", 0),
-                        "fb_shares":    eng.get("share_count", 0),
-                        "fb_comments":  eng.get("comment_count", 0)}
-        except Exception as ex:
-            if not first_error:
-                first_error.append({"message": str(ex)})
-        return None
-
-    try:
-        results = []
-        sample = candidates[:8]  # 10 calls/hour limit — stay well under with 8/cycle
-        with ThreadPoolExecutor(max_workers=12) as ex:
-            futures = [ex.submit(fetch_one, item) for item in sample]
-            for f in as_completed(futures):
-                r = f.result()
-                if r:
-                    results.append(r)
-
-        if first_response:
-            fr = first_response[0]
-            print(f"  Facebook API first response [{fr['status']}] url={fr['url'][:60]} data={str(fr['data'])[:200]}")
-        if first_error:
-            print(f"  Facebook API error: {first_error[0]}")
-
-        if not results and first_error:
-            err_code = first_error[0].get("code", 0)
-            err_type = first_error[0].get("type", "")
-            err_msg  = first_error[0].get("message", "")
-            print(f"  Facebook: no results — {err_type}: {err_msg}")
-            # Rate limits: back off to avoid hammering the API
-            if err_code == 4:
-                display = "App rate limit reached."
-                _FB_CACHE["backoff_until"] = now + 7200  # 2-hour backoff for app-level limit
-            elif err_code == 613:
-                display = "Rate limited (10 calls/hour). Will retry next hour."
-                _FB_CACHE["backoff_until"] = now + 3600  # 1-hour backoff for per-hour limit
-            else:
-                display = f"{err_type}: {err_msg}"
-            _FB_CACHE["data"] = [{"__unavailable": True, "reason": display}]
-            _FB_CACHE["fetched_at"] = now
-            return _FB_CACHE["data"]
-
-        results.sort(key=lambda x: x["fb_total"], reverse=True)
-        top = results[:20]
-        _FB_CACHE = {"data": top, "fetched_at": now, "backoff_until": 0}
-        print(f"  Facebook: {len(top)} articles with engagement (checked {len(sample)}, {len(candidates)} candidates)")
-        return top
-    except Exception as ex:
-        print(f"  Facebook engagement error: {ex}")
-        _FB_CACHE["backoff_until"] = now + 3600
-        return _FB_CACHE.get("data", [])
-
-
 # ── TF-IDF COSINE SIMILARITY CLUSTERING ──────────────────────────────────────
 # Replaces the single-keyword seed approach.
 # Each article title is vectorized via TF-IDF (sparse dict, no numpy needed).
@@ -1704,47 +1578,6 @@ def debug_refresh():
     except Exception as ex:
         return jsonify({"error": str(ex), "traceback": traceback.format_exc()})
 
-@app.route('/debug/fb')
-def debug_fb():
-    """Diagnostic endpoint: makes ONE live Facebook Graph API call and returns raw response.
-    Useful for confirming API connectivity and permissions from Railway. DELETE after fix."""
-    if not HAS_SCRAPE:
-        return jsonify({"error": "requests not available"})
-    FB_TOKEN = "1491126469205088|cd10efe58b5e4ee341710581b704bec7"
-    test_url = "https://nypost.com/2025/01/15/us-news/trump-cabinet-picks/"
-    try:
-        r = requests.get(
-            f"https://graph.facebook.com/v21.0/?id={test_url}&fields=engagement&access_token={FB_TOKEN}",
-            timeout=10,
-            headers={"User-Agent": "TrendingInRealTime.com/2.0 (editorial dashboard)"},
-        )
-        return jsonify({"status": r.status_code, "url_tested": test_url, "response": r.json()})
-    except Exception as ex:
-        return jsonify({"error": str(ex)})
-
-@app.route('/debug/memo')
-def debug_memo():
-    """Diagnostic: fetch Memeorandum with correct selectors (div.item > div.ii > strong > a)."""
-    if not HAS_SCRAPE:
-        return jsonify({"error": "requests not available"})
-    try:
-        r = requests.get("https://www.memeorandum.com/", timeout=12, headers={
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        })
-        soup = BeautifulSoup(r.text, 'html.parser')
-        stories = []
-        for item in soup.find_all('div', class_='item')[:5]:
-            ii = item.find('div', class_='ii')
-            if not ii: continue
-            strong = ii.find('strong')
-            if not strong: continue
-            a = strong.find('a', href=True)
-            if a:
-                stories.append({"title": a.get_text(strip=True), "link": a.get('href')})
-        return jsonify({"status": r.status_code, "items_found": len(soup.find_all('div', class_='item')), "sample": stories})
-    except Exception as ex:
-        return jsonify({"error": str(ex)})
-
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -2065,7 +1898,7 @@ body{background:var(--surface);color:var(--ink);font-family:'Inter',system-ui,sa
 }
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 23 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 26 sources · Building intelligence report…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
