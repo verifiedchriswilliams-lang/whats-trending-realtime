@@ -1522,7 +1522,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .topics-tbl thead th{padding:10px 16px;font-size:13px;font-weight:400;color:var(--ink3);background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Instrument Sans',sans-serif}
 .topics-tbl thead th.tc{text-align:center}
 .topics-tbl thead th.tr2{text-align:right}
-.th-r{width:104px}.th-s{width:108px}.th-v{width:112px}.th-g{width:80px}
+.th-r{width:64px}.th-s{width:236px}.th-v{width:112px}.th-g{width:80px}
 .topics-tbl td{overflow:hidden}
 .t-row{cursor:pointer;transition:background .1s}
 .t-row:hover td{background:rgba(0,0,0,.015)}
@@ -1532,7 +1532,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .x-row td{padding:0;border-bottom:1px solid var(--surface-high)}
 .rn{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:center;display:block}
 .rn-h{color:var(--red)}.rn-n{color:var(--ink-l)}
-.rn-cat{display:flex;flex-direction:column;align-items:flex-start;margin-top:4px;gap:2px;font-size:12px;line-height:1.3;white-space:normal;word-break:normal}
+.t-sub{font-size:13px;color:var(--ink3);margin-top:4px;line-height:1.45}
 .t-hl{font-family:'Instrument Sans',system-ui,sans-serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
 .t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Instrument Sans',sans-serif}
 .t-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
@@ -1543,9 +1543,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .tag.cat{border-radius:2px;font-size:9px;font-weight:700;letter-spacing:.4px}
 .tag.cat-natl,.tag.cat-intl,.tag.cat-sport,.tag.cat-ent,.tag.cat-biz,
 .tag.cat-crime,.tag.cat-tech,.tag.cat-health{background:none;color:var(--ink3);padding:0}
+/* Coverage dots: one dot per outlet in the roster, grouped left -> center -> right
+   -> not covering. Each group is one element; the repeating radial gradient paints
+   its dots, so a 20-outlet row is four spans rather than twenty. */
+.cdrow{display:flex;align-items:center;gap:4px;flex-wrap:nowrap}
+.cdots{height:9px;flex:none;background-image:radial-gradient(circle at 4.5px 4.5px,currentColor 2.1px,transparent 2.3px);background-size:9px 9px;background-repeat:repeat-x}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
-.chip{width:26px;height:22px;border-radius:2px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;font-family:'Instrument Sans',sans-serif;flex-shrink:0}
-.chip.hero{outline:2px solid var(--navy);outline-offset:1px}
 .sig-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:right;color:var(--ink);display:block}
 .sig-d{font-size:10px;font-weight:700;text-align:right;font-family:'Instrument Sans',sans-serif;display:block;margin-top:1px}
 .ei-c{font-size:10px;color:var(--ink-l);display:block;text-align:right;margin-top:3px}
@@ -1663,7 +1666,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   .topics-tbl tbody tr.t-row td:nth-child(3){grid-column:2;grid-row:2;padding-top:5px}
   .topics-tbl tbody tr.t-row td:nth-child(4){display:none}
   .topics-tbl tbody tr.t-row td:nth-child(5){grid-column:3;grid-row:1/3;padding-left:10px;text-align:right;padding-top:2px}
-  .topics-tbl tbody tr.x-row{display:block;width:100%}
+  .topics-tbl tbody tr.x-row{display:none}
+  .topics-tbl tbody tr.x-row.open{display:block;width:100%}
   .topics-tbl tbody tr.x-row td{display:block;padding:0 8px 12px 52px!important}
   .t-hl{font-size:15px}
   .sig-n{font-size:18px}
@@ -1745,7 +1749,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
   <div class="mob-hdr-brand">
-    <div class="mob-hdr-icon"></div>
+    <div class="mob-hdr-icon"><svg viewBox="0 0 32 32" width="17" height="17" aria-hidden="true">
+      <g fill="#fff"><circle cx="16" cy="5.5" r="2.6"/><circle cx="23.4" cy="8.6" r="2.6"/>
+      <circle cx="26.5" cy="16" r="2.6"/><circle cx="23.4" cy="23.4" r="2.6"/>
+      <circle cx="16" cy="26.5" r="2.6"/></g>
+      <g fill="#fff" opacity=".28"><circle cx="8.6" cy="23.4" r="2.6"/><circle cx="5.5" cy="16" r="2.6"/>
+      <circle cx="8.6" cy="8.6" r="2.6"/></g></svg></div>
     <span class="mob-hdr-title">Intelligence Ops</span>
   </div>
   <div class="mob-hdr-right">
@@ -2020,6 +2029,37 @@ function rLH(arts){
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
 function fc(ms){if(ms<=0)return'Refreshing…';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);return m+':'+String(s).padStart(2,'0')+' Refresh'}
+// Roster maps used by the coverage dots. Must run before rT() paints the topics list.
+function leanMaps(srcs){
+  window._L={};window._LB={};window._SN={};
+  Object.entries(srcs||{}).forEach(([id,s])=>{
+    window._L[id]=s.lean_color; window._SN[id]=s.name||id;
+    const l=s.lean||'center';
+    window._LB[id]=l.indexOf('left')>=0?'left':l.indexOf('right')>=0?'right':'center';
+  });
+}
+function dotGroup(n,colour,label){
+  if(!n)return '';
+  return '<span class="cdots" style="width:'+(n*9)+'px;color:'+colour+'" title="'+e(label)+'"></span>';
+}
+function dots(srcs){
+  const LB=window._LB||{},SN=window._SN||{};
+  const roster=Object.keys(LB);
+  if(!roster.length)return '';
+  const covering=new Set(srcs);
+  const by={left:[],center:[],right:[]},missing=[];
+  roster.forEach(id=>{
+    const b=LB[id]||'center';
+    if(covering.has(id))by[b].push(SN[id]||id); else missing.push(SN[id]||id);
+  });
+  const nm=n=>n.join(', ');
+  return '<span class="cdrow">'
+    +dotGroup(by.left.length,  'var(--ll)','Left of center: '+nm(by.left))
+    +dotGroup(by.center.length,'var(--lc)','Center: '+nm(by.center))
+    +dotGroup(by.right.length, 'var(--lr)','Right of center: '+nm(by.right))
+    +dotGroup(missing.length,  'var(--lo)','Not carrying it: '+nm(missing))
+    +'</span>';
+}
 function spark(delta,heat,history){
   const w=88,h=32,pad=4;
   // With a real history array, draw a true multi-point curve
@@ -2066,15 +2106,18 @@ function rT(topics){
   if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
   tb.innerHTML=topics.map((t,i)=>{
     const hot=i<3,heroSrcs=new Set(t.hero_sources||[]);
-    const chips=(t.sources||[]).map(s=>{
-      const isH=heroSrcs.has(s),col=(window._L||{})[s]||'#6B7280',abbr=SA[s]||(s.slice(0,3).toUpperCase());
-      return '<div class="chip'+(isH?' hero':'')+'" style="background:'+col+'" title="'+e(s)+(isH?' \u2014 Lead':'')+'">'+e(abbr)+'</div>';
-    }).join('');
+    const chips=dots(t.sources||[]);
     const brkBadge=t.is_breaking?'<span class="tag brk" title="Published within the last 90 minutes">Breaking</span>':'';
     const am=t.age_minutes;
     const ageBadge=(!t.is_breaking&&am!=null)?'<span class="tag age" title="Most recent article in this cluster was published '+(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago">'+(am<60?am+'m':Math.floor(am/60)+'h')+'</span>':'';
-    const leadSrcs=(t.hero_sources||[]).join(', ');
-    const leadBadge=heroSrcs.size>0?'<span class="tag lead" title="This story is the top headline at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+(leadSrcs?': '+leadSrcs:'')+'">Lead at '+heroSrcs.size+(heroSrcs.size>1?' outlets':' outlet')+'</span>':'';
+    const SNm=window._SN||{};
+    const leadNames=(t.hero_sources||[]).map(x=>SNm[x]||x);
+    const catTxt=(Array.isArray(t.category)?t.category:[t.category||'national'])
+                   .map(c=>_CAT_LABEL[c]||'National').join(', ');
+    const shown=leadNames.slice(0,3),extra=leadNames.length-shown.length;
+    const subLine=catTxt+(leadNames.length?' \u00b7 led by '+e(shown.join(', '))
+      +(extra>0?' and '+extra+' more':''):'');
+    const leadBadge='';
     const d=t.delta;
     const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:#15803D" title="Heat score rose +'+d+' points since last refresh (30 min ago)">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:#BA032A" title="Heat score fell '+Math.abs(d)+' points since last refresh (30 min ago)">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:#9CA3AF" title="No change since last refresh">\u2014</span>';
     const arts=(t.articles||[]).map(a=>{
@@ -2086,8 +2129,9 @@ function rT(topics){
     }).join('');
     const rn=(i<9?'0':'')+(i+1);
     return '<tr class="t-row" onclick="tg('+i+')">'
-      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span><div class="rn-cat">'+catBadge(t.category)+'</div></td>'
-      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-tags">'+brkBadge+ageBadge+leadBadge+'</div></td>'
+      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
+      +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-sub">'+subLine+'</div>'
+        +'<div class="t-tags">'+brkBadge+ageBadge+'</div></td>'
       +'<td><div class="chips">'+chips+'</div></td>'
       +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
@@ -2164,7 +2208,7 @@ function rdPosts(posts,subColors,label){
 
 function rS(srcs){
   if(!srcs)return;
-  window._L={};Object.entries(srcs).forEach(([id,s])=>window._L[id]=s.lean_color);
+
   const ord=[...SO.filter(id=>srcs[id]),...Object.keys(srcs).filter(id=>!SO.includes(id))];
   document.getElementById('sg').innerHTML=ord.map(sid=>{
     const s=srcs[sid];if(!s)return'';
@@ -2197,6 +2241,7 @@ async function ld(){
     _lastData=d;
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
+      leanMaps(d.sources);
       rT(d.trending_topics);rRe(d.reddit_posts);rTw(d.twitter_trends);rS(d.sources);
       if(_page==='bt')rBT(d);
       if(_page==='rt')rRT(d);

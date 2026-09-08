@@ -260,10 +260,26 @@ and 3 (structural, and new capability) are not started.
   read as a warning. Falling stays neutral grey. Never red.
 - **No gradient fills**, and category badges no longer use eight saturated pill colours.
 
+**Also shipped (design's data display):**
+- **Coverage dots replace the lettered source chips.** One dot per outlet across the whole
+  roster, grouped left → center → right → not covering, so the shape alone reads as
+  balance and absence is visible. Each group is a single element painted with a repeating
+  radial gradient (`.cdots`, 9px tile), so a 20-outlet row is four spans, not twenty.
+  Hovering a group names its outlets. `leanMaps()` must run before `rT()` — it builds the
+  roster the dots are drawn from, and when it ran inside `rS()` the first paint drew none.
+- **Category and lead outlets moved to one subtitle line** ("National · led by AP News,
+  NPR, NBC News and 5 more"), replacing the stacked category pill and the heavy dark
+  "Lead at N outlets" badge. Capped at three names, as the artboard shows.
+
+**Fixed: mobile rendered every expanded row permanently.** `.topics-tbl tbody tr.x-row`
+in the ≤600px block set `display:block` unconditionally, out-specifying `.x-row{display:none}`,
+so all 20 stories rendered their full article lists inline with no way to collapse them.
+The mobile page was ~68,000px tall. It is now gated on `.open` like the desktop rule, and
+the page is ~13,800px. If you touch that media query, keep the `.open` gate.
+
 **Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
-take the hover-raised plane; source chips are still bordered boxes rather than coverage
-dots; there is no hero and no Coverage gap section; and the fixed sidebar remains where
-the design has a single scrolling column.
+take the hover-raised plane; there is no hero and no Coverage gap section; and the fixed
+sidebar remains where the design has a single scrolling column.
 
 ## UI Features
 
