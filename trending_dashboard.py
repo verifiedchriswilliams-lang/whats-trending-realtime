@@ -1384,6 +1384,18 @@ analytics profile is built.</p>
 <p>For questions about this privacy policy, contact: cwilliams@dwventures.com</p>
 </body></html>""", 200, {'Content-Type': 'text/html; charset=utf-8'})
 
+@app.route('/og-image.png')
+def og_image():
+    """Social preview card, referenced by the og:image and twitter:image tags.
+    Served from the repo rather than a CDN — the app has no static directory."""
+    from flask import send_file
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'docs', 'social', 'og-image.png')
+    if not os.path.exists(path):
+        return ('Not found', 404)
+    resp = send_file(path, mimetype='image/png')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
 @app.route('/robots.txt')
 def robots():
     return ("User-agent: *\nDisallow: /api/\nDisallow: /debug/\n", 200, {'Content-Type': 'text/plain'})
@@ -1424,8 +1436,23 @@ def debug_refresh():
 HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Editorial Intelligence — TrendingInRealTime.com</title>
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23BA032A'/><polyline points='4,24 10,16 16,20 22,10 28,6' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='6' r='2.5' fill='white'/></svg>">
+<title>TrendingInRealTime.com — what the press is covering right now</title>
+<meta name="description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<link rel="canonical" href="https://www.trendinginrealtime.com/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="TrendingInRealTime.com">
+<meta property="og:url" content="https://www.trendinginrealtime.com/">
+<meta property="og:title" content="TrendingInRealTime.com — what the press is covering right now">
+<meta property="og:description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<meta property="og:image" content="https://www.trendinginrealtime.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="675">
+<meta property="og:image:alt" content="TrendingInRealTime.com — twenty news outlets, one ranked view of the day.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="TrendingInRealTime.com — what the press is covering right now">
+<meta name="twitter:description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<meta name="twitter:image" content="https://www.trendinginrealtime.com/og-image.png">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231A2231'/><g fill='white'><circle cx='16' cy='5.5' r='3.4'/><circle cx='23.4' cy='8.6' r='3.4'/><circle cx='26.5' cy='16' r='3.4'/><circle cx='23.4' cy='23.4' r='3.4'/><circle cx='16' cy='26.5' r='3.4'/></g><g fill='white' opacity='0.3'><circle cx='8.6' cy='23.4' r='3.4'/><circle cx='5.5' cy='16' r='3.4'/><circle cx='8.6' cy='8.6' r='3.4'/></g></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
@@ -2074,7 +2101,7 @@ function spark(delta,heat,history){
     const p='M'+pts.join(' L');
     const rising=history[history.length-1]>history[0];
     const flat=history[history.length-1]===history[0];
-    const color=rising?'#BA032A':flat?'#c5c6ce':'#c5c6ce';
+    const color=rising?'oklch(0.55 0.11 158)':'oklch(0.53 0.007 70)';
     const sw=rising?'2.5':'1.5';
     const tip=delta===null?'First reading':delta>0?'Gaining momentum — +'+delta+' pts since last refresh':delta<0?'Losing momentum — '+delta+' pts since last refresh':'No change since last refresh';
     return '<span title="'+tip+'"><svg width="'+w+'" height="'+h+'" viewBox="0 0 '+w+' '+h+'"><path d="'+p+'" stroke="'+color+'" stroke-width="'+sw+'" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
@@ -2119,7 +2146,7 @@ function rT(topics){
       +(extra>0?' and '+extra+' more':''):'');
     const leadBadge='';
     const d=t.delta;
-    const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:#15803D" title="Heat score rose +'+d+' points since last refresh (30 min ago)">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:#BA032A" title="Heat score fell '+Math.abs(d)+' points since last refresh (30 min ago)">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:#9CA3AF" title="No change since last refresh">\u2014</span>';
+    const dh=d===null||d===undefined?'':d>0?'<span class="sig-d" style="color:var(--acc)" title="Heat score rose +'+d+' points since last refresh (30 min ago)">\u25b2'+d+'</span>':d<0?'<span class="sig-d" style="color:var(--ink3)" title="Heat score fell '+Math.abs(d)+' points since last refresh (30 min ago)">\u25bc'+Math.abs(d)+'</span>':'<span class="sig-d" style="color:var(--ink3)" title="No change since last refresh">\u2014</span>';
     const arts=(t.articles||[]).map(a=>{
       const isH=a.feed_position===0||a.feed_position===1,isS=a.scrape_confirmed===true;
       const markTitle=isH&&isS?' title="\u2605\u2713 Double-confirmed: top 2 in RSS feed AND found on homepage"':isH?' title="\u2605 RSS hero: appeared in top 2 positions in this outlet\'s feed"':isS?' title="\u2713 Scrape confirmed: found on outlet\'s live homepage"':'';

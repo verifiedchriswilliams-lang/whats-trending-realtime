@@ -277,6 +277,20 @@ so all 20 stories rendered their full article lists inline with no way to collap
 The mobile page was ~68,000px tall. It is now gated on `.open` like the desktop rule, and
 the page is ~13,800px. If you touch that media query, keep the `.open` gate.
 
+**Identity and social metadata (Sept 2026):**
+- **Favicon** is the identity mark — eight circles on a ring, five solid and three at 30%,
+  empty centre, white on `#1A2231`, as an inline SVG data URI. It replaced a maroon
+  `#BA032A` line-graph icon whose colour was the accent Phase 1 retired. Circles are
+  r=3.4 rather than the UI's 2.6 so the ring still reads at 16px.
+- **`<title>`** is "TrendingInRealTime.com — what the press is covering right now". The
+  previous "Editorial Intelligence" title was Daily Wire–era naming.
+- **Open Graph and Twitter card tags** were absent entirely, so any shared link rendered
+  a bare preview. `/og-image.png` serves `docs/social/og-image.png` (1200×675) from the
+  repo, since the app has no static directory.
+- The card's coverage dots total exactly 20 — five left, four center, four right carrying
+  a story, seven not. Keep it that way if you re-render: the dots are the product's claim
+  about itself, and a card showing 25 dots for a 20-outlet roster undercuts it.
+
 **Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
 take the hover-raised plane; there is no hero and no Coverage gap section; and the fixed
 sidebar remains where the design has a single scrolling column.
