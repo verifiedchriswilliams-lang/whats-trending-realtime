@@ -1437,20 +1437,20 @@ HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TrendingInRealTime.com — what the press is covering right now</title>
-<meta name="description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<meta name="description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
 <link rel="canonical" href="https://www.trendinginrealtime.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TrendingInRealTime.com">
 <meta property="og:url" content="https://www.trendinginrealtime.com/">
 <meta property="og:title" content="TrendingInRealTime.com — what the press is covering right now">
-<meta property="og:description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<meta property="og:description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
 <meta property="og:image" content="https://www.trendinginrealtime.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="675">
 <meta property="og:image:alt" content="TrendingInRealTime.com — twenty news outlets, one ranked view of the day.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TrendingInRealTime.com — what the press is covering right now">
-<meta name="twitter:description" content="Twenty news outlets across the spectrum, read every 30 minutes and clustered by story. See what is breaking, what is gaining coverage, and which outlets are not carrying it.">
+<meta name="twitter:description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
 <meta name="twitter:image" content="https://www.trendinginrealtime.com/og-image.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231A2231'/><g fill='white'><circle cx='16' cy='5.5' r='3.4'/><circle cx='23.4' cy='8.6' r='3.4'/><circle cx='26.5' cy='16' r='3.4'/><circle cx='23.4' cy='23.4' r='3.4'/><circle cx='16' cy='26.5' r='3.4'/></g><g fill='white' opacity='0.3'><circle cx='8.6' cy='23.4' r='3.4'/><circle cx='5.5' cy='16' r='3.4'/><circle cx='8.6' cy='8.6' r='3.4'/></g></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
