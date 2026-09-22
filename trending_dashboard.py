@@ -1577,7 +1577,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .topics-tbl thead th{padding:10px 16px;font-size:13px;font-weight:400;color:var(--ink3);background:var(--surface-low);border-bottom:1px solid var(--surface-high);text-align:left;font-family:'Instrument Sans',sans-serif}
 .topics-tbl thead th.tc{text-align:center}
 .topics-tbl thead th.tr2{text-align:right}
-.th-r{width:64px}.th-s{width:236px}.th-v{width:112px}.th-g{width:80px}
+.th-r{width:76px}.th-v{width:112px}.th-g{width:80px}
 .topics-tbl td{overflow:hidden}
 .t-row{cursor:pointer;transition:background .1s}
 .t-row:hover td{background:rgba(0,0,0,.015)}
@@ -1587,10 +1587,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .x-row td{padding:0;border-bottom:1px solid var(--surface-high)}
 .rn{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:center;display:block}
 .rn-h{color:var(--red)}.rn-n{color:var(--ink-l)}
+.t-when{margin-top:7px;display:flex;justify-content:center}
+.t-when .tag{font-size:11px;font-weight:500;letter-spacing:0;padding:2px 6px}
 .t-sub{font-size:13px;color:var(--ink3);margin-top:4px;line-height:1.45}
 .t-hl{font-family:'Instrument Sans',system-ui,sans-serif;font-size:16px;font-weight:700;line-height:1.35;color:var(--ink);margin-bottom:6px}
 .t-st{font-size:11px;color:var(--ink-m);margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'Instrument Sans',sans-serif}
-.t-tags{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .tag{padding:2px 7px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:700;letter-spacing:.4px;font-family:'Instrument Sans',sans-serif;color:var(--ink-m)}
 .tag.brk{background:rgba(186,3,42,.1);color:var(--red);animation:lp 1.5s infinite}
 .tag.age{background:var(--surface-low);color:var(--ink-l);border:1px solid var(--surface-high)}
@@ -1601,8 +1602,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* Coverage dots: one dot per outlet in the roster, grouped left -> center -> right
    -> not covering. Each group is one element; the repeating radial gradient paints
    its dots, so a 25-outlet row is four spans rather than twenty-five. */
-.cdrow{display:flex;align-items:center;gap:4px;flex-wrap:nowrap}
-.cdots{height:9px;flex:none;background-image:radial-gradient(circle at 4.5px 4.5px,currentColor 2.1px,transparent 2.3px);background-size:9px 9px;background-repeat:repeat-x}
+.cdrow{display:flex;align-items:center;gap:4px;flex-wrap:nowrap;margin-top:9px}
+.cdn{font-size:13px;color:var(--ink3);margin-left:9px;white-space:nowrap}
+.cdots{--dt:9px;height:var(--dt);flex:none;width:calc(var(--n) * var(--dt));
+  background-image:radial-gradient(circle at calc(var(--dt)/2) calc(var(--dt)/2),
+    currentColor calc(var(--dt)*0.233),transparent calc(var(--dt)*0.256));
+  background-size:var(--dt) var(--dt);background-repeat:repeat-x}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
 .sig-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;text-align:right;color:var(--ink);display:block}
 .sig-d{font-size:10px;font-weight:700;text-align:right;font-family:'Instrument Sans',sans-serif;display:block;margin-top:1px}
@@ -1711,22 +1716,26 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   .topics-tbl thead{display:none}
   .topics-tbl tbody tr.t-row{
     display:grid;
-    grid-template-columns:44px 1fr auto;
+    grid-template-columns:52px 1fr auto;
     grid-template-rows:auto auto;
     padding:10px 8px;cursor:pointer;
     border-bottom:1px solid var(--surface-top);background:inherit}
   .topics-tbl tbody tr.t-row td{display:block;overflow:visible;padding:0}
   .topics-tbl tbody tr.t-row td:nth-child(1){grid-column:1;grid-row:1/3;padding-top:2px}
-  .topics-tbl tbody tr.t-row td:nth-child(2){grid-column:2;grid-row:1}
-  .topics-tbl tbody tr.t-row td:nth-child(3){grid-column:2;grid-row:2;padding-top:5px}
-  .topics-tbl tbody tr.t-row td:nth-child(4){display:none}
-  .topics-tbl tbody tr.t-row td:nth-child(5){grid-column:3;grid-row:1/3;padding-left:10px;text-align:right;padding-top:2px}
+  .topics-tbl tbody tr.t-row td:nth-child(2){grid-column:2;grid-row:1/3}
+  .topics-tbl tbody tr.t-row td:nth-child(3){display:none}
+  .topics-tbl tbody tr.t-row td:nth-child(4){grid-column:3;grid-row:1/3;padding-left:10px;text-align:right;padding-top:2px}
   .topics-tbl tbody tr.x-row{display:none}
   .topics-tbl tbody tr.x-row.open{display:block;width:100%}
   .topics-tbl tbody tr.x-row td{display:block;padding:0 8px 12px 52px!important}
   .t-hl{font-size:15px}
   .sig-n{font-size:18px}
   .rn{font-size:20px!important}
+  /* The dot row is a fixed 25 x 9px and cannot shrink, so on a phone the outlet
+     count drops to its own line rather than pushing the page sideways. */
+  .cdrow{flex-wrap:wrap}
+  .cdots{--dt:7px}
+  .cdn{flex-basis:100%;margin-left:0;margin-top:5px}
 }
 
 /* ── Mobile bottom navigation bar ─────────────────────────────────────── */
@@ -1906,12 +1915,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
               <tr>
                 <th class="th-r tc">Rank</th>
                 <th>Headline Intelligence</th>
-                <th class="th-s">Sources</th>
                 <th class="th-v" title="Story trajectory since last refresh. Rising curve = gaining coverage across sources. Flat = no change. Falling = losing momentum.">Velocity</th>
                 <th class="th-g tr2" title="Heat Score = weighted coverage strength. Formula: (sources × 12) + articles + (lead outlets × 20) + (double-confirmed × 10). Higher = more editors are leading with this story.">Signal</th>
               </tr>
             </thead>
-            <tbody id="tl"><tr><td colspan="5" style="padding:32px;text-align:center;color:var(--ink-l)">Loading intelligence…</td></tr></tbody>
+            <tbody id="tl"><tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">Loading intelligence…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2096,7 +2104,7 @@ function leanMaps(srcs){
 }
 function dotGroup(n,colour,label){
   if(!n)return '';
-  return '<span class="cdots" style="width:'+(n*9)+'px;color:'+colour+'" title="'+e(label)+'"></span>';
+  return '<span class="cdots" style="--n:'+n+';color:'+colour+'" title="'+e(label)+'"></span>';
 }
 function dots(srcs){
   const LB=window._LB||{},SN=window._SN||{};
@@ -2109,11 +2117,13 @@ function dots(srcs){
     if(covering.has(id))by[b].push(SN[id]||id); else missing.push(SN[id]||id);
   });
   const nm=n=>n.join(', ');
+  const covered=by.left.length+by.center.length+by.right.length;
   return '<span class="cdrow">'
     +dotGroup(by.left.length,  'var(--ll)','Left of center: '+nm(by.left))
     +dotGroup(by.center.length,'var(--lc)','Center: '+nm(by.center))
     +dotGroup(by.right.length, 'var(--lr)','Right of center: '+nm(by.right))
     +dotGroup(missing.length,  'var(--lo)','Not carrying it: '+nm(missing))
+    +'<span class="cdn">'+covered+' of '+roster.length+' outlets</span>'
     +'</span>';
 }
 function spark(delta,heat,history){
@@ -2159,13 +2169,19 @@ function catBadge(cats){
 }
 function rT(topics){
   const tb=document.getElementById('tl');
-  if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="5" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
+  if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
   tb.innerHTML=topics.map((t,i)=>{
     const hot=i<3,heroSrcs=new Set(t.hero_sources||[]);
     const chips=dots(t.sources||[]);
-    const brkBadge=t.is_breaking?'<span class="tag brk" title="Published within the last 90 minutes">Breaking</span>':'';
+    // One chip under the rank number, always the same shape: the age of the newest
+    // article. Breaking is the same chip in red, not a second wider word — the gutter
+    // is 76px and "Breaking" does not fit it without pushing the whole table over.
     const am=t.age_minutes;
-    const ageBadge=(!t.is_breaking&&am!=null)?'<span class="tag age" title="Most recent article in this cluster was published '+(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago">'+(am<60?am+'m':Math.floor(am/60)+'h')+'</span>':'';
+    const ageTxt=am==null?'':(am<60?am+'m':Math.floor(am/60)+'h');
+    const ageWords=am==null?'':(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago';
+    const whenBadge=t.is_breaking
+      ?'<span class="tag brk" title="Breaking \u2014 newest article published '+(ageWords||'within the last 90 minutes')+'">'+(ageTxt||'new')+'</span>'
+      :(am!=null?'<span class="tag age" title="Most recent article in this cluster was published '+ageWords+'">'+ageTxt+'</span>':'');
     const SNm=window._SN||{};
     const leadNames=(t.hero_sources||[]).map(x=>SNm[x]||x);
     const catTxt=(Array.isArray(t.category)?t.category:[t.category||'national'])
@@ -2185,14 +2201,14 @@ function rT(topics){
     }).join('');
     const rn=(i<9?'0':'')+(i+1);
     return '<tr class="t-row" onclick="tg('+i+')">'
-      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span></td>'
+      +'<td><span class="rn '+(hot?'rn-h':'rn-n')+'">'+rn+'</span>'
+        +(whenBadge?'<div class="t-when">'+whenBadge+'</div>':'')+'</td>'
       +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-sub">'+subLine+'</div>'
-        +'<div class="t-tags">'+brkBadge+ageBadge+'</div></td>'
-      +'<td><div class="chips">'+chips+'</div></td>'
+        +chips+'</td>'
       +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
       +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
       +'</tr>'
-      +'<tr id="ta'+i+'" class="x-row"><td colspan="5"><div class="x-inner">'+arts+'</div></td></tr>';
+      +'<tr id="ta'+i+'" class="x-row"><td colspan="4"><div class="x-inner">'+arts+'</div></td></tr>';
   }).join('');
 }
 function tg(i){

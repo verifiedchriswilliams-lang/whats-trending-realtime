@@ -314,6 +314,18 @@ and 3 (structural, and new capability) are not started.
 - **Category and lead outlets moved to one subtitle line** ("National · led by AP News,
   NPR, NBC News and 5 more"), replacing the stacked category pill and the heavy dark
   "Lead at N outlets" badge. Capped at three names, as the artboard shows.
+- **The Sources column is gone; the dots sit under the subtitle** (Sept 2026). The row now
+  reads as one argument — headline, who is leading it, then how broadly it is carried —
+  instead of asking the eye to pair a sentence with a separate column. It also gives the
+  headline the retired column's 236px, so titles wrap less. The dot tile is the `--dt`
+  token on `.cdots` (9px desktop, 7px ≤600px) and group widths are `calc(var(--n) *
+  var(--dt))`, so the whole row scales without any group wrapping — a wrapped group
+  destroys the single-shape reading. `.cdn` ("7 of 25 outlets") carries the label the
+  column header used to.
+- **Age lives under the rank number** (`.t-when`), not in the headline cell. Rank and age
+  are both one-glance scalars — how big, how new — so they share the left gutter. Breaking
+  is the *same* chip in red with the pulse, never the wider word "Breaking": the gutter is
+  76px and the word does not fit it. The word stays in the tooltip.
 
 **Fixed: mobile rendered every expanded row permanently.** `.topics-tbl tbody tr.x-row`
 in the ≤600px block set `display:block` unconditionally, out-specifying `.x-row{display:none}`,
