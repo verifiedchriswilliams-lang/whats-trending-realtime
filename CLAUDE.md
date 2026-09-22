@@ -474,7 +474,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 | The Hill | ✅ 15 | ❌ 403 | `homenews/feed`. Homepage 403s to servers everywhere, not just here. See `scripts/probe_403.py`. |
 | Wall Street Journal | ✅ 20 | ➖ | Google News RSS — every `feeds.a.dj.com` feed is frozen at 27 Jan 2025. Paywalled homepage 401s. |
 | Bloomberg | ✅ 20 | ⚠️ 403 here | Added Sept 2026. `feeds.bloomberg.com/politics/news.rss`. Scrape 403s in the sandbox; unconfirmed on Railway. |
-| Washington Times | ❌ 0 | ❌ 403 | **Known intermittent block:** RSS and homepage both 403 to datacentre IPs, though it has served from Railway as recently as this month. Needs a Google News RSS fallback or removal. |
+| Washington Times | ⚠️ 0 here | ❌ 403 | **Sandbox-only block:** RSS and homepage both 403 from this container, but production reported **25/25 sources live** right after this deploy, so Railway's IP is fine. Still worth a Google News RSS fallback — it has failed from Railway before. |
 | Washington Examiner | ✅ 6 | ✅ 128/90 | Google News RSS — a thin pool on this cycle. Scrape is strong. |
 | National Review | ✅ 13 | ➖ | Direct RSS. Homepage 403s server-side, so RSS-only. |
 | The Free Press | ✅ 15 | ➖ | `thefp.com/feed`. Not in `SCRAPE_SOURCES`. |
