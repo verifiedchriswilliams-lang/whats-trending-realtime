@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-TrendingInRealTime.com — Editorial Intelligence Dashboard  v2
+TrendingInRealTime.com — what the press is covering right now  v2
 Newspaper theme. Clustering fix. 15 sources incl. NYT.
 """
 
@@ -1544,15 +1544,15 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* ── Mobile top header + hamburger drawer ──────────────────────────────── */
 .mob-hdr{display:none;position:fixed;top:0;left:0;right:0;height:48px;z-index:300;
   background:#fff;border-bottom:2px solid var(--surface-top);
-  align-items:center;justify-content:space-between;padding:0 16px 0 14px}
-.mob-hdr-brand{display:flex;align-items:center;gap:9px}
+  align-items:center;justify-content:space-between;gap:12px;padding:0 16px 0 14px}
+.mob-hdr-brand{display:flex;align-items:center;gap:9px;min-width:0}
 .mob-hdr-icon{width:30px;height:30px;border-radius:2px;background:var(--navy);
   display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.mob-hdr-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:15px;font-weight:700;color:var(--navy-d)}
-.mob-hdr-right{display:flex;align-items:center;gap:10px}
+.mob-hdr-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:14px;font-weight:700;color:var(--navy-d);white-space:nowrap}
+.mob-hdr-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .mob-live-pill{display:flex;align-items:center;gap:4px}
 .mob-live-txt{font-size:8px;font-weight:800;letter-spacing:1.5px;color:var(--red);}
-.mob-cd{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums}
+.mob-cd{font-size:10px;color:var(--ink-l);font-variant-numeric:tabular-nums;white-space:nowrap}
 .mob-hbg{background:none;border:none;cursor:pointer;padding:4px;color:var(--navy-d);
   display:flex;align-items:center;justify-content:center;border-radius:4px}
 .mob-hbg .ms{font-size:26px}
@@ -1654,7 +1654,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 27 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Reading 27 sources · Ranking what the press is covering…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
@@ -1665,7 +1665,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
       <circle cx="16" cy="26.5" r="2.6"/></g>
       <g fill="#fff" opacity=".28"><circle cx="8.6" cy="23.4" r="2.6"/><circle cx="5.5" cy="16" r="2.6"/>
       <circle cx="8.6" cy="8.6" r="2.6"/></g></svg></div>
-    <span class="mob-hdr-title">Intelligence Ops</span>
+    <span class="mob-hdr-title">TrendingInRealTime</span>
   </div>
   <div class="mob-hdr-right">
     <div class="mob-live-pill"><span class="live-dot"></span><span class="mob-live-txt">Live</span></div>
@@ -1682,7 +1682,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 <!-- Mobile nav drawer (slides in from right) -->
 <div class="mob-drawer" id="mob-drawer">
   <nav class="sb-nav" style="gap:4px">
-    <a href="#" class="sb-lnk act" id="drw-topics" onclick="switchPage('dash');closeDrawer();return false"><span>Topic Intelligence</span>
+    <a href="#" class="sb-lnk act" id="drw-topics" onclick="switchPage('dash');closeDrawer();return false"><span>Trending</span>
     </a>
     <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false"><span>Live Source Feed</span>
     </a>
@@ -1705,14 +1705,14 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
         <circle cx="8.6" cy="23.4" r="2.6"/><circle cx="5.5" cy="16" r="2.6"/>
         <circle cx="8.6" cy="8.6" r="2.6"/>
       </g></svg></div>
-    <div><div class="sb-title">Intelligence Ops</div><div class="sb-sub">Global Newsroom</div></div>
+    <div><div class="sb-title">TrendingInRealTime</div><div class="sb-sub">what the press is covering right now</div></div>
   </div>
   <div class="sb-live">
     <div class="sb-live-pill"><span class="live-dot"></span><span class="sb-live-txt">Live</span></div>
     <span class="sb-live-time" id="cd"></span>
   </div>
   <nav class="sb-nav">
-    <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false"><span>Topic Intelligence</span>
+    <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false"><span>Trending</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false"><span>Live Source Feed</span>
     </a>
@@ -1748,12 +1748,12 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
             <thead>
               <tr>
                 <th class="th-r tc">Rank</th>
-                <th>Headline Intelligence</th>
+                <th>Story</th>
                 <th class="th-v" title="Story trajectory since last refresh. Rising curve = gaining coverage across sources. Flat = no change. Falling = losing momentum.">Velocity</th>
                 <th class="th-g tr2" title="Heat Score = weighted coverage strength. Formula: (sources × 12) + articles + (lead outlets × 20) + (double-confirmed × 10). Higher = more editors are leading with this story.">Signal</th>
               </tr>
             </thead>
-            <tbody id="tl"><tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">Loading intelligence…</td></tr></tbody>
+            <tbody id="tl"><tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">Loading…</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1788,7 +1788,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 <!-- Mobile bottom navigation — visible on screens ≤900px -->
 <nav class="mob-nav">
-  <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false"><span>Topics</span>
+  <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false"><span>Trending</span>
   </a>
   <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false"><span>Sources</span>
   </a>
@@ -1887,7 +1887,7 @@ function rLH(arts){
 }
 function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
 function ta(iso){if(!iso)return'';const d=Math.floor((Date.now()-new Date(iso))/1000);if(d<60)return d+'s ago';if(d<3600)return Math.floor(d/60)+'m ago';return Math.floor(d/3600)+'h ago'}
-function fc(ms){if(ms<=0)return'Refreshing…';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);return m+':'+String(s).padStart(2,'0')+' Refresh'}
+function fc(ms,bare){if(ms<=0)return bare?'…':'Refreshing…';const m=Math.floor(ms/60000),s=Math.floor((ms%60000)/1000);const t=m+':'+String(s).padStart(2,'0');return bare?t:t+' Refresh'}
 // Roster maps used by the coverage dots. Must run before rT() paints the topics list.
 function leanMaps(srcs){
   window._L={};window._LB={};window._SN={};
@@ -2091,7 +2091,7 @@ async function fr(){
 setInterval(()=>{
   const r=_n-Date.now(),txt=fc(r);
   document.getElementById('cd').textContent=txt;
-  const cdm=document.getElementById('cd-mob');if(cdm)cdm.textContent=txt;
+  const cdm=document.getElementById('cd-mob');if(cdm)cdm.textContent=fc(r,true);
   if(r<=0){_n=Date.now()+30*60*1000;ld()}
 },1000);
 

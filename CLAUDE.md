@@ -325,6 +325,15 @@ so all 20 stories rendered their full article lists inline with no way to collap
 The mobile page was ~68,000px tall. It is now gated on `.open` like the desktop rule, and
 the page is ~13,800px. If you touch that media query, keep the `.open` gate.
 
+**Naming (Sept 2026).** The app says what it is, in the same words everywhere: the
+sidebar is **TrendingInRealTime / "what the press is covering right now"**, matching the
+`<title>` and the share card. It previously read "Intelligence Ops / Global Newsroom",
+with "Topic Intelligence" in the nav and "Headline Intelligence" as a column header —
+Daily Wire–era naming for an internal newsroom tool, aimed at an audience that no longer
+exists. The nav item is **Trending** and the column is **Story**. This is the same rule
+Phase 1 applied to `Natl`/`Biz`: a general reader should not have to decode a label. Do
+not reintroduce "intelligence" as product vocabulary.
+
 **Identity and social metadata (Sept 2026):**
 - **Favicon** is the identity mark — eight circles on a ring, five solid and three at 30%,
   empty centre, white on `#1A2231`, as an inline SVG data URI. It replaced a maroon
@@ -350,7 +359,7 @@ sidebar remains where the design has a single scrolling column.
 The app uses a **fixed left sidebar** for navigation (no top nav bar). The sidebar collapses on screens ≤ 900px, replaced by a **mobile bottom nav bar** with icon+label items.
 
 **Sidebar nav items (top to bottom):**
-1. **Topic Intelligence** (`local_fire_department`) — Top Trending Topics dashboard (main view)
+1. **Trending** — Top Trending Topics dashboard (main view)
 2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
 3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Twitter/Memeorandum sidebar on the Dashboard page
 4. **Last Hour** (`schedule`) — recent articles page, with live article count badge
@@ -360,7 +369,7 @@ the page by political side has to be symmetric in both structure *and* data qual
 two could not be, because Reddit rate-limited one side harder than the other on most
 cycles. The dashboard's own coverage dots carry that signal instead.
 
-The **LIVE indicator + countdown to refresh** lives in the sidebar between the Intelligence Ops logo and the nav items (`.sb-live` element). There is no top header bar — content starts at the very top of the viewport.
+The **LIVE indicator + countdown to refresh** lives in the sidebar between the wordmark and the nav items (`.sb-live` element). There is no top header bar on desktop — content starts at the very top of the viewport. On a phone the same countdown sits in `.mob-hdr` and shows the timer alone (`fc(ms, bare=true)`); the sidebar's longer "29:16 Refresh" form does not fit beside an 18-character wordmark, a live pill and the Menu button at 390px.
 
 ### Dashboard — Top Trending Topics
 - Ranked by heat score (highest first)
