@@ -40,6 +40,11 @@ SCRAPE_SOURCES = {
     "washtimes":  "https://www.washingtontimes.com",
     "cbsnews":    "https://www.cbsnews.com",
     "washexam":   "https://www.washingtonexaminer.com",
+    "bloomberg":  "https://www.bloomberg.com",
+    "dispatch":   "https://thedispatch.com",
+    "foxbusiness":"https://www.foxbusiness.com",
+    "dailymail":  "https://www.dailymail.co.uk/ushome/index.html",
+    "freebeacon": "https://freebeacon.com",
     # Verified Sept 2026: wapo (read timeout), wsj (401 paywall), axios, politico and
     # natreview (403) all refuse server-side scraping, so they are RSS-only.
     "bbc":        "https://www.bbc.com/news",
@@ -47,32 +52,54 @@ SCRAPE_SOURCES = {
     "usatoday":   "https://www.usatoday.com",
 }
 
+# ── Media bias ratings ───────────────────────────────────────────────────────
+# `lean` is the three-bucket value the UI renders. `allsides` is the verbatim
+# five-tier AllSides rating, kept for attribution so the site can cite a source
+# rather than assert a judgement of its own.
+#
+# AllSides rates PERSPECTIVE ONLY, on online US political content — explicitly
+# not accuracy or credibility, and not TV, print or radio. Say so wherever the
+# ratings appear; do not present a tier as a quality signal.
+#
+# This is a dated snapshot, not a live feed. Re-check it and bump RATINGS_AS_OF.
+RATINGS_SOURCE = "AllSides"
+RATINGS_AS_OF  = "2026-09-22"
+RATINGS_URL    = "https://www.allsides.com/media-bias/media-bias-ratings"
+
 SOURCES = [
-    # Tier 1 — editorial homepage / top-story feeds where available
-    {"id":"foxnews",    "name":"Fox News",          "rss":"https://feeds.foxnews.com/foxnews/latest", "lean":"right", "tier":1, "rss_limit":50},
-    {"id":"cnn",        "name":"CNN",               "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US",  "lean":"left", "tier":1},
-    {"id":"nytimes",    "name":"New York Times",    "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml","lean":"left",         "tier":1},
-    {"id":"nypost",     "name":"NY Post",           "rss":"https://nypost.com/feed/",                                 "lean":"right",        "tier":1},
-    {"id":"ap",         "name":"AP News",           "rss":"https://news.google.com/rss/search?q=site:apnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
-    {"id":"reuters",    "name":"Reuters",           "rss":"https://news.google.com/rss/search?q=site:reuters.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":1},
-    {"id":"nbcnews",    "name":"NBC News",          "rss":"https://feeds.nbcnews.com/nbcnews/public/news",            "lean":"left",         "tier":1},
-    # Tier 2 — strong opinion/political feeds
-    {"id":"thehill",    "name":"The Hill",          "rss":"https://thehill.com/homenews/feed/",                        "lean":"center",       "tier":2},
-    {"id":"washtimes",  "name":"Washington Times",  "rss":"https://www.washingtontimes.com/rss/headlines/news/",      "lean":"right",        "tier":2},
-    # Tier 3 — new additions
-    {"id":"cbsnews",    "name":"CBS News",          "rss":"https://www.cbsnews.com/latest/rss/main",                  "lean":"center-left",  "tier":2},
-    {"id":"washexam",   "name":"Washington Examiner","rss":"https://news.google.com/rss/search?q=site:washingtonexaminer.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "tier":2},
-    {"id":"freepress",  "name":"The Free Press",    "rss":"https://www.thefp.com/feed",                               "lean":"center-right", "tier":2},
-    # Added Sept 2026 for the general-market rebalance. All eight need a
-    # scripts/qa_sources.py run to confirm the feed URLs are still correct.
-    {"id":"wapo",       "name":"Washington Post",  "rss":"https://feeds.washingtonpost.com/rss/national",            "lean":"left",         "tier":1},
-    {"id":"wsj",        "name":"Wall Street Journal","rss":"https://news.google.com/rss/search?q=site:wsj.com&ceid=US:en&hl=en-US&gl=US", "lean":"center-right", "tier":1},
-    {"id":"bbc",        "name":"BBC News",         "rss":"https://feeds.bbci.co.uk/news/rss.xml",                    "lean":"center",       "tier":1},
-    {"id":"npr",        "name":"NPR",              "rss":"https://news.google.com/rss/search?q=site:npr.org&ceid=US:en&hl=en-US&gl=US", "lean":"center-left", "tier":1},
-    {"id":"axios",      "name":"Axios",            "rss":"https://api.axios.com/feed/",                              "lean":"center",       "tier":2},
-    {"id":"usatoday",   "name":"USA Today",        "rss":"https://news.google.com/rss/search?q=site:usatoday.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "tier":2},
-    {"id":"politico",   "name":"Politico",         "rss":"https://news.google.com/rss/search?q=site:politico.com&ceid=US:en&hl=en-US&gl=US", "lean":"center-left", "tier":2},
-    {"id":"natreview",  "name":"National Review",  "rss":"https://www.nationalreview.com/feed/",                     "lean":"right",        "tier":2},
+    # ── Left of centre (10) — all rated Lean Left ───────────────────────────
+    {"id":"cnn",        "name":"CNN",                   "rss":"https://news.google.com/rss/search?q=site:cnn.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"nytimes",    "name":"New York Times",        "rss":"https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"wapo",       "name":"Washington Post",       "rss":"https://feeds.washingtonpost.com/rss/national", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"nbcnews",    "name":"NBC News",              "rss":"https://feeds.nbcnews.com/nbcnews/public/news", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"cbsnews",    "name":"CBS News",              "rss":"https://www.cbsnews.com/latest/rss/main", "lean":"left", "allsides":"Lean Left", "tier":2},
+    {"id":"npr",        "name":"NPR",                   "rss":"https://news.google.com/rss/search?q=site:npr.org&ceid=US:en&hl=en-US&gl=US", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"ap",         "name":"AP News",               "rss":"https://news.google.com/rss/search?q=site:apnews.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "allsides":"Lean Left", "tier":1},
+    {"id":"axios",      "name":"Axios",                 "rss":"https://api.axios.com/feed/", "lean":"left", "allsides":"Lean Left", "tier":2},
+    {"id":"usatoday",   "name":"USA Today",             "rss":"https://news.google.com/rss/search?q=site:usatoday.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "allsides":"Lean Left", "tier":2},
+    {"id":"politico",   "name":"Politico",              "rss":"https://news.google.com/rss/search?q=site:politico.com&ceid=US:en&hl=en-US&gl=US", "lean":"left", "allsides":"Lean Left", "tier":2},
+
+    # ── Centre (5) ──────────────────────────────────────────────────────────
+    {"id":"reuters",    "name":"Reuters",               "rss":"https://news.google.com/rss/search?q=site:reuters.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "allsides":"Center", "tier":1},
+    {"id":"bbc",        "name":"BBC News",              "rss":"https://feeds.bbci.co.uk/news/rss.xml", "lean":"center", "allsides":"Center", "tier":1},
+    {"id":"thehill",    "name":"The Hill",              "rss":"https://thehill.com/homenews/feed/", "lean":"center", "allsides":"Center", "tier":2},
+    # AllSides rates WSJ's news operation Center, separately from its opinion page.
+    {"id":"wsj",        "name":"Wall Street Journal",   "rss":"https://news.google.com/rss/search?q=site:wsj.com&ceid=US:en&hl=en-US&gl=US", "lean":"center", "allsides":"Center", "tier":1},
+    {"id":"bloomberg",  "name":"Bloomberg",             "rss":"https://feeds.bloomberg.com/politics/news.rss", "lean":"center", "allsides":"Center", "tier":1},
+
+    # ── Right of centre (10) ────────────────────────────────────────────────
+    {"id":"washtimes",  "name":"Washington Times",      "rss":"https://www.washingtontimes.com/rss/headlines/news/", "lean":"right", "allsides":"Lean Right", "tier":2},
+    {"id":"washexam",   "name":"Washington Examiner",   "rss":"https://news.google.com/rss/search?q=site:washingtonexaminer.com&ceid=US:en&hl=en-US&gl=US", "lean":"right", "allsides":"Lean Right", "tier":2},
+    {"id":"natreview",  "name":"National Review",       "rss":"https://www.nationalreview.com/feed/", "lean":"right", "allsides":"Lean Right", "tier":2},
+    {"id":"freepress",  "name":"The Free Press",        "rss":"https://www.thefp.com/feed", "lean":"right", "allsides":"Lean Right", "tier":2},
+    {"id":"dispatch",   "name":"The Dispatch",          "rss":"https://thedispatch.com/feed/", "lean":"right", "allsides":"Lean Right", "tier":2},
+    # AllSides rates Fox Business separately from Fox News; it is a distinct newsroom.
+    {"id":"foxbusiness","name":"Fox Business",          "rss":"https://moxie.foxbusiness.com/google-publisher/latest.xml", "lean":"right", "allsides":"Lean Right", "tier":2},
+    # US edition. Homepage is celebrity/lifestyle-heavy, so it stays in SKIP_INJECT.
+    {"id":"dailymail",  "name":"Daily Mail",            "rss":"https://www.dailymail.co.uk/ushome/index.rss", "lean":"right", "allsides":"Lean Right", "tier":2},
+    {"id":"foxnews",    "name":"Fox News",              "rss":"https://feeds.foxnews.com/foxnews/latest", "lean":"right", "allsides":"Right", "tier":1, "rss_limit":50},
+    {"id":"nypost",     "name":"NY Post",               "rss":"https://nypost.com/feed/", "lean":"right", "allsides":"Right", "tier":1},
+    {"id":"freebeacon", "name":"Washington Free Beacon","rss":"https://freebeacon.com/feed/", "lean":"right", "allsides":"Right", "tier":2},
 ]
 
 # Lean colours hold constant lightness (0.62) and chroma (0.075) and differ only in
@@ -84,16 +111,16 @@ SOURCES = [
 # Previously "left" and "center-left" shared the same hex, so those tiers were
 # indistinguishable, and right (#C41230) was visibly darker than left (#1D4ED8).
 LEAN = {
-    "right":        {"label":"Right",        "color":"oklch(0.62 0.075 35)"},
-    "center-right": {"label":"Center-right", "color":"oklch(0.62 0.075 35)"},
-    "center":       {"label":"Center",       "color":"oklch(0.66 0.012 90)"},
-    "left":         {"label":"Left",         "color":"oklch(0.62 0.075 255)"},
-    "center-left":  {"label":"Center-left",  "color":"oklch(0.62 0.075 255)"},
+    "left":   {"label":"Left of center",  "color":"oklch(0.62 0.075 255)"},
+    "center": {"label":"Center",          "color":"oklch(0.66 0.012 90)"},
+    "right":  {"label":"Right of center", "color":"oklch(0.62 0.075 35)"},
 }
 
-SOURCE_ORDER = ["foxnews","nypost","wsj","washtimes","washexam","natreview","freepress",
-                "ap","reuters","bbc","axios","usatoday","thehill",
-                "nytimes","wapo","npr","politico","nbcnews","cbsnews","cnn"]
+SOURCE_ORDER = ["foxnews","nypost","freebeacon","washtimes","washexam","natreview",
+                "dispatch","foxbusiness","dailymail","freepress",
+                "reuters","bbc","thehill","wsj","bloomberg",
+                "ap","npr","nytimes","wapo","nbcnews","cbsnews","cnn","axios",
+                "usatoday","politico"]
 
 STOP_WORDS = {
     # --- Function words ---
@@ -718,9 +745,10 @@ def extract_keywords(title):
 
 # Preferred source order for choosing the most readable cluster headline label.
 # AP/Reuters/NYT give clean, neutral, descriptive headlines.
-_LABEL_SRC_PREF = ["ap","reuters","bbc","npr","nytimes","wapo","wsj","nbcnews","cbsnews",
-                   "usatoday","axios","politico","cnn","thehill","foxnews","washtimes",
-                   "washexam","nypost","natreview","freepress"]
+_LABEL_SRC_PREF = ["ap","reuters","bbc","bloomberg","npr","nytimes","wapo","wsj",
+                   "nbcnews","cbsnews","usatoday","axios","politico","cnn","thehill",
+                   "foxnews","foxbusiness","washtimes","washexam","nypost","dispatch",
+                   "natreview","freebeacon","freepress","dailymail"]
 
 def best_label(kw, articles):
     """Return the most representative real headline from the cluster.
@@ -1110,7 +1138,7 @@ def refresh_data():
     # Any source whose scrape yields no url_map is skipped automatically, so this
     # set is only for sources that scrape fine but whose homepage mix is unreliable.
     INJECT_LIMIT    = 10
-    SKIP_INJECT     = set()
+    SKIP_INJECT     = {'dailymail'}
 
     # Junk filter for synthetic injection — blocks nav elements, promos, and ads
     # that pass the URL quality gate (depth ≥ 2) but aren't actual news headlines.
@@ -1437,20 +1465,20 @@ HTML = r"""<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>TrendingInRealTime.com — what the press is covering right now</title>
-<meta name="description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
+<meta name="description" content="Most of us read two or three outlets and assume that's the news. See what all 25 are running right now, what's genuinely major, and what your sources skipped.">
 <link rel="canonical" href="https://www.trendinginrealtime.com/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="TrendingInRealTime.com">
 <meta property="og:url" content="https://www.trendinginrealtime.com/">
 <meta property="og:title" content="TrendingInRealTime.com — what the press is covering right now">
-<meta property="og:description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
+<meta property="og:description" content="Most of us read two or three outlets and assume that's the news. See what all 25 are running right now, what's genuinely major, and what your sources skipped.">
 <meta property="og:image" content="https://www.trendinginrealtime.com/og-image.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="675">
-<meta property="og:image:alt" content="TrendingInRealTime.com — twenty news outlets, one ranked view of the day.">
+<meta property="og:image:alt" content="TrendingInRealTime.com — twenty-five news outlets, one ranked view of the day.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="TrendingInRealTime.com — what the press is covering right now">
-<meta name="twitter:description" content="Most of us read two or three outlets and assume that's the news. See what all 20 are running right now, what's genuinely major, and what your sources skipped.">
+<meta name="twitter:description" content="Most of us read two or three outlets and assume that's the news. See what all 25 are running right now, what's genuinely major, and what your sources skipped.">
 <meta name="twitter:image" content="https://www.trendinginrealtime.com/og-image.png">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%231A2231'/><g fill='white'><circle cx='16' cy='5.5' r='3.4'/><circle cx='23.4' cy='8.6' r='3.4'/><circle cx='26.5' cy='16' r='3.4'/><circle cx='23.4' cy='23.4' r='3.4'/><circle cx='16' cy='26.5' r='3.4'/></g><g fill='white' opacity='0.3'><circle cx='8.6' cy='23.4' r='3.4'/><circle cx='5.5' cy='16' r='3.4'/><circle cx='8.6' cy='8.6' r='3.4'/></g></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1572,7 +1600,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .tag.cat-crime,.tag.cat-tech,.tag.cat-health{background:none;color:var(--ink3);padding:0}
 /* Coverage dots: one dot per outlet in the roster, grouped left -> center -> right
    -> not covering. Each group is one element; the repeating radial gradient paints
-   its dots, so a 20-outlet row is four spans rather than twenty. */
+   its dots, so a 25-outlet row is four spans rather than twenty-five. */
 .cdrow{display:flex;align-items:center;gap:4px;flex-wrap:nowrap}
 .cdots{height:9px;flex:none;background-image:radial-gradient(circle at 4.5px 4.5px,currentColor 2.1px,transparent 2.3px);background-size:9px 9px;background-repeat:repeat-x}
 .chips{display:flex;gap:3px;flex-wrap:wrap}
@@ -1771,7 +1799,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 }
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 30 sources · Building intelligence report…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Scanning 35 sources · Building intelligence report…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
@@ -1911,7 +1939,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 <div class="lh-page" id="lh-page">
   <div class="lh-hdr">
     <h2>Last Hour</h2>
-    <p>Every article published across all 15 outlets in the past 60 minutes · newest first</p>
+    <p>Every article published across all 25 outlets in the past 60 minutes · newest first</p>
   </div>
   <div id="lh-feed"><div class="lh-empty">Loading…</div></div>
 </div>
@@ -1960,8 +1988,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 <button class="fab" onclick="fr()" title="Refresh data">Refresh</button>
 
 <script>
-const SO=['ap','reuters','bbc','nytimes','wapo','wsj','npr','cnn','nbcnews','cbsnews','politico','axios','usatoday','thehill','foxnews','nypost','washtimes','washexam','natreview','freepress'];
-const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',thehill:'HILL',washtimes:'WT',cbsnews:'CBS',washexam:'EXAM',freepress:'FP',wapo:'WAPO',wsj:'WSJ',bbc:'BBC',npr:'NPR',axios:'AXIOS',usatoday:'USAT',politico:'POL',natreview:'NR'};
+const SO=['ap','reuters','bbc','bloomberg','nytimes','wapo','wsj','npr','cnn','nbcnews','cbsnews','politico','axios','usatoday','thehill','foxnews','nypost','washtimes','washexam','natreview','dispatch','foxbusiness','dailymail','freebeacon','freepress'];
+const SA={foxnews:'FOX',cnn:'CNN',nytimes:'NYT',nypost:'NYP',ap:'AP',reuters:'REU',nbcnews:'NBC',thehill:'HILL',washtimes:'WT',cbsnews:'CBS',washexam:'EXAM',freepress:'FP',wapo:'WAPO',wsj:'WSJ',bbc:'BBC',npr:'NPR',axios:'AXIOS',usatoday:'USAT',politico:'POL',natreview:'NR',bloomberg:'BBG',dispatch:'DISP',foxbusiness:'FOXB',dailymail:'DM',freebeacon:'WFB'};
 let _n=Date.now()+30*60*1000,_lastTs=null,_lastData=null,_page='dash';
 function switchPage(pg, scrollTo){
   _page=pg;
@@ -2061,8 +2089,9 @@ function leanMaps(srcs){
   window._L={};window._LB={};window._SN={};
   Object.entries(srcs||{}).forEach(([id,s])=>{
     window._L[id]=s.lean_color; window._SN[id]=s.name||id;
-    const l=s.lean||'center';
-    window._LB[id]=l.indexOf('left')>=0?'left':l.indexOf('right')>=0?'right':'center';
+    // `lean` is already the three-bucket display value; AllSides' five-tier label
+    // rides along on s.allsides for attribution.
+    window._LB[id]=s.lean||'center';
   });
 }
 function dotGroup(n,colour,label){
@@ -2263,7 +2292,7 @@ async function ld(){
     document.getElementById('lu').textContent=d.last_updated?'Updated '+ta(d.last_updated):'—';
     const now=new Date();
     document.getElementById('ed').textContent=now.toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-    document.getElementById('es').textContent=(d.sources_live||0)+' of 15 reporting';
+    document.getElementById('es').textContent=(d.sources_live||0)+' of '+SO.length+' reporting';
     if(d.last_updated){const sn=new Date(d.last_updated).getTime()+30*60*1000;if(sn>Date.now())_n=sn;}
     _lastData=d;
     if(d.last_updated!==_lastTs){

@@ -2,9 +2,9 @@
 
 ## Project Purpose
 
-A real-time news dashboard for a general audience. It aggregates RSS feeds from 20 major
-news outlets — balanced across right, center, and left — plus
-liberal and conservative Reddit, Twitter/X trends, and Memeorandum (30 sources
+A real-time news dashboard for a general audience. It aggregates RSS feeds from 25 major
+news outlets — balanced 10 right / 5 center / 10 left on AllSides ratings — plus
+liberal and conservative Reddit, Twitter/X trends, and Memeorandum (35 sources
 total) every 30 minutes, clusters stories by specific topic (not generic keywords), and
 ranks them by how widely and prominently they are being covered.
 
@@ -12,8 +12,8 @@ ranks them by how widely and prominently they are being covered.
 the page and see, at a glance, what is happening in the world right now and which stories
 are gaining coverage across the press.
 
-**Editorial stance:** None. Sources are chosen for reputation and balanced across the
-political spectrum. The Red Trends and Blue Trends pages are symmetric by design — neither
+**Editorial stance:** None. Sources are chosen for reputation and reach, and balanced
+across the political spectrum using AllSides ratings rather than our own judgement. The Red Trends and Blue Trends pages are symmetric by design — neither
 carries a positive or negative connotation. They simply show what is generating engagement
 on each side.
 
@@ -38,10 +38,10 @@ CLAUDE.md               ← this file
 **Stack:**
 - Python 3.13 (Railway auto-detected — do NOT add runtime.txt, it breaks the build)
 - Flask for HTTP serving
-- feedparser for RSS ingestion (18 news sources + 4 Reddit subreddits, concurrent via ThreadPoolExecutor)
-- requests + BeautifulSoup4 for homepage scraping (13 sources)
+- feedparser for RSS ingestion (25 news sources + 8 Reddit subreddits, concurrent via ThreadPoolExecutor)
+- requests + BeautifulSoup4 for homepage scraping (18 sources in `SCRAPE_SOURCES`)
 - Memeorandum political aggregator via HTML scrape (surfaces stories driving pundit conversation)
-- Reddit RSS feeds for 4 liberal subreddits (politics, progressive, liberal, democrats) via feedparser
+- Reddit RSS feeds for 4 liberal + 4 conservative subreddits via feedparser
 - gunicorn for production serving (via Procfile)
 - Railway for hosting, GitHub for version control
 
@@ -124,46 +124,88 @@ This replaced a naive approach that keyed history by cluster label text, which b
 
 ---
 
-## Data Sources (20 news RSS + 10 supplemental = 30 total)
+## Data Sources (25 news RSS + 10 supplemental = 35 total)
 
-Sources are chosen for reputation and balanced across the political spectrum:
-**7 right / 6 center / 7 left.** `lean` drives the colour coding throughout the UI.
+Sources are chosen for reputation and reach, and balanced across the political spectrum:
+**10 left of center / 5 center / 10 right of center.** `lean` is the three-bucket value
+that drives the colour coding throughout the UI.
+
+### Bias ratings — AllSides
+
+The roster's political placement is **not our judgement**. Every outlet carries the
+verbatim [AllSides](https://www.allsides.com/media-bias/media-bias-ratings) rating in the
+`allsides` field, snapshotted **2026-09-22** (`RATINGS_SOURCE`, `RATINGS_AS_OF`,
+`RATINGS_URL` at the top of `trending_dashboard.py`). AllSides publishes five tiers; we
+collapse Left + Lean Left into `left` and Right + Lean Right into `right` for display, so
+the UI has three buckets instead of five.
+
+Snapshot composition: **10 Lean Left · 5 Center · 7 Lean Right · 3 Right.** No outlet in
+the roster currently carries AllSides' full Left rating.
+
+AllSides rates **perspective only** — explicitly *not* accuracy, credibility or quality —
+and only online US political content. Any UI copy that cites the ratings must say so.
+
+**How we got to 10/5/10 (Sept 2026):** applying the AllSides snapshot to the previous
+twenty-source roster showed it was actually **10 left / 4 center / 6 right**, not the
+7/6/7 we had claimed — our own hand-assigned leans had been wrong on 11 of 20, in a
+direction that manufactured apparent balance. That also gave left-of-center stories a
+10-dot coverage ceiling against 6 for the right, a 67% measurement advantage. The fix was
+**additive**: nothing was removed, five outlets were added (Bloomberg, The Dispatch, Fox
+Business, Daily Mail, Washington Free Beacon) to reach 10/5/10.
+
+Considered and rejected for the right-hand additions: Epoch Times, Newsmax, OAN, The
+Post Millennial, Breitbart and Townhall. Daily Mail was included on **reach** grounds —
+it is a large outlet with a real newsroom and reporting staff — which is why the
+selection criterion is reputation *and* reach, not reputation alone.
 
 ### News Outlets
 
-| ID | Name | RSS Feed | Lean | Tier |
-|---|---|---|---|---|
-| ap | AP News | Google News RSS (site:apnews.com) | Center | 1 |
-| reuters | Reuters | Google News RSS (site:reuters.com) | Center | 1 |
-| bbc | BBC News | feeds.bbci.co.uk/news/rss.xml | Center | 1 |
-| npr | NPR | Google News RSS (site:npr.org) | Center-Left | 1 |
-| nytimes | New York Times | rss.nytimes.com nyt/HomePage | Left | 1 |
-| wapo | Washington Post | feeds.washingtonpost.com/rss/national | Left | 1 |
-| wsj | Wall Street Journal | Google News RSS (site:wsj.com) | Center-Right | 1 |
-| cnn | CNN | Google News RSS (site:cnn.com) | Left | 1 |
-| nbcnews | NBC News | feeds.nbcnews.com nbcnews/public/news | Left | 1 |
-| foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right | 1 |
-| nypost | NY Post | nypost.com/feed | Right | 1 |
-| cbsnews | CBS News | cbsnews.com/latest/rss/main | Center-Left | 2 |
-| politico | Politico | Google News RSS (site:politico.com) | Center-Left | 2 |
-| axios | Axios | api.axios.com/feed | Center | 2 |
-| usatoday | USA Today | Google News RSS (site:usatoday.com) | Center | 2 |
-| thehill | The Hill | thehill.com/homenews/feed | Center | 2 |
-| washtimes | Washington Times | washingtontimes.com/rss/headlines/news | Right | 2 |
-| washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Right | 2 |
-| natreview | National Review | nationalreview.com/feed | Right | 2 |
-| freepress | The Free Press | thefp.com/feed | Center-Right | 2 |
+| ID | Name | RSS Feed | AllSides | Bucket | Tier |
+|---|---|---|---|---|---|
+| cnn | CNN | Google News RSS (site:cnn.com) | Lean Left | left | 1 |
+| nytimes | New York Times | rss.nytimes.com nyt/HomePage | Lean Left | left | 1 |
+| wapo | Washington Post | feeds.washingtonpost.com/rss/national | Lean Left | left | 1 |
+| nbcnews | NBC News | feeds.nbcnews.com nbcnews/public/news | Lean Left | left | 1 |
+| cbsnews | CBS News | cbsnews.com/latest/rss/main | Lean Left | left | 2 |
+| npr | NPR | Google News RSS (site:npr.org) | Lean Left | left | 1 |
+| ap | AP News | Google News RSS (site:apnews.com) | Lean Left | left | 1 |
+| axios | Axios | api.axios.com/feed | Lean Left | left | 2 |
+| usatoday | USA Today | Google News RSS (site:usatoday.com) | Lean Left | left | 2 |
+| politico | Politico | Google News RSS (site:politico.com) | Lean Left | left | 2 |
+| reuters | Reuters | Google News RSS (site:reuters.com) | Center | center | 1 |
+| bbc | BBC News | feeds.bbci.co.uk/news/rss.xml | Center | center | 1 |
+| thehill | The Hill | thehill.com/homenews/feed | Center | center | 2 |
+| wsj | Wall Street Journal | Google News RSS (site:wsj.com) | Center | center | 1 |
+| bloomberg | Bloomberg | feeds.bloomberg.com/politics/news.rss | Center | center | 1 |
+| washtimes | Washington Times | washingtontimes.com/rss/headlines/news | Lean Right | right | 2 |
+| washexam | Washington Examiner | Google News RSS (site:washingtonexaminer.com) | Lean Right | right | 2 |
+| natreview | National Review | nationalreview.com/feed | Lean Right | right | 2 |
+| freepress | The Free Press | thefp.com/feed | Lean Right | right | 2 |
+| dispatch | The Dispatch | thedispatch.com/feed | Lean Right | right | 2 |
+| foxbusiness | Fox Business | moxie.foxbusiness.com/google-publisher/latest.xml | Lean Right | right | 2 |
+| dailymail | Daily Mail | dailymail.co.uk/ushome/index.rss | Lean Right | right | 2 |
+| foxnews | Fox News | feeds.foxnews.com/foxnews/latest (50 articles) | Right | right | 1 |
+| nypost | NY Post | nypost.com/feed | Right | right | 1 |
+| freebeacon | Washington Free Beacon | freebeacon.com/feed | Right | right | 2 |
 
 **Per-source limit:** 20 articles from RSS (Fox News: 50, via `rss_limit`).
 
-**Removed in the Sept 2026 rebalance:** Daily Wire (audience pivot), Daily Mail (tabloid),
-Breitbart and Townhall (opinion/aggregation rather than original reporting), Fox Business
-(vertical duplicate of Fox News), Sky News (UK-centric; homepage scrape also 403s).
+**The five added in the 10/5/10 pass** (all verified live 22 Sept 2026, all **direct**
+feeds — no new Google News dependencies): Bloomberg Politics (20 items), Fox Business
+(25/18 fresh), The Dispatch (10), Daily Mail US (135/25 fresh), Washington Free Beacon
+(20/8 fresh).
 
-**Added in the same pass** (all verified live Sept 2026): Washington Post, Wall Street
-Journal, BBC News, NPR, Axios, USA Today, Politico, National Review.
+**Fox Business and Daily Mail were previously removed and are now back.** Fox Business
+was dropped as a "vertical duplicate of Fox News" and Daily Mail as a tabloid; both were
+restored on the AllSides evidence that the roster was short of right-of-center outlets,
+and Daily Mail specifically on reach. Daily Mail stays in `SKIP_INJECT` — its homepage is
+celebrity/lifestyle-heavy, so synthetic injection would surface non-news.
 
-**Feed URLs corrected during that verification:**
+**Removed in the earlier Sept 2026 rebalance and still out:** Daily Wire (audience pivot),
+Breitbart and Townhall (opinion/aggregation rather than original reporting), Sky News
+(UK-centric; homepage scrape also 403s).
+
+**Feed URLs corrected during verification:**
 - **WSJ** — every `feeds.a.dj.com` feed is frozen at 27 Jan 2025, so the 48h cutoff
   discarded all of it. Now Google News RSS.
 - **USA Today** — `rssfeeds.usatoday.com` 301s every path to the homepage; the RSS
@@ -174,9 +216,9 @@ Journal, BBC News, NPR, Axios, USA Today, Politico, National Review.
   200, python-requests gets 403 with byte-identical headers. No header change fixes it
   and Railway runs the same stack. Now Google News RSS.
 
-**Eight of twenty sources now use Google News RSS** (cnn, ap, reuters, washexam, wsj,
-npr, usatoday, politico). That makes the unstripped `" - Publisher"` suffix a bigger
-clustering problem than it was — see the note below.
+**Eight of twenty-five sources use Google News RSS** (cnn, ap, reuters, washexam, wsj,
+npr, usatoday, politico). That makes the unstripped `" - Publisher"` suffix a clustering
+problem — see the note below.
 
 **Note on Google News RSS sources:** titles arrive with a
 `" - Publisher"` suffix. `best_label()` strips it from the *display label only* — the raw
@@ -188,6 +230,8 @@ then Google News RSS, now `feeds.foxnews.com/foxnews/latest` with a 50-article p
 catch editorially pinned "LIVE UPDATES" hero stories that never refresh to position 0 in a
 chronological feed. Paired with Fox-specific targeted scraping of `div.big-top` and
 `div.thumbs-2-7`. Fox IS server-side rendered — BeautifulSoup parses the full layout.
+The 50-article pool is the one place an outlet gets a bigger pool than the rest; it
+compensates for a chronological feed, it does not weight Fox in the ranking.
 
 **Note on CNN and AP:** Both use Google News RSS. CNN's direct feed returned only 2
 articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
@@ -264,7 +308,7 @@ and 3 (structural, and new capability) are not started.
 - **Coverage dots replace the lettered source chips.** One dot per outlet across the whole
   roster, grouped left → center → right → not covering, so the shape alone reads as
   balance and absence is visible. Each group is a single element painted with a repeating
-  radial gradient (`.cdots`, 9px tile), so a 20-outlet row is four spans, not twenty.
+  radial gradient (`.cdots`, 9px tile), so a 25-outlet row is four spans, not twenty-five.
   Hovering a group names its outlets. `leanMaps()` must run before `rT()` — it builds the
   roster the dots are drawn from, and when it ran inside `rS()` the first paint drew none.
 - **Category and lead outlets moved to one subtitle line** ("National · led by AP News,
@@ -287,9 +331,10 @@ the page is ~13,800px. If you touch that media query, keep the `.open` gate.
 - **Open Graph and Twitter card tags** were absent entirely, so any shared link rendered
   a bare preview. `/og-image.png` serves `docs/social/og-image.png` (1200×675) from the
   repo, since the app has no static directory.
-- The card's coverage dots total exactly 20 — five left, four center, four right carrying
-  a story, seven not. Keep it that way if you re-render: the dots are the product's claim
-  about itself, and a card showing 25 dots for a 20-outlet roster undercuts it.
+- The card's coverage dots total exactly 25 — six left, three center, five right carrying
+  a story, eleven not — and the headline reads "Twenty-five outlets." Keep both in step
+  with the roster if you re-render: the dots are the product's claim
+  about itself, and a card that disagrees with the roster undercuts it.
 
 **Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
 take the hover-raised plane; there is no hero and no Coverage gap section; and the fixed
@@ -328,7 +373,7 @@ The **LIVE indicator + countdown to refresh** lives in the sidebar between the I
 
 
 ### Last Hour
-- All articles published in the last 60 minutes across all 15 outlets, chronological (newest first)
+- All articles published in the last 60 minutes across all 25 outlets, chronological (newest first)
 - Two sections: **Just Published** (< 15 min old) with pulsing dot indicator, and **Earlier This Hour**
 - **⚡ X sources** signal badge when the article's story is already clustering on the Dashboard (shows how many outlets are covering it)
 - Political lean color on the source eyebrow (FOX NEWS, CNN, etc.)
@@ -354,7 +399,7 @@ Two symmetric single-column pages showing hot Reddit posts from each side. They 
 
 
 ### Live Source Feed (Source Headlines grid)
-- All 20 news sources displayed with their top 8 headlines
+- All 25 news sources displayed with their top 8 headlines
 - Color-coded by political lean
 - Editorial picks (scrape-confirmed) shown first per source
 - Source names link to each outlet's homepage
@@ -383,7 +428,7 @@ python3 scripts/qa_sources.py --prod     # live Railway deployment health
 `--prod` is the exception to the network requirement below: it only talks to
 www.trendinginrealtime.com, so it works anywhere that host is reachable. It hits
 `/debug/refresh` (forces a synchronous refresh, no session token needed) and reports
-`sources_live` out of 18 plus `last_updated` — the fastest way to answer "is Railway
+`sources_live` out of 25 plus `last_updated` — the fastest way to answer "is Railway
 still serving, and is it serving real data?" Allow up to ~2 minutes; it runs a full
 fetch cycle.
 Prints article/headline counts per source and exits non-zero if any source came back
@@ -403,30 +448,41 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 
 ## Known Issues
 
-### Per-Source Data Quality (from full QA regression, March 2026)
+### Per-Source Data Quality (full QA, 22 Sept 2026 — all 25 feeds + 18 scrapes)
 
-| Source | RSS Quality | Scrape Quality | Notes |
+Article counts are from one live refresh; scrape figures are `headlines/urls` from
+`scripts/qa_sources.py --scrape`. **Five scrapes returned 403 in the sandbox** (nytimes,
+ap, thehill, washtimes, bloomberg) — a bare `curl` from the same container is also 403ed
+by nytimes and apnews, which both scrape fine from Railway, so treat sandbox 403s as
+datacentre-IP blocks and confirm on production with `--prod`.
+
+| Source | RSS | Scrape | Notes |
 |---|---|---|---|
-| Fox News | ✅ Good | ✅ Good | Direct RSS (feeds.foxnews.com/foxnews/latest, 50 articles). Fox IS server-side rendered — BeautifulSoup parses the full editorial layout. Targeted scraper hits `div.big-top` (hero) + `div.thumbs-2-7` (editorial grid) first, so positions 1-10 are Fox's actual top stories. MAX_VALID_SCRAPE_POS=80 blocks footer anchor links (pos 90-150). Synthetic injection typically ~9 articles/cycle. |
-| CNN | ✅ Good | ✅ Good | Google News RSS (site:cnn.com) — ~20 articles. Switched from direct RSS which returned only 2 articles from Railway. Synthetic injection typically ~2 articles/cycle. |
-| NY Times | ✅ Excellent | ✅ Excellent | Direct homepage RSS feed + tight scrape positions 11-44. Best source setup. Synthetic injection ~3 articles/cycle. |
-| NY Post | ✅ Good | ✅ Good | Direct RSS + scrape positions 7-90. Synthetic injection ~7 articles/cycle. |
-| AP News | ✅ Good | ✅ Good | Google News RSS (site:apnews.com) — ~17 articles. Switched from direct RSS which fails Railway DNS (`feeds.apnews.com` not resolving). Synthetic injection ~9 articles/cycle. |
-| Reuters | ⚠️ Moderate | ❌ Blocked | Reuters homepage blocks scraping. Google News RSS articles unverified — pass on age alone. No synthetic injection (url_map empty). |
-| NBC News | ✅ Excellent | ✅ Excellent | Direct RSS + very tight scrape positions 2-13. Best scraper performance. Synthetic injection ~3 articles/cycle. |
-| The Hill | ✅ Good | ❌ 403 | Switched to homenews/feed/ (news-only). Homepage returns **HTTP 403**, not JS-rendering as previously documented. Possibly fixable with better request headers — see `scripts/probe_403.py`. |
-| Washington Times | ❌ 403 | ❌ 403 | **Regression (Sept 2026):** both the RSS feed and the homepage scrape now return HTTP 403 to servers. Confirmed failing from Railway in production (19/20 sources live, washtimes the only empty one), not just from sandboxed environments. It still works from a residential connection. Needs a Google News RSS fallback like the other blocked sources, or removal. See `scripts/probe_403.py`. |
-| CBS News | ❓ Unverified | ❓ Unverified | Direct RSS (`cbsnews.com/latest/rss/main`). In `SCRAPE_SOURCES`. Added post-launch, never QA'd — run `scripts/qa_sources.py`. |
-| Washington Examiner | ❓ Unverified | ❓ Unverified | Google News RSS (site:washingtonexaminer.com). In `SCRAPE_SOURCES`. Added post-launch, never QA'd. |
-| The Free Press | ❓ Unverified | ➖ N/A | Direct RSS (`thefp.com/feed`). Not in `SCRAPE_SOURCES`. Never QA'd. |
-| Washington Post | ❓ Unverified | ❓ Unverified | Added Sept 2026. Feed URL unconfirmed. |
-| Wall Street Journal | ❓ Unverified | ❓ Unverified | Added Sept 2026. Feed URL unconfirmed; paywalled site may block scraping. |
-| BBC News | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
-| NPR | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
-| Axios | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
-| USA Today | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
-| Politico | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
-| National Review | ❓ Unverified | ❓ Unverified | Added Sept 2026. |
+| Fox News | ✅ 25 | ✅ 238/186 | `feeds.foxnews.com/foxnews/latest`, 50-article pool. Targeted scraper hits `div.big-top` + `div.thumbs-2-7` first, so positions 1-10 are Fox's actual top stories. `MAX_VALID_SCRAPE_POS=80` blocks footer anchors (pos 90-150). |
+| NY Times | ✅ 20 | ⚠️ 403 here | Direct homepage RSS. Scrape is the best in the roster from a residential/Railway IP (tight positions 11-44); 403s from this sandbox. |
+| Washington Post | ✅ 16 | ➖ | `feeds.washingtonpost.com/rss/national`. Homepage read-timeouts server-side, so RSS-only. |
+| NBC News | ✅ 17 | ✅ 104/63 | Direct RSS + very tight scrape positions 2-13. Best scraper performance. |
+| CBS News | ✅ 20 | ⚠️ 89/2 | Direct RSS. Scrape parses headlines but captures almost no article URLs, so injection is effectively off. |
+| NPR | ✅ 20 | ✅ 89/49 | Google News RSS — `feeds.npr.org` fingerprints the TLS handshake, not headers. |
+| AP News | ✅ 16 | ⚠️ 403 here | Google News RSS (`feeds.apnews.com` fails Railway DNS). Scrape works from Railway (~9 injections/cycle), 403s here. |
+| CNN | ✅ 20 | ⚠️ 223/2 | Google News RSS (~20 articles vs 2 from the direct feed). Scrape finds headlines but few URLs. |
+| Axios | ✅ 20 | ➖ | `api.axios.com/feed`. Homepage 403s server-side, so RSS-only. |
+| USA Today | ✅ 20 | ⚠️ 55/0 | Google News RSS (the direct RSS service is retired). Scrape returns no URLs — injection disabled. |
+| Politico | ✅ 20 | ➖ | Google News RSS. Homepage 403s server-side, so RSS-only. |
+| Reuters | ✅ 20 | ➖ | Google News RSS. Homepage blocks scraping; articles pass on age alone. |
+| BBC News | ✅ 20 | ✅ 126/40 | Direct RSS + working scrape. |
+| The Hill | ✅ 15 | ❌ 403 | `homenews/feed`. Homepage 403s to servers everywhere, not just here. See `scripts/probe_403.py`. |
+| Wall Street Journal | ✅ 20 | ➖ | Google News RSS — every `feeds.a.dj.com` feed is frozen at 27 Jan 2025. Paywalled homepage 401s. |
+| Bloomberg | ✅ 20 | ⚠️ 403 here | Added Sept 2026. `feeds.bloomberg.com/politics/news.rss`. Scrape 403s in the sandbox; unconfirmed on Railway. |
+| Washington Times | ❌ 0 | ❌ 403 | **Known intermittent block:** RSS and homepage both 403 to datacentre IPs, though it has served from Railway as recently as this month. Needs a Google News RSS fallback or removal. |
+| Washington Examiner | ✅ 6 | ✅ 128/90 | Google News RSS — a thin pool on this cycle. Scrape is strong. |
+| National Review | ✅ 13 | ➖ | Direct RSS. Homepage 403s server-side, so RSS-only. |
+| The Free Press | ✅ 15 | ➖ | `thefp.com/feed`. Not in `SCRAPE_SOURCES`. |
+| The Dispatch | ✅ 10 | ✅ 130/58 | Added Sept 2026. Small but consistently fresh feed. |
+| Fox Business | ✅ 18 | ✅ 166/153 | Added back Sept 2026 on the direct `moxie.foxbusiness.com` feed. Earlier note that it was JS-rendered is wrong — it scrapes cleanly. |
+| Daily Mail | ✅ 20 | ✅ 471/94 | Added back Sept 2026 (US edition feed). In `SKIP_INJECT` — homepage is celebrity/lifestyle-heavy. |
+| NY Post | ✅ 20 | ✅ 257/204 | Direct RSS + scrape positions 7-90. |
+| Washington Free Beacon | ✅ 8 | ⚠️ 59/1 | Added Sept 2026. Small feed; scrape captures headlines but only one URL. |
 
 ### Other Known Issues
 - **Multi-line regex replacements in this file are dangerous.** A `re.sub` over
@@ -447,9 +503,10 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **25-source 10/5/10 rebalance with AllSides attribution (Sept 2026)** — added Bloomberg, The Dispatch, Fox Business, Daily Mail and Washington Free Beacon, all on direct feeds; nothing removed. Every outlet now carries its verbatim AllSides rating (`allsides`) plus `RATINGS_SOURCE`/`RATINGS_AS_OF`/`RATINGS_URL`, and `LEAN` collapsed from five hand-assigned tiers to three display buckets. Fixed a 67% measurement advantage for left-of-center stories (a 10-dot ceiling against 6).
 - [x] **Facebook dead-code + token removal** — deleted `fetch_facebook_engagement()` (never called by `refresh_data()`), the `/debug/fb` route, and the `/debug/memo` route. All three embedded a hardcoded Facebook app token in publicly deployed code; `/debug/fb` also exposed it via an unauthenticated endpoint. See "Rotate the Facebook token" below.
 - [x] **Google Trends removed** — `fetch_google_trends()`, `_gt_cache` and `TRENDS_RSS` deleted. The function was never called by `refresh_data()`, never written to `data_store`, and never rendered, despite earlier revisions of this file describing a "Google Trends US sidebar" as a shipped feature. There is no Google Trends signal in the app; do not cite one.
-- [x] **Live source QA script** — `scripts/qa_sources.py` checks all 18 RSS feeds, 15 homepage scrapes, and every supplemental API in one pass; exits non-zero if any source is empty.
+- [x] **Live source QA script** — `scripts/qa_sources.py` checks all 25 RSS feeds, 18 homepage scrapes, and every supplemental API in one pass; exits non-zero if any source is empty.
 - [x] **Scraped page position boosting** — `scrape_position` recorded per article. Positions 1–3 = editorial spotlight (+15/outlet), 4–8 = standard hero (+20/outlet).
 - [x] **Google Stitch design refresh** — full structural rewrite with fixed sidebar, table layout, sparklines, source chips.
 - [x] **Last Hour tab** — all articles from last 60 min, newest first, with signal badges and Just Published pulsing indicator.
@@ -474,21 +531,22 @@ Railway auto-deploys on push to `main`. The old Cowork VM workaround
 - [x] **Facebook tab removed** — Meta's Graph API requires App Review for `Page Public Content Access` and is incompatible with the Facebook Login app type. Removed from Social Velocity sidebar entirely.
 - [x] **Blue Trends page** — `/bluetrends`, hot posts from r/politics, r/progressive, r/liberal, r/democrats.
 - [x] **Liberal Reddit hot posts** — `fetch_liberal_reddit()` fetches RSS from 4 subreddits via feedparser. Round-robin interleave ensures all 4 subs always appear (cap: 8 per sub). External article URLs extracted from RSS summary HTML when available.
-- [x] **Loading screen source count** — now "Scanning 30 sources" (20 news RSS + 10 supplemental: 4 liberal + 4 conservative subreddits, Twitter/X, Memeorandum).
+- [x] **Loading screen source count** — now "Scanning 35 sources" (25 news RSS + 10 supplemental: 4 liberal + 4 conservative subreddits, Twitter/X, Memeorandum).
 - [x] **General-market pivot (Sept 2026)** — removed Daily Wire, `compute_alignment()` (dead code), the Side by Side page and its nav in all three surfaces, and the DW framing from `/privacy`.
-- [x] **20-source rebalance** — 7 right / 6 center / 7 left. Dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review.
+- [x] **20-source rebalance** — dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review. Its claimed 7 right / 6 center / 7 left turned out to be 10/4/6 once measured against AllSides — superseded by the 25-source pass above.
 - [x] **Red Trends page** — `/redtrends`, mirroring Blue Trends: conservative Reddit, sharing the `.bt-*` classes and the `rdPosts()` renderer.
 - [x] **Symmetric trend iconography** — both pages use the `forum` glyph, differing only in colour. Replaces the editorialising `mood_bad` on Blue Trends.
 - [x] **Generalised Reddit fetcher** — `_fetch_reddit_set()` serves both sets; the log now reports which subreddits actually returned posts instead of always printing the full count.
 
 ### Backlog
-- [ ] **Email digest** — daily 8am summary of top 10 trending + DW alignment score
+- [ ] **Email digest** — daily 8am summary of the top 10 trending stories
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
-- [ ] **Verify the 8 new feeds** — run `scripts/qa_sources.py` and fix any wrong URLs
-- [ ] **Fix the 403 scrapes** — run `scripts/probe_403.py`; The Hill and Washington Times are blocked
-- [ ] **Strip Google News suffixes before TF-IDF** — currently stripped only in `best_label()`, so publisher names pollute the clustering vocabulary for cnn/ap/reuters/washexam
+- [ ] **Fix the 403 scrapes** — run `scripts/probe_403.py`; The Hill and Washington Times are blocked, and Washington Times' RSS is blocked too (a Google News fallback is the likely fix)
+- [ ] **Strip Google News suffixes before TF-IDF** — currently stripped only in `best_label()`, so publisher names pollute the clustering vocabulary for the eight Google News sources
 - [ ] **Velocity in ranking** — heat score has no time term; ranking is magnitude only, and the Jaccard source-set matcher loses history exactly when a story is growing fastest. Deferred by product decision, revisit later.
 - [ ] **Delete `trending_dashboard_v2.py`** — stale 15-source predecessor of the current single-file app. Not imported, not served, not referenced by `Procfile`. Dead weight that confuses source-count audits.
+- [ ] **Display normalization within buckets** — coverage dots now span an uneven roster (10/5/10), so "9 of 10 left · 3 of 5 center · 4 of 10 right" reads more honestly than raw dot counts
+- [ ] **Sources / Methodology page** — surface the AllSides attribution, the snapshot date, and the "perspective only, not accuracy" disclaimer in the UI, not just in this file
 - [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
 
 ---
