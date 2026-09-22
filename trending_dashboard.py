@@ -1461,6 +1461,41 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
+/* Leading story. Everything in it is either computed from the data or quoted from an
+   outlet — the hero states no judgement of its own about the coverage it summarises. */
+.hero{display:none;margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--surface-top)}
+.hero.on{display:block}
+.hero-eyebrow{font-size:13px;color:var(--ink3);margin-bottom:12px}
+.hero-hl{font-family:'Instrument Sans',system-ui,sans-serif;
+  font-size:clamp(27px,3.5vw,42px);font-weight:400;letter-spacing:-.035em;line-height:1.04;
+  color:var(--ink);margin-bottom:14px}
+.hero-hl a{color:inherit;text-decoration:none}
+.hero-hl a:hover{text-decoration:underline;text-underline-offset:4px}
+.hero-lede{font-size:clamp(15px,1.3vw,17px);color:var(--ink2);line-height:1.6;margin-bottom:20px;max-width:62ch}
+/* The framing split, shown rather than characterised: the same story as two outlets
+   on opposite sides of the roster actually headlined it. */
+.hero-split{display:grid;gap:10px;margin-bottom:20px;max-width:74ch}
+.hero-q{display:grid;grid-template-columns:132px 1fr;gap:14px;align-items:baseline;
+  padding:9px 0;border-top:1px solid var(--surface-low)}
+.hero-q-src{font-size:13px;font-weight:500;line-height:1.4}
+.hero-q-hl{font-size:15px;color:var(--ink);line-height:1.45}
+.hero-q-hl a{color:inherit;text-decoration:none}
+.hero-q-hl a:hover{text-decoration:underline;text-underline-offset:3px}
+.hero-none{font-size:14px;color:var(--ink3);line-height:1.5;padding:9px 0;border-top:1px solid var(--surface-low)}
+.hero-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;flex-wrap:wrap}
+.hero-dots .cdots{--dt:13px}
+.hero-dots .cdn{display:none}
+.hero-legend{font-size:13px;color:var(--ink3);margin-top:9px}
+.hero-stat{text-align:right}
+.hero-stat-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1}
+.hero-stat-l{font-size:13px;color:var(--ink3);margin-top:3px}
+@media(max-width:600px){
+  .hero{margin-bottom:24px;padding-bottom:20px}
+  .hero-q{grid-template-columns:1fr;gap:3px}
+  .hero-foot{gap:18px}
+  .hero-stat{text-align:left}
+  .hero-dots .cdots{--dt:10px}
+}
 .sec-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;color:var(--navy-d);line-height:1.1}
 .sec-sub{font-size:13px;color:var(--ink-l);margin-top:4px}
 .bdg{padding:3px 8px;background:var(--surface-high);border-radius:2px;font-size:9px;font-weight:800;letter-spacing:.5px;font-family:'Instrument Sans',sans-serif;color:var(--ink-m)}
@@ -1748,6 +1783,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 <main class="main">
   <div class="cgrid">
     <section>
+      <div class="hero" id="hero"></div>
       <div class="sec-hdr">
         <div>
           <h2 class="sec-title">Top Trending Topics</h2>
@@ -1918,16 +1954,20 @@ function dotGroup(n,colour,label){
   if(!n)return '';
   return '<span class="cdots" style="--n:'+n+';color:'+colour+'" title="'+e(label)+'"></span>';
 }
-function dots(srcs){
+function dotSplit(srcs){
   const LB=window._LB||{},SN=window._SN||{};
   const roster=Object.keys(LB);
-  if(!roster.length)return '';
   const covering=new Set(srcs);
   const by={left:[],center:[],right:[]},missing=[];
   roster.forEach(id=>{
     const b=LB[id]||'center';
     if(covering.has(id))by[b].push(SN[id]||id); else missing.push(SN[id]||id);
   });
+  return {roster:roster,by:by,missing:missing};
+}
+function dots(srcs){
+  const sp=dotSplit(srcs), roster=sp.roster, by=sp.by, missing=sp.missing;
+  if(!roster.length)return '';
   const nm=n=>n.join(', ');
   const covered=by.left.length+by.center.length+by.right.length;
   return '<span class="cdrow">'
@@ -1982,7 +2022,12 @@ function catBadge(cats){
 function rT(topics){
   const tb=document.getElementById('tl');
   if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
-  tb.innerHTML=topics.map((t,i)=>{
+  rHero(topics[0]);
+  if(topics.length===1){tb.innerHTML='<tr><td colspan="4" style="padding:24px;text-align:center;color:var(--ink-l)">Only one story is clustering right now.</td></tr>';return}
+  // Rank 01 is the hero above the table; the list picks up at 02 and the rank numbers
+  // stay true to the ranking rather than restarting.
+  tb.innerHTML=topics.slice(1).map((t,i0)=>{
+    const i=i0+1;
     const hot=i<3,heroSrcs=new Set(t.hero_sources||[]);
     const chips=dots(t.sources||[]);
     // One chip under the rank number, always the same shape: the age of the newest
@@ -2054,6 +2099,92 @@ function rTw(trends){
   if(!trends||!trends.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Twitter/X trends unavailable</div>';return}
   el.innerHTML=trends.slice(0,25).map((t,i)=>'<div class="tw-r"><span class="tw-rk">'+(i+1)+'</span><span class="tw-tm"><a href="https://x.com/search?q='+encodeURIComponent(t)+'&src=trend_click" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+e(t)+'</a></span><div class="tw-bw"><div class="tw-bg"><div class="tw-bf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
 }
+// ── Leading story hero ──────────────────────────────────────────────────────
+// Two rules hold here. Every sentence is computed from the data, and every
+// characterisation of the coverage is a quote from an outlet rather than a claim of
+// ours — the site's whole position is that it shows what the press is running, so the
+// one place it speaks in its own voice had better not be the place it editorialises.
+const _NUMW=['no','one','two','three','four','five','six','seven','eight','nine','ten',
+             'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen',
+             'eighteen','nineteen','twenty'];
+function numWord(n){return n>=0&&n<_NUMW.length?_NUMW[n]:String(n)}
+function agoWords(m){
+  if(m==null)return null;
+  if(m<1)return 'less than a minute ago';
+  if(m<60)return numWord(m)!==String(m)?numWord(m)+' minute'+(m===1?'':'s')+' ago':m+' minutes ago';
+  const h=Math.floor(m/60);
+  return h<24?numWord(h)+' hour'+(h===1?'':'s')+' ago':Math.floor(h/24)+' day'+(h<48?'':'s')+' ago';
+}
+// Rank an article by how prominently its own outlet is running it, so the quote we
+// show is the one that outlet is actually leading with.
+function _prom(a){
+  const sp=a.scrape_position;
+  return (sp!=null&&sp<=3?4:0)+(a.feed_position<=1?2:0)+(a.scrape_confirmed?1:0);
+}
+function rHero(t){
+  const el=document.getElementById('hero');
+  if(!el)return;
+  if(!t){el.classList.remove('on');return}
+  const LB=window._LB||{},SN=window._SN||{},L=window._L||{};
+  const srcs=t.sources||[];
+  const sp=dotSplit(srcs);
+  const arts=(t.articles||[]).filter(a=>a&&a.title&&a.link);
+
+  // Headline links to the article it was taken from — it is that outlet's wording.
+  const lab=t.topic||t.keyword||'';
+  const labNorm=lab.toLowerCase().slice(0,40);
+  const src=arts.find(a=>a.title.toLowerCase().indexOf(labNorm)===0);
+  const hl=src?'<a href="'+e(src.link)+'" target="_blank" rel="noopener">'+e(lab)+'</a>':e(lab);
+
+  // Lede: leaders and recency, both straight from the cluster.
+  const leads=(t.hero_sources||[]).length, n=srcs.length, ago=agoWords(t.age_minutes);
+  let lede = leads
+    ? numWord(leads).charAt(0).toUpperCase()+numWord(leads).slice(1)+' outlet'+(leads===1?'':'s')+(leads===1?' is':' are')+' leading with it'
+    : numWord(n).charAt(0).toUpperCase()+numWord(n).slice(1)+' outlets are carrying it, none of them leading with it';
+  lede += ago?'; the most recent article landed '+ago+'.':'.';
+
+  // The split, shown not asserted. Presence is judged from the full source list;
+  // a quote is only shown when we actually hold one, so absence is never inferred
+  // from the article sample.
+  const quote=b=>{
+    const c=arts.filter(a=>(LB[a.source_id]||'center')===b);
+    if(!c.length)return null;
+    c.sort((x,y)=>_prom(y)-_prom(x));
+    return c[0];
+  };
+  const row=(a,b)=>'<div class="hero-q"><div class="hero-q-src" style="color:'+e(L[a.source_id]||'var(--ink3)')+'">'
+      +e(SN[a.source_id]||a.source_id)+'</div>'
+      +'<div class="hero-q-hl"><a href="'+e(a.link)+'" target="_blank" rel="noopener">'+e(a.title)+'</a></div></div>';
+  let split='';
+  ['left','right'].forEach(b=>{
+    const label=b==='left'?'left of center':'right of center';
+    if(!sp.by[b].length){
+      split+='<div class="hero-none">No outlet '+label+' is carrying this story.</div>';
+    }else{
+      const a=quote(b);
+      if(a)split+=row(a,b);
+    }
+  });
+
+  const d=t.delta;
+  const dh=d===null||d===undefined?''
+    :d>0?'<div class="hero-stat-l" style="color:var(--acc)">▲'+d+' in the last 30 minutes</div>'
+    :d<0?'<div class="hero-stat-l">▼'+Math.abs(d)+' in the last 30 minutes</div>'
+    :'<div class="hero-stat-l">No change in the last 30 minutes</div>';
+  const legend=[sp.by.left.length+' left',sp.by.center.length+' center',sp.by.right.length+' right',
+                sp.missing.length+' not carrying it'].join(' · ');
+
+  el.innerHTML='<div class="hero-eyebrow">Leading story · '+n+' of '+sp.roster.length+' outlets</div>'
+    +'<div class="hero-hl">'+hl+'</div>'
+    +'<div class="hero-lede">'+e(lede)+'</div>'
+    +(split?'<div class="hero-split">'+split+'</div>':'')
+    +'<div class="hero-foot"><div><div class="hero-dots">'+dots(srcs)+'</div>'
+      +'<div class="hero-legend">'+legend+'</div></div>'
+    +'<div class="hero-stat"><div class="hero-stat-n">'+t.heat_score+'</div>'
+      +'<div class="hero-stat-l">Signal</div>'+dh+'</div></div>';
+  el.classList.add('on');
+}
+
 function rS(srcs){
   if(!srcs)return;
 

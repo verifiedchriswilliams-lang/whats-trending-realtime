@@ -358,9 +358,29 @@ not reintroduce "intelligence" as product vocabulary.
   with the roster if you re-render: the dots are the product's claim
   about itself, and a card that disagrees with the roster undercuts it.
 
+**The leading-story hero (Sept 2026).** The top-ranked cluster opens the page and the
+table starts at 02 — rank numbers stay true to the ranking rather than restarting.
+
+The artboard's lede is two sentences: *"Nine outlets led with it in the last ninety
+minutes. Framing splits on consumer cost versus manufacturing capacity; the underlying
+facts hold across the spread."* The first is computable. **The second is an editorial
+judgement**, and it would be the only unsourced claim on a page whose entire position is
+that it reports what the press is running. So the hero computes the first sentence and
+*shows* the second: the same story as one left-of-center and one right-of-center outlet
+actually headlined it, quoted verbatim, each in its own lean colour and linked to the
+article. Framing differences are evidence here, not assertion.
+
+Two rules for anything added to the hero later. **Every sentence is computed from the
+data, and every characterisation of the coverage is a quote.** No LLM lede. And
+**presence is read from `t.sources`, never from the article sample** — the payload caps
+clusters at 10 articles, so "no outlet right of center is carrying this" is only ever
+printed when the full source list says so. Inferring absence from the sample would put a
+false claim in the largest type on the page.
+
 **Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
-take the hover-raised plane; there is no hero and no Coverage gap section; and the fixed
-sidebar remains where the design has a single scrolling column.
+take the hover-raised plane; there is no Coverage gap section; the hero has no lead image
+(see the image-extraction item in the backlog); and the fixed sidebar remains where the
+design has a single scrolling column.
 
 ## UI Features
 
@@ -510,6 +530,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **Leading-story hero (Sept 2026)** — top cluster opens the page; table starts at 02. Computed lede (leaders + recency) plus one left-of-center and one right-of-center headline quoted verbatim, so the framing split is shown rather than characterised. No LLM, no unsourced claim. `rHero()`, `.hero-*`, and `dotSplit()` shared with the coverage dots so the legend and the dots cannot disagree.
 - [x] **Per-outlet cap on the breadth term (Sept 2026)** — `MAX_ARTICLES_PER_SOURCE = 3`. Heat's article term counts at most three articles from any one outlet, so no single newsroom's output can stand in for coverage across newsrooms. Investigated because Fox's `rss_limit: 50` looked like a thumb on the scale; measurement showed Fox was not the problem (the 48h cutoff binds first) and NY Post was, at 5 of 6 articles in one cluster. Affected 0 of 20 clusters on the cycle it shipped — it is a guardrail, not a re-ranking.
 - [x] **Reddit and the two trend pages retired (Sept 2026)** — deleted `_fetch_reddit_set()`, both subreddit lists, the `.bt-*` CSS, the `rdPosts()`/`rBT()`/`rRT()` renderers, the two nav items in all three surfaces and the `liberal_reddit`/`conservative_reddit` store keys. `/bluetrends` and `/redtrends` 301 to `/`. Reddit 429d one side harder than the other most cycles, so the two pages could not be symmetric in fact, only in layout. Also cut ~30s off every refresh (44s → 14s): the `_REDDIT_DELAY` throttle was the single slowest thing in the pipeline. The Memeorandum slot took the chance to stop being called `reddit_posts` — it is `data_store['memeorandum']` / `_MEMO_CACHE` now.
 - [x] **25-source 10/5/10 rebalance with AllSides attribution (Sept 2026)** — added Bloomberg, The Dispatch, Fox Business, Daily Mail and Washington Free Beacon, all on direct feeds; nothing removed. Every outlet now carries its verbatim AllSides rating (`allsides`) plus `RATINGS_SOURCE`/`RATINGS_AS_OF`/`RATINGS_URL`, and `LEAN` collapsed from five hand-assigned tiers to three display buckets. Fixed a 67% measurement advantage for left-of-center stories (a 10-dot ceiling against 6).
