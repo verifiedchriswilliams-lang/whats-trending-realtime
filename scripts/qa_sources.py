@@ -90,8 +90,6 @@ def check_supplemental():
     checks = [
         ("Twitter/X",      td.fetch_twitter_trends, 5),
         ("Memeorandum",    td.fetch_memeorandum,    3),
-        ("Liberal Reddit", td.fetch_liberal_reddit, 8),
-        ("Conservative Reddit", td.fetch_conservative_reddit, 8),
     ]
     failures = []
     for name, fn, low in checks:
