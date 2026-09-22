@@ -242,6 +242,36 @@ _RSS_HEADERS = {
     'Upgrade-Insecure-Requests': '1',
 }
 
+_IMG_IN_HTML = re.compile(r'<img[^>]+src="([^"]+)"', re.I)
+
+def entry_image(e):
+    """Article image from an RSS entry, or None.
+
+    Only 12 of the 25 feeds carry one, and the supply is politically lopsided —
+    3 left / 2 center / 7 right, because the eight Google News feeds strip media and
+    those skew left. That is why only the hero shows an image and always credits the
+    outlet it came from: a photo is the most salient thing on a row, and putting one
+    outlet's picture on every story would hand a disproportionate share of the page's
+    visual voice to one side of the roster.
+    """
+    for key in ("media_content", "media_thumbnail"):
+        v = e.get(key)
+        if v and isinstance(v, list) and v[0].get("url"):
+            return v[0]["url"]
+    for enc in e.get("enclosures", []) or []:
+        if str(enc.get("type", "")).startswith("image/") and enc.get("href"):
+            return enc["href"]
+    for key in ("summary", "description"):
+        m = _IMG_IN_HTML.search(e.get(key) or "")
+        if m:
+            return m.group(1)
+    for c in e.get("content", []) or []:
+        m = _IMG_IN_HTML.search(c.get("value") or "")
+        if m:
+            return m.group(1)
+    return None
+
+
 def fetch_source(source):
     try:
         # Use requests (with 15s timeout) to fetch raw RSS bytes, then hand to feedparser.
@@ -272,6 +302,7 @@ def fetch_source(source):
                          "summary":re.sub(r'<[^>]+>','',e.get("summary",""))[:200],
                          "published":e.get("published",""),
                          "pub_ts": pub.isoformat() if pub else None,
+                         "image": entry_image(e),
                          "feed_position": i})
         return source["id"], arts
     except: return source["id"], []
@@ -1482,6 +1513,13 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-q-hl a{color:inherit;text-decoration:none}
 .hero-q-hl a:hover{text-decoration:underline;text-underline-offset:3px}
 .hero-none{font-size:14px;color:var(--ink3);line-height:1.5;padding:9px 0;border-top:1px solid var(--surface-low)}
+/* One image, on the leading story only, always credited. Absence is a layout
+   variant rather than a hole: roughly one story in ten has no image anywhere in
+   its cluster, and those skew toward all-left-and-center coverage. */
+.hero-fig{margin:0 0 20px;max-width:74ch}
+.hero-img{display:block;width:100%;aspect-ratio:21/9;object-fit:cover;
+  border-radius:clamp(14px,2vw,22px);background:var(--surface-low)}
+.hero-credit{font-size:13px;color:var(--ink3);margin-top:8px}
 .hero-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;flex-wrap:wrap}
 .hero-dots .cdots{--dt:13px}
 .hero-dots .cdn{display:none}
@@ -2166,6 +2204,19 @@ function rHero(t){
     }
   });
 
+  // The image comes from whichever carrying outlet is running the story hardest and
+  // has one. It is credited in place, because it is that outlet's editorial choice of
+  // picture, not a neutral illustration of the story.
+  const withImg=arts.filter(a=>a.image);
+  withImg.sort((x,y)=>_prom(y)-_prom(x));
+  const im=withImg[0];
+  const fig=im?'<figure class="hero-fig">'
+      +'<img class="hero-img" src="'+e(im.image)+'" alt="" decoding="async" '
+      +'referrerpolicy="no-referrer" '
+      +'onerror="this.closest(\'.hero-fig\').remove()">'
+      +'<figcaption class="hero-credit">Photo: '+e(SN[im.source_id]||im.source_id)+'</figcaption>'
+      +'</figure>':'';
+
   const d=t.delta;
   const dh=d===null||d===undefined?''
     :d>0?'<div class="hero-stat-l" style="color:var(--acc)">▲'+d+' in the last 30 minutes</div>'
@@ -2177,6 +2228,7 @@ function rHero(t){
   el.innerHTML='<div class="hero-eyebrow">Leading story · '+n+' of '+sp.roster.length+' outlets</div>'
     +'<div class="hero-hl">'+hl+'</div>'
     +'<div class="hero-lede">'+e(lede)+'</div>'
+    +fig
     +(split?'<div class="hero-split">'+split+'</div>':'')
     +'<div class="hero-foot"><div><div class="hero-dots">'+dots(srcs)+'</div>'
       +'<div class="hero-legend">'+legend+'</div></div>'

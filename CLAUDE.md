@@ -377,10 +377,35 @@ clusters at 10 articles, so "no outlet right of center is carrying this" is only
 printed when the full source list says so. Inferring absence from the sample would put a
 false claim in the largest type on the page.
 
+**Images: the hero only, always credited (Sept 2026).** `entry_image()` pulls an article
+image off the RSS entry (`media_content`, `media_thumbnail`, an image enclosure, or the
+first `<img>` in the summary) and the hero shows one, chosen from whichever carrying
+outlet is running the story hardest and has a picture. `.hero-fig` removes itself
+`onerror`, so a blocked hotlink is a missing image rather than a broken icon, and the
+request goes out `referrerpolicy="no-referrer"` (verified loading from foxnews, nbcnews,
+foxbusiness, bbc, dailymail, natreview and axios CDNs).
+
+**Thumbnails on every row were measured and rejected**, and the measurement is the reason:
+
+- **12 of 25 feeds carry an image, and they split 3 left / 2 center / 7 right.** The eight
+  Google News feeds strip all media and skew left (CNN, AP, NPR, USA Today, Politico);
+  Bloomberg, CBS and the Washington Post carry none either.
+- Per cluster it evens out only partly: **18 of 20** stories have an image available and
+  the pick lands **5 left / 6 center / 7 right** against a 10/5/10 roster.
+- **~158KB average** (Fox 309KB, NY Post 346KB, BBC 6KB) — twenty of them is **~3.1MB**
+  per page load, hotlinked from a dozen CDNs with no image proxy and no static directory.
+- The two clusters with no image at all were all-left-and-center coverage, so the gap is
+  structural, not incidental.
+
+A photo is the most salient thing on a row, and one outlet's picture becomes the face of
+a story twenty newsrooms are covering. One credited image on one story is a claim the
+product can stand behind; twenty uncredited ones drawn from a supply that is 7/12 right
+of center is not. **If you revisit this, fix the supply first** (og:image scraping for
+the feeds that strip media) rather than shipping the skew.
+
 **Deferred to Phase 2** (structural): the topics list is still a `<table>`, so rows cannot
-take the hover-raised plane; there is no Coverage gap section; the hero has no lead image
-(see the image-extraction item in the backlog); and the fixed sidebar remains where the
-design has a single scrolling column.
+take the hover-raised plane; there is no Coverage gap section; and the fixed sidebar
+remains where the design has a single scrolling column.
 
 ## UI Features
 
@@ -530,6 +555,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **Hero lead image (Sept 2026)** — `entry_image()` extracts an article image from RSS; the hero shows one, credited to the outlet it came from, and drops the figure entirely when the image fails or none exists. Thumbnails on every row were measured and rejected: the supply is 3 left / 2 center / 7 right, ~3.1MB for twenty, and 2 of 20 stories have no image at all.
 - [x] **Leading-story hero (Sept 2026)** — top cluster opens the page; table starts at 02. Computed lede (leaders + recency) plus one left-of-center and one right-of-center headline quoted verbatim, so the framing split is shown rather than characterised. No LLM, no unsourced claim. `rHero()`, `.hero-*`, and `dotSplit()` shared with the coverage dots so the legend and the dots cannot disagree.
 - [x] **Per-outlet cap on the breadth term (Sept 2026)** — `MAX_ARTICLES_PER_SOURCE = 3`. Heat's article term counts at most three articles from any one outlet, so no single newsroom's output can stand in for coverage across newsrooms. Investigated because Fox's `rss_limit: 50` looked like a thumb on the scale; measurement showed Fox was not the problem (the 48h cutoff binds first) and NY Post was, at 5 of 6 articles in one cluster. Affected 0 of 20 clusters on the cycle it shipped — it is a guardrail, not a re-ranking.
 - [x] **Reddit and the two trend pages retired (Sept 2026)** — deleted `_fetch_reddit_set()`, both subreddit lists, the `.bt-*` CSS, the `rdPosts()`/`rBT()`/`rRT()` renderers, the two nav items in all three surfaces and the `liberal_reddit`/`conservative_reddit` store keys. `/bluetrends` and `/redtrends` 301 to `/`. Reddit 429d one side harder than the other most cycles, so the two pages could not be symmetric in fact, only in layout. Also cut ~30s off every refresh (44s → 14s): the `_REDDIT_DELAY` throttle was the single slowest thing in the pipeline. The Memeorandum slot took the chance to stop being called `reddit_posts` — it is `data_store['memeorandum']` / `_MEMO_CACHE` now.
@@ -564,6 +590,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [x] **20-source rebalance** — dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review. Its claimed 7 right / 6 center / 7 left turned out to be 10/4/6 once measured against AllSides — superseded by the 25-source pass above.
 
 ### Backlog
+- [ ] **Even out the image supply** — 13 of 25 feeds strip media, so the available photos run 3 left / 2 center / 7 right. `og:image` from each article page would close it, at the cost of one request per article per cycle against sites that already 403 us. Needed before thumbnails could go in the list at all.
 - [ ] **Email digest** — daily 8am summary of the top 10 trending stories
 - [ ] **Story staleness** — fade out / gray out stories older than 4 hours from trending list
 - [ ] **Fix the 403 scrapes** — run `scripts/probe_403.py`; The Hill and Washington Times are blocked, and Washington Times' RSS is blocked too (a Google News fallback is the likely fix)
