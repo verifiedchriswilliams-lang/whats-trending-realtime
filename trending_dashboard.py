@@ -586,6 +586,14 @@ SIMILARITY_THRESHOLD = 0.28   # Tune: higher = tighter clusters, fewer false mer
 # for meaningful above-the-fold content).
 MAX_VALID_SCRAPE_POS = 80
 
+# Most articles from any one outlet that count toward a cluster's breadth term.
+# Without it, an outlet that files five stories on the same game or trial carries the
+# cluster on its own: sampled Sept 2026, NY Post supplied 5 of 6 articles in one cluster
+# and 4 of 8 in another. Breadth is supposed to mean "many newsrooms are on this", so an
+# outlet's fifth article on a story should not read as more breadth than its third.
+# source_count, hero and spotlight credit were already per-outlet and are unaffected.
+MAX_ARTICLES_PER_SOURCE = 3
+
 def _tfidf_tokenize(title):
     """Tokenize a headline for TF-IDF clustering (reuses STOP_WORDS)."""
     words = re.findall(r"[A-Za-z']+", title.lower())
@@ -924,13 +932,20 @@ def cluster_topics(all_arts):
         hero_count   = len(hero_set)
         editorial_spotlight = len(editorial_spotlight_set)
 
+        # Breadth counts at most MAX_ARTICLES_PER_SOURCE articles from any one outlet,
+        # so no single newsroom's output can stand in for coverage across newsrooms.
+        per_source = defaultdict(int)
+        for a in cl_arts:
+            per_source[a["source_id"]] += 1
+        counted_articles = sum(min(n, MAX_ARTICLES_PER_SOURCE) for n in per_source.values())
+
         # Heat formula:
         #   base:               source_count × 12
-        #   breadth:            + article_count
+        #   breadth:            + counted_articles  (max 3 per outlet)
         #   hero placement:     + hero_count × 20   (RSS top-2 OR scrape pos 1-8)
         #   double-confirmed:   + double_confirmed × 10  (RSS hero AND scraped)
         #   editorial spotlight:+ editorial_spotlight × 15  (scrape pos 1-3; editors chose it)
-        heat = (src_count * 12 + len(cl_arts)
+        heat = (src_count * 12 + counted_articles
                 + (hero_count * 20)
                 + (double_confirmed * 10)
                 + (editorial_spotlight * 15))
@@ -947,6 +962,7 @@ def cluster_topics(all_arts):
         clusters.append({"keyword": label, "topic": label,
                          "articles": cl_arts[:10], "sources": list(cl_srcs),
                          "source_count": src_count, "article_count": len(cl_arts),
+                         "counted_articles": counted_articles,
                          "heat_score": heat, "hero_sources": hero_sources,
                          "age_minutes": age_minutes, "is_breaking": is_breaking,
                          "category": classify_category([a["title"] for a in cl_arts])})
@@ -1750,7 +1766,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
                 <th class="th-r tc">Rank</th>
                 <th>Story</th>
                 <th class="th-v" title="Story trajectory since last refresh. Rising curve = gaining coverage across sources. Flat = no change. Falling = losing momentum.">Velocity</th>
-                <th class="th-g tr2" title="Heat Score = weighted coverage strength. Formula: (sources × 12) + articles + (lead outlets × 20) + (double-confirmed × 10). Higher = more editors are leading with this story.">Signal</th>
+                <th class="th-g tr2" title="Heat Score = weighted coverage strength. Formula: (sources × 12) + articles (max 3 per outlet) + (lead outlets × 20) + (double-confirmed × 10). Higher = more editors are leading with this story.">Signal</th>
               </tr>
             </thead>
             <tbody id="tl"><tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">Loading…</td></tr></tbody>
@@ -2002,7 +2018,7 @@ function rT(topics){
       +'<td><div class="t-hl">'+e(t.keyword)+'</div><div class="t-sub">'+subLine+'</div>'
         +chips+'</td>'
       +'<td>'+spark(t.delta,t.heat_score,t.heat_history)+'</td>'
-      +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + articles + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
+      +'<td><span class="sig-n" title="Heat Score '+t.heat_score+': ('+((t.sources||[]).length)+' sources \xd7 12) + '+(t.counted_articles||t.article_count||0)+' articles (max 3 per outlet) + (lead outlets \xd7 20) + (double-confirmed \xd7 10)">'+t.heat_score+'</span>'+dh+'<span class="ei-c" id="ei'+i+'">\u25b8</span></td>'
       +'</tr>'
       +'<tr id="ta'+i+'" class="x-row"><td colspan="4"><div class="x-inner">'+arts+'</div></td></tr>';
   }).join('');

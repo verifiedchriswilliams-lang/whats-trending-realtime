@@ -48,10 +48,16 @@ CLAUDE.md               ← this file
 ## Key Algorithms
 
 ### Heat Score
-`heat_score = (source_count × 12) + article_count + (hero_count × 20) + (double_confirmed × 10) + (editorial_spotlight × 15)`
+`heat_score = (source_count × 12) + counted_articles + (hero_count × 20) + (double_confirmed × 10) + (editorial_spotlight × 15)`
 
 - `source_count` = number of distinct outlets covering this story
-- `article_count` = total articles in the cluster
+- `counted_articles` = articles in the cluster, counting at most
+  **`MAX_ARTICLES_PER_SOURCE = 3`** from any one outlet. The raw total is still
+  reported as `article_count` for display. Without the cap, an outlet that files five
+  stories on one game or trial carries the cluster by itself — sampled Sept 2026, NY Post
+  supplied 5 of 6 articles in one cluster and 4 of 8 in another. Breadth is meant to say
+  "many newsrooms are on this", so six articles from three outlets (heat 42) must outscore
+  six from one outlet plus a straggler (heat 28). Every other term was already per-outlet.
 - `hero_count` = outlets where this story was RSS position 0–1 OR appeared on scraped homepage (pos ≤ 8)
 - `double_confirmed` = outlets where story is BOTH RSS position 0–1 AND scraped from homepage
 - `editorial_spotlight` = outlets where scraped homepage position is 1–3 (editors are actively leading with this story)
@@ -228,8 +234,11 @@ then Google News RSS, now `feeds.foxnews.com/foxnews/latest` with a 50-article p
 catch editorially pinned "LIVE UPDATES" hero stories that never refresh to position 0 in a
 chronological feed. Paired with Fox-specific targeted scraping of `div.big-top` and
 `div.thumbs-2-7`. Fox IS server-side rendered — BeautifulSoup parses the full layout.
-The 50-article pool is the one place an outlet gets a bigger pool than the rest; it
-compensates for a chronological feed, it does not weight Fox in the ranking.
+The 50-article pool is the one place an outlet gets a bigger pool than the rest. It
+compensates for a chronological feed and does not weight Fox in the ranking: the 48h
+cutoff binds first (Fox contributes ~25 against everyone else's ~20), `source_count`,
+hero and spotlight credit are per-outlet, and since Sept 2026 `MAX_ARTICLES_PER_SOURCE`
+caps the one term a deeper pool could reach.
 
 **Note on CNN and AP:** Both use Google News RSS. CNN's direct feed returned only 2
 articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
@@ -501,6 +510,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **Per-outlet cap on the breadth term (Sept 2026)** — `MAX_ARTICLES_PER_SOURCE = 3`. Heat's article term counts at most three articles from any one outlet, so no single newsroom's output can stand in for coverage across newsrooms. Investigated because Fox's `rss_limit: 50` looked like a thumb on the scale; measurement showed Fox was not the problem (the 48h cutoff binds first) and NY Post was, at 5 of 6 articles in one cluster. Affected 0 of 20 clusters on the cycle it shipped — it is a guardrail, not a re-ranking.
 - [x] **Reddit and the two trend pages retired (Sept 2026)** — deleted `_fetch_reddit_set()`, both subreddit lists, the `.bt-*` CSS, the `rdPosts()`/`rBT()`/`rRT()` renderers, the two nav items in all three surfaces and the `liberal_reddit`/`conservative_reddit` store keys. `/bluetrends` and `/redtrends` 301 to `/`. Reddit 429d one side harder than the other most cycles, so the two pages could not be symmetric in fact, only in layout. Also cut ~30s off every refresh (44s → 14s): the `_REDDIT_DELAY` throttle was the single slowest thing in the pipeline. The Memeorandum slot took the chance to stop being called `reddit_posts` — it is `data_store['memeorandum']` / `_MEMO_CACHE` now.
 - [x] **25-source 10/5/10 rebalance with AllSides attribution (Sept 2026)** — added Bloomberg, The Dispatch, Fox Business, Daily Mail and Washington Free Beacon, all on direct feeds; nothing removed. Every outlet now carries its verbatim AllSides rating (`allsides`) plus `RATINGS_SOURCE`/`RATINGS_AS_OF`/`RATINGS_URL`, and `LEAN` collapsed from five hand-assigned tiers to three display buckets. Fixed a 67% measurement advantage for left-of-center stories (a 10-dot ceiling against 6).
 - [x] **Facebook dead-code + token removal** — deleted `fetch_facebook_engagement()` (never called by `refresh_data()`), the `/debug/fb` route, and the `/debug/memo` route. All three embedded a hardcoded Facebook app token in publicly deployed code; `/debug/fb` also exposed it via an unauthenticated endpoint. See "Rotate the Facebook token" below.
