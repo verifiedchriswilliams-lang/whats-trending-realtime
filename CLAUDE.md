@@ -377,13 +377,57 @@ clusters at 10 articles, so "no outlet right of center is carrying this" is only
 printed when the full source list says so. Inferring absence from the sample would put a
 false claim in the largest type on the page.
 
-**Images: the hero only, always credited (Sept 2026).** `entry_image()` pulls an article
-image off the RSS entry (`media_content`, `media_thumbnail`, an image enclosure, or the
-first `<img>` in the summary) and the hero shows one, chosen from whichever carrying
-outlet is running the story hardest and has a picture. `.hero-fig` removes itself
-`onerror`, so a blocked hotlink is a missing image rather than a broken icon, and the
-request goes out `referrerpolicy="no-referrer"` (verified loading from foxnews, nbcnews,
-foxbusiness, bbc, dailymail, natreview and axios CDNs).
+**Images: the hero only, always credited (Sept 2026).** `entry_image()` collects *every*
+candidate an entry offers — `media_content`, `media_thumbnail`, image enclosures, the
+first `<img>` in the summary — and picks the largest. The hero shows one, from whichever
+carrying outlet is running the story hardest and has a picture. `.hero-fig` removes
+itself `onerror`, so a blocked hotlink is a missing image rather than a broken icon, and
+also `onload` when the image would have to be upscaled past 1.25×: a soft hero is worse
+than none. Requests go out `referrerpolicy="no-referrer"` (verified loading from foxnews,
+nbcnews, foxbusiness, bbc, dailymail, natreview and axios CDNs).
+
+**Taking the first candidate shipped a visibly pixelated hero.** Feeds advertise whatever
+size suits their own page: **BBC serves 240×135** and the **Daily Mail 154×115**, both as
+the first thing in the entry. Blown up to hero width that is a 4× upscale. Three rules
+now apply, in `_IMG_UPGRADES` and the picker:
+
+- **Rewrite the size token** where the CDN takes one — BBC `/ace/standard/240/` → `/1024/`
+  (240×135 → 1024×576), wp.com `?fit=`, `?w=`, Axios `/320x320/`. Do **not** do this to
+  Fox: `a57.foxnews.com` serves only the renditions it lists and a rewritten size 404s.
+- **Ask WordPress CDNs for a width when none is given.** NY Post handed back the untouched
+  master: **7430×4953, 3.9MB**. With `?w=1600` it is 1600×1066 at 263KB.
+- **An undeclared width must not lose to a declared tiny one.** The Daily Mail ships a
+  154×115 `<media:thumbnail>` beside a full-size `<media:content>` carrying no dimensions,
+  so an unknown width scores as 900 rather than 0.
+- **Skip video URLs.** NBC files `prodamdnewsencoding.akamaized.net` inside
+  `<media:content>`; it is an `<img>` that can never load.
+
+**The frame is 16:9, not the artboard's 21:9, and the crop is biased upward.** Measured
+across the twelve feeds that carry images, five are exactly 16:9 and three are 3:2 —
+**nothing is wider than 16:9**. A 21:9 frame therefore cropped every photograph, 43% of
+the height on a 16:9 source, and a centred vertical crop takes the top of the head first.
+`object-position:50% 30%` handles the residual crop on 3:2 and 1:1 sources, because news
+photographs put faces above the middle. This is not face detection; do not describe it as
+such.
+
+**The hero is two columns, gated on a container query.** Argument on the left (headline,
+lede, the two quoted headlines), evidence on the right (image, coverage dots, Signal).
+That is 463px tall against 914px for the full-width version, so the leading story and the
+top of the ranked list share the first screen, and the Signal sits with the dots it
+belongs with instead of below the fold.
+
+It keys off `@container hero-col`, not the viewport, because the main column is squeezed
+between a 256px sidebar and a 360px aside — at a 1100px viewport a percentage second
+column resolved to a **161px image**. Stacked single-column is the default, so a browser
+without container query support gets that rather than a broken grid, and the phone layout
+leads with the photograph.
+
+**Two traps in that CSS, both of which shipped a sideways-scrolling page before they were
+caught.** The second column has a hard **264px floor** because the 25-dot row cannot
+shrink or wrap — a wrapped group destroys the shape the dots exist to show — and 25 tiles
+at 10px plus three 4px gaps is 262px. And **a container query adds no specificity**: the
+`--dt:10px` inside `@container` lost to an equal-specificity `--dt:13px` further down the
+sheet, putting a 337px row in a 292px column. Size the hero tile once, outside the query.
 
 **Thumbnails on every row were measured and rejected**, and the measurement is the reason:
 

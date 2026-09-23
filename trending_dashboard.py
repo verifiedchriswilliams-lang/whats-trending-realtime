@@ -244,32 +244,88 @@ _RSS_HEADERS = {
 
 _IMG_IN_HTML = re.compile(r'<img[^>]+src="([^"]+)"', re.I)
 
-def entry_image(e):
-    """Article image from an RSS entry, or None.
+# Hosts that appear in <media:content> but serve video, not stills. NBC files these
+# alongside real images; rendering one gives an <img> that never loads.
+_NOT_IMAGE_HOST = ("prodamdnewsencoding.akamaized.net", "video", ".mp4", ".m3u8")
 
-    Only 12 of the 25 feeds carry one, and the supply is politically lopsided —
-    3 left / 2 center / 7 right, because the eight Google News feeds strip media and
-    those skew left. That is why only the hero shows an image and always credits the
-    outlet it came from: a photo is the most salient thing on a row, and putting one
-    outlet's picture on every story would hand a disproportionate share of the page's
-    visual voice to one side of the roster.
+# Feeds advertise whatever size suits their own page, which is often a thumbnail:
+# BBC serves 240x135 and the Daily Mail 154x115. Blown up to hero width that is a
+# 4x upscale, so rewrite the size token in the URL where the CDN takes one.
+_IMG_UPGRADES = (
+    (re.compile(r'(ichef\.bbci\.co\.uk/(?:ace/)?\w+/)\d{2,4}(/)'), r'\g<1>1024\g<2>'),
+    (re.compile(r'([?&]w=)\d{2,4}'),                                  r'\g<1>1600'),
+    (re.compile(r'([?&]fit=)\d{2,4}(%2C|,)\d{2,4}'),                 r'\g<1>1600\g<2>900'),
+    (re.compile(r'(/)\d{2,3}x\d{2,3}(/)'),                           r'\g<1>1366x768\g<2>'),
+)
+
+def _upgrade_image(url):
+    for pat, rep in _IMG_UPGRADES:
+        new = pat.sub(rep, url)
+        if new != url:
+            return new, True
+    # WordPress CDNs serve the untouched master when no width is asked for — NY Post
+    # handed back 7430x4953 at 3.9MB. Ask for a hero-sized rendition instead.
+    if "wp-content" in url and not re.search(r'[?&]w=', url):
+        return url + ("&" if "?" in url else "?") + "w=1600", True
+    return url, False
+
+
+def entry_image(e):
+    """Best article image from an RSS entry, or None.
+
+    Collects every candidate the entry offers rather than taking the first — feeds
+    list thumbnails and full-size images side by side and the thumbnail often comes
+    first — then prefers the one with the largest declared width.
+
+    Only 12 of the 25 feeds carry an image at all, and the supply is politically
+    lopsided: 3 left / 2 center / 7 right, because the eight Google News feeds strip
+    media and those skew left. That is why only the hero shows an image and always
+    credits the outlet it came from. A photo is the most salient thing on a row, and
+    putting one outlet's picture on every story would hand a disproportionate share
+    of the page's visual voice to one side of the roster.
     """
+    cands = []   # (declared_width, url)
+
+    def add(url, w=None):
+        if not url:
+            return
+        low = url.lower()
+        if any(bad in low for bad in _NOT_IMAGE_HOST):
+            return
+        try:
+            w = int(w) if w else 0
+        except (TypeError, ValueError):
+            w = 0
+        # An undeclared width must not lose to a declared tiny one: the Daily Mail
+        # ships a 154x115 <media:thumbnail> beside a full-size <media:content> that
+        # carries no dimensions at all.
+        if not w:
+            w = 900
+        url, upgraded = _upgrade_image(url)
+        if upgraded:
+            w = max(w, 1024)   # the rewrite asks the CDN for a hero-sized rendition
+        cands.append((w, url))
+
     for key in ("media_content", "media_thumbnail"):
-        v = e.get(key)
-        if v and isinstance(v, list) and v[0].get("url"):
-            return v[0]["url"]
+        for v in (e.get(key) or []):
+            if isinstance(v, dict):
+                add(v.get("url"), v.get("width"))
     for enc in e.get("enclosures", []) or []:
-        if str(enc.get("type", "")).startswith("image/") and enc.get("href"):
-            return enc["href"]
+        if str(enc.get("type", "")).startswith("image/"):
+            add(enc.get("href"), enc.get("width"))
     for key in ("summary", "description"):
         m = _IMG_IN_HTML.search(e.get(key) or "")
         if m:
-            return m.group(1)
+            add(m.group(1))
     for c in e.get("content", []) or []:
         m = _IMG_IN_HTML.search(c.get("value") or "")
         if m:
-            return m.group(1)
-    return None
+            add(m.group(1))
+
+    if not cands:
+        return None
+    cands.sort(key=lambda c: -c[0])
+    return cands[0][1]
 
 
 def fetch_source(source):
@@ -1489,16 +1545,47 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* MAIN CANVAS */
 .main{margin-left:256px;margin-top:0;padding:20px 20px 24px;min-height:100vh}
 .cgrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
+.cgrid > section{container-type:inline-size;container-name:hero-col;min-width:0}
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
 /* Leading story. Everything in it is either computed from the data or quoted from an
    outlet — the hero states no judgement of its own about the coverage it summarises. */
+/* Two columns: the argument on the left, the evidence on the right. The photograph
+   is supporting material, not the subject, so it sits beside the headline rather than
+   under it — which keeps the whole leading story above the fold (463px against 914px
+   for the full-width version) and keeps the Signal next to the coverage dots it
+   belongs with.
+
+   Gated on a CONTAINER query, not the viewport. The main column is squeezed between a
+   256px sidebar and a 360px aside, so viewport width says little about how much room
+   the hero actually has: at 1100px a percentage second column resolved to a 161px
+   image. Stacked is the default, so a browser without container query support gets the
+   single-column layout rather than a broken grid. */
 .hero{display:none;margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--surface-top)}
-.hero.on{display:block}
+.hero.on{display:flex;flex-direction:column}
+.hero-eyebrow{order:1}.hero-fig{order:2}.hero-hl{order:3}
+.hero-lede{order:4}.hero-split{order:5}.hero-foot{order:6}
+
+/* The 25-dot row cannot shrink or wrap — a wrapped group destroys the shape it
+   exists to show — so the second column has a hard floor wide enough to hold it:
+   25 tiles at 10px plus three 4px group gaps is 262px. Get this wrong and the page
+   scrolls sideways, which is exactly what a 13px tile in a 295px column did. */
+@container hero-col (min-width:760px){
+  .hero.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(264px,34%);
+    gap:6px 36px;align-items:start}
+  .hero-eyebrow{grid-column:1/-1}
+  .hero-hl{grid-column:1;grid-row:2}
+  .hero-lede{grid-column:1;grid-row:3}
+  .hero-split{grid-column:1;grid-row:4;margin-bottom:0}
+  .hero-fig{grid-column:2;grid-row:2/span 2;margin:6px 0 0}
+  .hero-foot{grid-column:2;grid-row:4;flex-direction:column;
+    align-items:flex-start;gap:16px;margin-top:2px}
+  .hero-stat{text-align:left}
+}
 .hero-eyebrow{font-size:13px;color:var(--ink3);margin-bottom:12px}
 .hero-hl{font-family:'Instrument Sans',system-ui,sans-serif;
-  font-size:clamp(27px,3.5vw,42px);font-weight:400;letter-spacing:-.035em;line-height:1.04;
+  font-size:clamp(24px,2.7vw,34px);font-weight:400;letter-spacing:-.035em;line-height:1.04;
   color:var(--ink);margin-bottom:14px}
 .hero-hl a{color:inherit;text-decoration:none}
 .hero-hl a:hover{text-decoration:underline;text-underline-offset:4px}
@@ -1515,24 +1602,38 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-none{font-size:14px;color:var(--ink3);line-height:1.5;padding:9px 0;border-top:1px solid var(--surface-low)}
 /* One image, on the leading story only, always credited. Absence is a layout
    variant rather than a hole: roughly one story in ten has no image anywhere in
-   its cluster, and those skew toward all-left-and-center coverage. */
-.hero-fig{margin:0 0 20px;max-width:74ch}
-.hero-img{display:block;width:100%;aspect-ratio:21/9;object-fit:cover;
+   its cluster, and those skew toward all-left-and-center coverage.
+
+   16:9, not the artboard's 21:9. Measured across the twelve feeds that carry
+   images, five are exactly 16:9 and three are 3:2 — nothing is wider. A 21:9
+   frame therefore cropped every photograph, 43% of the height on a 16:9 source,
+   and what a centred vertical crop takes first is the top of someone's head.
+   The residual crop on 3:2 and 1:1 sources is biased upward for the same reason:
+   news photographs put faces above the middle. */
+.hero-fig{margin:0 0 18px}
+.hero-img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;
+  object-position:50% 30%;
   border-radius:clamp(14px,2vw,22px);background:var(--surface-low)}
 .hero-credit{font-size:13px;color:var(--ink3);margin-top:8px}
-.hero-foot{display:flex;align-items:flex-end;justify-content:space-between;gap:30px;flex-wrap:wrap}
-.hero-dots .cdots{--dt:13px}
+
+.hero-foot{display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:2px}
+.hero-stat{text-align:left}
+/* 10px, not 13px. A container query adds no specificity, so sizing this inside one
+   loses to any equal-specificity rule further down the sheet — which is how a 13px
+   tile ended up in a 292px column and scrolled the page sideways. Size it once, for
+   the narrowest column it will ever sit in: 25 tiles plus three group gaps is 262px
+   against the second column's 264px floor. The row cannot wrap; a wrapped group
+   destroys the shape the dots exist to show. */
+.hero-dots .cdots{--dt:10px}
 .hero-dots .cdn{display:none}
 .hero-legend{font-size:13px;color:var(--ink3);margin-top:9px}
-.hero-stat{text-align:right}
 .hero-stat-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1}
 .hero-stat-l{font-size:13px;color:var(--ink3);margin-top:3px}
 @media(max-width:600px){
   .hero{margin-bottom:24px;padding-bottom:20px}
+  .hero-hl{font-size:clamp(23px,5.6vw,30px)}
   .hero-q{grid-template-columns:1fr;gap:3px}
   .hero-foot{gap:18px}
-  .hero-stat{text-align:left}
-  .hero-dots .cdots{--dt:10px}
 }
 .sec-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;color:var(--navy-d);line-height:1.1}
 .sec-sub{font-size:13px;color:var(--ink-l);margin-top:4px}
@@ -2213,7 +2314,9 @@ function rHero(t){
   const fig=im?'<figure class="hero-fig">'
       +'<img class="hero-img" src="'+e(im.image)+'" alt="" decoding="async" '
       +'referrerpolicy="no-referrer" '
-      +'onerror="this.closest(\'.hero-fig\').remove()">'
+      +'onerror="this.closest(\'.hero-fig\').remove()" '
+      +'onload="if(this.naturalWidth&&this.naturalWidth<this.getBoundingClientRect().width*0.8)'
+      +'this.closest(\'.hero-fig\').remove()">'
       +'<figcaption class="hero-credit">Photo: '+e(SN[im.source_id]||im.source_id)+'</figcaption>'
       +'</figure>':'';
 
