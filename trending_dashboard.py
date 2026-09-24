@@ -1551,55 +1551,62 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
 /* Leading story. Everything in it is either computed from the data or quoted from an
    outlet — the hero states no judgement of its own about the coverage it summarises. */
-/* Two columns: the argument on the left, the evidence on the right. The photograph
-   is supporting material, not the subject, so it sits beside the headline rather than
-   under it — which keeps the whole leading story above the fold (463px against 914px
-   for the full-width version) and keeps the Signal next to the coverage dots it
-   belongs with.
+/* Two columns, each its own flow container. The first version made the hero one grid
+   and gave the figure `grid-row: 2 / span 2`, which tied the image's height to the
+   headline and lede rows — a tall photograph stretched those rows and left the text
+   floating in the middle of them, with ~160px of dead space under the headline. A
+   column is not a set of shared rows. `.hero-main` and `.hero-side` each flow on their
+   own, so nothing in one column can push anything in the other.
 
-   Gated on a CONTAINER query, not the viewport. The main column is squeezed between a
-   256px sidebar and a 360px aside, so viewport width says little about how much room
-   the hero actually has: at 1100px a percentage second column resolved to a 161px
-   image. Stacked is the default, so a browser without container query support gets the
-   single-column layout rather than a broken grid. */
+   Gated on a CONTAINER query, not the viewport: the main column is squeezed between a
+   256px sidebar and a 360px aside, so viewport width says little about the room the
+   hero actually has — at a 1100px viewport a percentage second column once resolved to
+   a 161px image. Stacked is the default, so a browser without container query support
+   gets a sound single column. */
 .hero{display:none;margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--surface-top)}
 .hero.on{display:flex;flex-direction:column}
-.hero-eyebrow{order:1}.hero-fig{order:2}.hero-hl{order:3}
-.hero-lede{order:4}.hero-split{order:5}.hero-foot{order:6}
+/* Stacked: the wrapper dissolves so the photograph can lead, which is what tells you
+   at a glance on a phone which story this is. */
+.hero-side{display:contents}
+.hero-eyebrow{order:1}.hero-fig{order:2}.hero-main{order:3}.hero-foot{order:4}
 
-/* The 25-dot row cannot shrink or wrap — a wrapped group destroys the shape it
-   exists to show — so the second column has a hard floor wide enough to hold it:
-   25 tiles at 10px plus three 4px group gaps is 262px. Get this wrong and the page
-   scrolls sideways, which is exactly what a 13px tile in a 295px column did. */
 @container hero-col (min-width:760px){
-  .hero.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(264px,34%);
-    gap:6px 36px;align-items:start}
+  .hero.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(264px,32%);
+    column-gap:40px;align-items:start}
+  /* `order` applies to grid items too, so the stacked ordering above has to be
+     cleared here — left in place, `.hero-side` (no order, so 0) sorted ahead of the
+     eyebrow and the photograph jumped to the top of the grid. */
+  .hero-eyebrow,.hero-fig,.hero-main,.hero-foot,.hero-side{order:0}
   .hero-eyebrow{grid-column:1/-1}
-  .hero-hl{grid-column:1;grid-row:2}
-  .hero-lede{grid-column:1;grid-row:3}
-  .hero-split{grid-column:1;grid-row:4;margin-bottom:0}
-  .hero-fig{grid-column:2;grid-row:2/span 2;margin:6px 0 0}
-  .hero-foot{grid-column:2;grid-row:4;flex-direction:column;
-    align-items:flex-start;gap:16px;margin-top:2px}
-  .hero-stat{text-align:left}
+  .hero-side{display:block}
+  .hero-fig{margin:6px 0 0}
+  .hero-main{min-width:0}
 }
-.hero-eyebrow{font-size:13px;color:var(--ink3);margin-bottom:12px}
+
+.hero-eyebrow{font-size:13px;color:var(--ink3);margin-bottom:14px}
 .hero-hl{font-family:'Instrument Sans',system-ui,sans-serif;
-  font-size:clamp(24px,2.7vw,34px);font-weight:400;letter-spacing:-.035em;line-height:1.04;
-  color:var(--ink);margin-bottom:14px}
+  font-size:clamp(24px,2.7vw,34px);font-weight:400;letter-spacing:-.035em;line-height:1.06;
+  color:var(--ink);margin:0 0 12px}
 .hero-hl a{color:inherit;text-decoration:none}
 .hero-hl a:hover{text-decoration:underline;text-underline-offset:4px}
-.hero-lede{font-size:clamp(15px,1.3vw,17px);color:var(--ink2);line-height:1.6;margin-bottom:20px;max-width:62ch}
+.hero-lede{font-size:clamp(15px,1.3vw,16.5px);color:var(--ink2);line-height:1.55;
+  margin:0 0 26px;max-width:58ch}
+
 /* The framing split, shown rather than characterised: the same story as two outlets
-   on opposite sides of the roster actually headlined it. */
-.hero-split{display:grid;gap:10px;margin-bottom:20px;max-width:74ch}
-.hero-q{display:grid;grid-template-columns:132px 1fr;gap:14px;align-items:baseline;
-  padding:9px 0;border-top:1px solid var(--surface-low)}
+   on opposite sides of the roster actually headlined it. Labelled, because two
+   quotations appearing under a headline with nothing to introduce them read as
+   loose fragments rather than as the evidence they are. */
+.hero-split{max-width:74ch;margin:0}
+.hero-split-lbl{font-size:13px;color:var(--ink3);padding-bottom:8px}
+.hero-q{display:grid;grid-template-columns:124px minmax(0,1fr);gap:14px;align-items:baseline;
+  padding:10px 0;border-top:1px solid var(--surface-high)}
 .hero-q-src{font-size:13px;font-weight:500;line-height:1.4}
 .hero-q-hl{font-size:15px;color:var(--ink);line-height:1.45}
 .hero-q-hl a{color:inherit;text-decoration:none}
 .hero-q-hl a:hover{text-decoration:underline;text-underline-offset:3px}
-.hero-none{font-size:14px;color:var(--ink3);line-height:1.5;padding:9px 0;border-top:1px solid var(--surface-low)}
+.hero-none{font-size:14px;color:var(--ink3);line-height:1.5;padding:10px 0;
+  border-top:1px solid var(--surface-high)}
+
 /* One image, on the leading story only, always credited. Absence is a layout
    variant rather than a hole: roughly one story in ten has no image anywhere in
    its cluster, and those skew toward all-left-and-center coverage.
@@ -1610,14 +1617,19 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
    and what a centred vertical crop takes first is the top of someone's head.
    The residual crop on 3:2 and 1:1 sources is biased upward for the same reason:
    news photographs put faces above the middle. */
-.hero-fig{margin:0 0 18px}
+/* Stacked, the photograph would otherwise run the full column — 728px at a 768px
+   viewport — and push everything else off the screen. It is supporting material at
+   any width. */
+.hero-fig{margin:0 0 18px;max-width:min(100%,520px)}
 .hero-img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover;
   object-position:50% 30%;
   border-radius:clamp(14px,2vw,22px);background:var(--surface-low)}
 .hero-credit{font-size:13px;color:var(--ink3);margin-top:8px}
 
-.hero-foot{display:flex;flex-direction:column;align-items:flex-start;gap:16px;margin-top:2px}
-.hero-stat{text-align:left}
+/* The measurements read as one block, under a rule that separates them from the
+   photograph above: how broadly it is carried, then how strong that is. */
+.hero-foot{margin-top:20px;padding-top:16px;border-top:1px solid var(--surface-high)}
+.hero-dots .cdrow{margin-top:0}
 /* 10px, not 13px. A container query adds no specificity, so sizing this inside one
    loses to any equal-specificity rule further down the sheet — which is how a 13px
    tile ended up in a 292px column and scrolled the page sideways. Size it once, for
@@ -1626,9 +1638,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
    destroys the shape the dots exist to show. */
 .hero-dots .cdots{--dt:10px}
 .hero-dots .cdn{display:none}
-.hero-legend{font-size:13px;color:var(--ink3);margin-top:9px}
+.hero-legend{font-size:13px;color:var(--ink3);margin-top:10px}
+.hero-stat{margin-top:20px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .hero-stat-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1}
-.hero-stat-l{font-size:13px;color:var(--ink3);margin-top:3px}
+.hero-stat-l{font-size:13px;color:var(--ink3)}
+.hero-delta{font-size:13px;color:var(--ink3);margin-top:6px;width:100%}
 @media(max-width:600px){
   .hero{margin-bottom:24px;padding-bottom:20px}
   .hero-hl{font-size:clamp(23px,5.6vw,30px)}
@@ -2304,6 +2318,9 @@ function rHero(t){
       if(a)split+=row(a,b);
     }
   });
+  // Two quotations under a headline with nothing to introduce them read as loose
+  // fragments rather than as the evidence they are. One quiet line says what they are.
+  if(split)split='<div class="hero-split-lbl">How it is being headlined</div>'+split;
 
   // The image comes from whichever carrying outlet is running the story hardest and
   // has one. It is credited in place, because it is that outlet's editorial choice of
@@ -2322,21 +2339,29 @@ function rHero(t){
 
   const d=t.delta;
   const dh=d===null||d===undefined?''
-    :d>0?'<div class="hero-stat-l" style="color:var(--acc)">▲'+d+' in the last 30 minutes</div>'
-    :d<0?'<div class="hero-stat-l">▼'+Math.abs(d)+' in the last 30 minutes</div>'
-    :'<div class="hero-stat-l">No change in the last 30 minutes</div>';
+    :d>0?'<div class="hero-delta" style="color:var(--acc)">▲'+d+' in the last 30 minutes</div>'
+    :d<0?'<div class="hero-delta">▼'+Math.abs(d)+' in the last 30 minutes</div>'
+    :'<div class="hero-delta">No change in the last 30 minutes</div>';
   const legend=[sp.by.left.length+' left',sp.by.center.length+' center',sp.by.right.length+' right',
                 sp.missing.length+' not carrying it'].join(' · ');
 
+  // Each column is its own flow container: nothing in one can stretch a row in the
+  // other, which is what left 160px of dead space under the headline.
   el.innerHTML='<div class="hero-eyebrow">Leading story · '+n+' of '+sp.roster.length+' outlets</div>'
-    +'<div class="hero-hl">'+hl+'</div>'
-    +'<div class="hero-lede">'+e(lede)+'</div>'
-    +fig
-    +(split?'<div class="hero-split">'+split+'</div>':'')
-    +'<div class="hero-foot"><div><div class="hero-dots">'+dots(srcs)+'</div>'
-      +'<div class="hero-legend">'+legend+'</div></div>'
-    +'<div class="hero-stat"><div class="hero-stat-n">'+t.heat_score+'</div>'
-      +'<div class="hero-stat-l">Signal</div>'+dh+'</div></div>';
+    +'<div class="hero-main">'
+      +'<div class="hero-hl">'+hl+'</div>'
+      +'<div class="hero-lede">'+e(lede)+'</div>'
+      +(split?'<div class="hero-split">'+split+'</div>':'')
+    +'</div>'
+    +'<div class="hero-side">'
+      +fig
+      +'<div class="hero-foot">'
+        +'<div class="hero-dots">'+dots(srcs)+'</div>'
+        +'<div class="hero-legend">'+legend+'</div>'
+        +'<div class="hero-stat"><span class="hero-stat-n">'+t.heat_score+'</span>'
+          +'<span class="hero-stat-l">Signal</span>'+dh+'</div>'
+      +'</div>'
+    +'</div>';
   el.classList.add('on');
 }
 

@@ -411,19 +411,31 @@ photographs put faces above the middle. This is not face detection; do not descr
 such.
 
 **The hero is two columns, gated on a container query.** Argument on the left (headline,
-lede, the two quoted headlines), evidence on the right (image, coverage dots, Signal).
-That is 463px tall against 914px for the full-width version, so the leading story and the
-top of the ranked list share the first screen, and the Signal sits with the dots it
-belongs with instead of below the fold.
+lede, the quoted headlines under a "How it is being headlined" label), evidence on the
+right (image, credit, then a rule, then the coverage dots and Signal as one block). 392px
+tall against 914px for the full-width version, so the leading story and the top of the
+ranked list share the first screen.
+
+**Each column is its own flow container — `.hero-main` and `.hero-side` — and that is
+load-bearing.** The first version made the whole hero one grid and gave the figure
+`grid-row: 2 / span 2`. That tied the image's height to the headline and lede rows: a tall
+photograph stretched those rows and left the text floating inside them, ~160px of dead
+space under the headline and another gap under the lede. A column is not a set of shared
+rows. Do not reintroduce row spanning across the two columns.
 
 It keys off `@container hero-col`, not the viewport, because the main column is squeezed
 between a 256px sidebar and a 360px aside — at a 1100px viewport a percentage second
 column resolved to a **161px image**. Stacked single-column is the default, so a browser
-without container query support gets that rather than a broken grid, and the phone layout
-leads with the photograph.
+without container query support gets that rather than a broken grid; `.hero-side` becomes
+`display:contents` there so the photograph can lead, which is what tells you at a glance
+on a phone which story this is. Stacked, the figure is capped at 520px — uncapped it ran
+the full column (728px at a 768px viewport) and pushed everything else off screen.
 
-**Two traps in that CSS, both of which shipped a sideways-scrolling page before they were
-caught.** The second column has a hard **264px floor** because the 25-dot row cannot
+**Three traps in that CSS.** `order` applies to grid items, not just flex items, so the
+stacked ordering has to be cleared inside the container query — left in place,
+`.hero-side` (no `order`, so 0) sorted ahead of the eyebrow and the photograph jumped to
+the top of the grid. The other two shipped a sideways-scrolling page before they were
+caught. The second column has a hard **264px floor** because the 25-dot row cannot
 shrink or wrap — a wrapped group destroys the shape the dots exist to show — and 25 tiles
 at 10px plus three 4px gaps is 262px. And **a container query adds no specificity**: the
 `--dt:10px` inside `@container` lost to an equal-specificity `--dt:13px` further down the
