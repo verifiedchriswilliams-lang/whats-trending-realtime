@@ -3,8 +3,7 @@
 ## Project Purpose
 
 A real-time news dashboard for a general audience. It aggregates RSS feeds from 25 major
-news outlets — balanced 10 right / 5 center / 10 left on AllSides ratings — plus
-Twitter/X trends and Memeorandum (27 sources total) every 30 minutes, clusters stories by specific topic (not generic keywords), and
+news outlets — balanced 10 right / 5 center / 10 left on AllSides ratings — every 30 minutes, clusters stories by specific topic (not generic keywords), and
 ranks them by how widely and prominently they are being covered.
 
 **Target audience:** General market, mass consumption. The goal is that a reader can open
@@ -39,7 +38,6 @@ CLAUDE.md               ← this file
 - Flask for HTTP serving
 - feedparser for RSS ingestion (25 news sources, concurrent via ThreadPoolExecutor)
 - requests + BeautifulSoup4 for homepage scraping (18 sources in `SCRAPE_SOURCES`)
-- Memeorandum political aggregator via HTML scrape (surfaces stories driving pundit conversation)
 - gunicorn for production serving (via Procfile)
 - Railway for hosting, GitHub for version control
 
@@ -128,7 +126,7 @@ This replaced a naive approach that keyed history by cluster label text, which b
 
 ---
 
-## Data Sources (25 news RSS + 2 supplemental = 27 total)
+## Data Sources (25 news outlets)
 
 Sources are chosen for reputation and reach, and balanced across the political spectrum:
 **10 left of center / 5 center / 10 right of center.** `lean` is the three-bucket value
@@ -243,41 +241,38 @@ caps the one term a deeper pool could reach.
 **Note on CNN and AP:** Both use Google News RSS. CNN's direct feed returned only 2
 articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
 
-### Supplemental Sources
+### There is no social panel, and that is deliberate
 
-| Source | Method | Feeds | Notes |
-|---|---|---|---|
-| Twitter/X Trends | getdaytrends.com (primary) / trends24.in (fallback) | Social Velocity | getdaytrends currently parses 0 — the fallback is carrying it. |
-| Memeorandum | HTML scrape (`div.item > div.ii > strong > a`) | Social Velocity | `data_store['memeorandum']`, `_MEMO_CACHE`, 30 min. Both were named `reddit_posts`/`_REDDIT_CACHE` until the Reddit pages were retired. |
+Twitter/X trends and Memeorandum were the two halves of a "Social Velocity" sidebar,
+retired Sept 2026 along with the aside that held them. Both were measured first:
 
-**Removed Sept 2026:** Bluesky, Drudge Report, Truth Social — and, later the same month,
-Reddit entirely (see below).
-- **Drudge** is a single hand-curated, historically right-leaning feed — a poor fit for a
-  politically balanced product.
-- **Truth Social** returns a 403 Cloudflare challenge to server requests, so its panel
-  could never render.
-- **Bluesky** went with them: once Truth Social was gone it had no counterpart.
-- **Reddit** (all eight subreddits, and the Blue Trends and Red Trends pages it fed) came
-  out at the end of the month. Reddit 429s public RSS aggressively from datacentre IPs:
-  even throttled to one request every two seconds with a retry, a typical cycle returned
-  one or two of the four liberal subs and two of the four conservative ones. The two pages
-  could not be honestly symmetric when one side routinely carried more posts than the
-  other for reasons that had nothing to do with engagement. `/bluetrends` and `/redtrends`
-  now 301 to `/`. The coverage dots already carry the left/center/right claim, per story,
-  from sources that answer reliably. **Do not reintroduce a social panel that can only be
-  populated some of the time.**
+- **Memeorandum was the *useful* one and still failed the sourcing test.** All 20 of its
+  stories were real news, but of the 20 headlines on the panel, **8 were from outlets
+  outside the roster** — including `mediamatters.org`, an advocacy organisation rather
+  than a newsroom, and a personal Substack. Across its whole front page (1,132 outbound
+  links, 142 hosts) **18% came from outlets we had specifically considered and rejected**:
+  Newsmax, Breitbart, RedState, Gateway Pundit, Townhall, The Post Millennial, OAN, Daily
+  Kos. It is not partisan in aggregate — its mainstream links lean left (177 left / 112
+  center / 75 right among roster outlets) while its fringe links lean right — but a page
+  that picks 25 outlets on reputation, reach and AllSides attribution cannot put an
+  unvetted back door beside them with nothing marking the difference.
+- **Twitter was noise.** Of 25 live US trends sampled, **3 were news** and all three were
+  the same story. The rest: Braves, Man City, Iowa Hawkeyes, #TinaTuesday,
+  #NationalCoffeeDay, SPOOKTOOZ, Trea Turner.
 
-**On Memeorandum's balance:** sampled live (Sept 2026), its front page carried NYT (42
-links) alongside Washington Examiner (35) and Newsmax (27), Fox News (18) alongside The
-New Republic (18); classified links ran 149 left / 118 right. It is algorithmic rather
-than curated — it tracks what political writers are linking to and clusters commentary
-from both sides under each story — which is why it stays balanced without being balanced
-by hand. Caveat: it tracks *political punditry* specifically, so it skews toward what the
-commentariat is fixated on rather than general news. That is a genre skew, not a partisan
-one.
+Deleting the panel dropped `fetch_twitter_trends()`, `fetch_memeorandum()`, both caches,
+the `twitter_trends`/`memeorandum` store keys, the `.stab`/`.spanel`/`.tw-*` CSS, the
+`rTw()`/`rMemo()`/`switchTab()` renderers, the Social Velocity nav item in all three
+surfaces, and the `<aside>` — which also turned `.cgrid` into a single column and gave
+the main content the sidebar's 360px.
 
+**The standard this sets:** a panel on this page has to meet the same bar as the roster.
+Reddit failed it on availability, Memeorandum on sourcing, Twitter on relevance. If a
+social signal comes back, it has to pass all three.
 
 ---
+
+## Design system---
 
 ## Design system (2030 redesign)
 
@@ -410,11 +405,20 @@ the height on a 16:9 source, and a centred vertical crop takes the top of the he
 photographs put faces above the middle. This is not face detection; do not describe it as
 such.
 
-**The hero is two columns, gated on a container query.** Argument on the left (headline,
-lede, the quoted headlines under a "How it is being headlined" label), evidence on the
-right (image, credit, then a rule, then the coverage dots and Signal as one block). 392px
-tall against 914px for the full-width version, so the leading story and the top of the
-ranked list share the first screen.
+**The hero is three columns, gated on a container query:** a 94px rank gutter, the
+argument (headline, lede, the quoted headlines under a "How it is being headlined"
+label), and the evidence (image, credit, a rule, then the coverage dots and Signal as one
+block). 435px tall against 914px for the full-width version, so the leading story and the
+top of the ranked list share the first screen.
+
+**The rank gutter is the table's own geometry, and it has to stay that way.** 94px = 2px
+of `.tbl-wrap` padding + the 76px rank column + 16px of cell padding, so the hero's 01 and
+the table's 02 sit at the same x, and the hero's headline starts exactly where the Story
+column does. The gap to the evidence column is `padding-right` on `.hero-main`, **not** a
+`column-gap`: a column gap also opens between the rank and the headline and pushes the
+headline 40px right of the column it is meant to line up with. `.sec-hdr` is `order:-1`
+so the list's header sits above the hero — left where it was, the count read 01, a
+section heading, then 02.
 
 **Each column is its own flow container — `.hero-main` and `.hero-side` — and that is
 load-bearing.** The first version made the whole hero one grid and gave the figure
@@ -471,8 +475,7 @@ The app uses a **fixed left sidebar** for navigation (no top nav bar). The sideb
 **Sidebar nav items (top to bottom):**
 1. **Trending** — Top Trending Topics dashboard (main view)
 2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
-3. **Social Velocity** (`trending_up`) — smooth-scrolls to the Twitter/Memeorandum sidebar on the Dashboard page
-4. **Last Hour** (`schedule`) — recent articles page, with live article count badge
+3. **Last Hour** (`schedule`) — recent articles page, with live article count badge
 
 Blue Trends and Red Trends were items 5 and 6 until Sept 2026. Any nav item that splits
 the page by political side has to be symmetric in both structure *and* data quality; those
@@ -500,11 +503,6 @@ The **LIVE indicator + countdown to refresh** lives in the sidebar between the w
 - Political lean color on the source eyebrow (FOX NEWS, CNN, etc.)
 - Live count badge on the tab updates every refresh cycle
 - Auto-refreshes with the main data pipeline
-
-### Social Velocity sidebar
-- **Twitter** tab: US trending topics. Primary source: getdaytrends.com (server-rendered). Fallback: trends24.in. Both may be intermittent from cloud IPs.
-
-**Note:** Facebook tab was removed. Meta's Graph API (`Page Public Content Access` feature) requires App Review and is incompatible with the Facebook Login app type — not feasible for public page engagement data without a full app rebuild.
 
 ### Live Source Feed (Source Headlines grid)
 - All 25 news sources displayed with their top 8 headlines
@@ -603,7 +601,6 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
 - **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
 - **Post-merge threshold tuning:** `MERGE_THRESHOLD = 0.20` was chosen to catch same-story false splits. If unrelated stories start merging, raise it toward 0.25. If splits persist, lower it toward 0.15.
-- **Twitter/X trends:** getdaytrends.com and trends24.in may block cloud server IPs intermittently. Shows "unavailable" gracefully when both fail.
 - **SIMILARITY_THRESHOLD tuning:** 0.28 is the current setting. After a full day of news cycles, this may need adjustment — raise if unrelated stories are still merging, lower if related stories are splitting into separate clusters.
 
 ---
@@ -614,6 +611,8 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [x] **Hero lead image (Sept 2026)** — `entry_image()` extracts an article image from RSS; the hero shows one, credited to the outlet it came from, and drops the figure entirely when the image fails or none exists. Thumbnails on every row were measured and rejected: the supply is 3 left / 2 center / 7 right, ~3.1MB for twenty, and 2 of 20 stories have no image at all.
 - [x] **Leading-story hero (Sept 2026)** — top cluster opens the page; table starts at 02. Computed lede (leaders + recency) plus one left-of-center and one right-of-center headline quoted verbatim, so the framing split is shown rather than characterised. No LLM, no unsourced claim. `rHero()`, `.hero-*`, and `dotSplit()` shared with the coverage dots so the legend and the dots cannot disagree.
 - [x] **Per-outlet cap on the breadth term (Sept 2026)** — `MAX_ARTICLES_PER_SOURCE = 3`. Heat's article term counts at most three articles from any one outlet, so no single newsroom's output can stand in for coverage across newsrooms. Investigated because Fox's `rss_limit: 50` looked like a thumb on the scale; measurement showed Fox was not the problem (the 48h cutoff binds first) and NY Post was, at 5 of 6 articles in one cluster. Affected 0 of 20 clusters on the cycle it shipped — it is a guardrail, not a re-ranking.
+- [x] **Social Velocity panel retired (Sept 2026)** — Twitter and Memeorandum both measured and both cut: Memeorandum put 8 of 20 headlines from outside the roster on the page (including an advocacy org and a personal Substack), and Twitter was 3 of 25 trends actually news. Removed the fetchers, caches, store keys, renderers, CSS, nav item and the `<aside>`; `.cgrid` is a single column now.
+- [x] **The hero is item 01 of the list (Sept 2026)** — the rank sits in a 94px gutter left of the headline, at the table's own geometry, and "Top Trending Topics" moved above the hero. Previously the eye read 01, a section heading, then 02.
 - [x] **Reddit and the two trend pages retired (Sept 2026)** — deleted `_fetch_reddit_set()`, both subreddit lists, the `.bt-*` CSS, the `rdPosts()`/`rBT()`/`rRT()` renderers, the two nav items in all three surfaces and the `liberal_reddit`/`conservative_reddit` store keys. `/bluetrends` and `/redtrends` 301 to `/`. Reddit 429d one side harder than the other most cycles, so the two pages could not be symmetric in fact, only in layout. Also cut ~30s off every refresh (44s → 14s): the `_REDDIT_DELAY` throttle was the single slowest thing in the pipeline. The Memeorandum slot took the chance to stop being called `reddit_posts` — it is `data_store['memeorandum']` / `_MEMO_CACHE` now.
 - [x] **25-source 10/5/10 rebalance with AllSides attribution (Sept 2026)** — added Bloomberg, The Dispatch, Fox Business, Daily Mail and Washington Free Beacon, all on direct feeds; nothing removed. Every outlet now carries its verbatim AllSides rating (`allsides`) plus `RATINGS_SOURCE`/`RATINGS_AS_OF`/`RATINGS_URL`, and `LEAN` collapsed from five hand-assigned tiers to three display buckets. Fixed a 67% measurement advantage for left-of-center stories (a 10-dot ceiling against 6).
 - [x] **Facebook dead-code + token removal** — deleted `fetch_facebook_engagement()` (never called by `refresh_data()`), the `/debug/fb` route, and the `/debug/memo` route. All three embedded a hardcoded Facebook app token in publicly deployed code; `/debug/fb` also exposed it via an unauthenticated endpoint. See "Rotate the Facebook token" below.
@@ -676,4 +675,3 @@ The dashboard is built for a fast scan. Suggested reading order:
 1. Top trending topics (highest heat score = broadest, most prominent coverage)
 2. Velocity sparkline and the ▲/▼ delta — which stories are gaining or losing coverage
 3. Last Hour tab — anything breaking in the last 60 minutes that hasn't clustered yet
-4. Social Velocity sidebar (Twitter / Memeorandum) — stories RSS may miss

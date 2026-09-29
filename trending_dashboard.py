@@ -213,7 +213,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"memeorandum":[],"last_hour":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -506,8 +506,6 @@ def scrape_homepage(sid, url):
         print(f"  scrape {sid}: {ex}")
         return [], {}, {}
 
-_TWITTER_CACHE  = {"data": [], "fetched_at": 0}
-_MEMO_CACHE   = {"data": [], "fetched_at": 0}
 
 
 _SITE_NAV_TERMS = {
@@ -515,147 +513,6 @@ _SITE_NAV_TERMS = {
     'subscribe','newsletter','advertise','careers','help','faq','sitemap',
     'gumroad','youtube trending videos','x (twitter)',
 }
-
-def fetch_twitter_trends():
-    """Scrape US Twitter/X trending topics.
-    Primary: getdaytrends.com (server-side rendered, reliable on cloud IPs)
-    Fallback: trends24.in
-    """
-    global _TWITTER_CACHE
-    now = time.time()
-    if _TWITTER_CACHE["data"] and now - _TWITTER_CACHE["fetched_at"] < 1800:
-        return _TWITTER_CACHE["data"]
-    if not HAS_SCRAPE:
-        return _TWITTER_CACHE["data"]
-
-    hdrs = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-    }
-
-    def _parse_getdaytrends(html):
-        soup = BeautifulSoup(html, 'html.parser')
-        trends, seen = [], set()
-        # getdaytrends.com: trend names are in <p class="trend-name"> or <span class="trend-name">
-        for el in soup.select('.trend-name, [class*="trend"] p, [class*="trending"] span'):
-            text = el.get_text(strip=True)
-            if not text or len(text) < 2 or len(text) > 80: continue
-            if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
-            seen.add(text.lower())
-            trends.append(text)
-        return trends[:25]
-
-    def _parse_trends24(html):
-        soup = BeautifulSoup(html, 'html.parser')
-        trends, seen = [], set()
-        for card in soup.select('.trend-card, [class*="trend-card"]'):
-            for li in card.select('ol li a, li a'):
-                text = li.get_text(strip=True)
-                if not text or len(text) < 2 or len(text) > 80: continue
-                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
-                seen.add(text.lower())
-                trends.append(text)
-            if len(trends) >= 25: break
-        # Fallback: any <a> with a hash-like short label inside a list
-        if not trends:
-            for a in soup.select('li a'):
-                text = a.get_text(strip=True)
-                if not text or len(text) < 2 or len(text) > 80: continue
-                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
-                seen.add(text.lower())
-                trends.append(text)
-                if len(trends) >= 25: break
-        return trends[:25]
-
-    sources = [
-        ("https://getdaytrends.com/united-states/", _parse_getdaytrends),
-        ("https://trends24.in/united-states/",      _parse_trends24),
-    ]
-    for url, parser in sources:
-        try:
-            r = requests.get(url, timeout=15, headers=hdrs)
-            r.raise_for_status()
-            trends = parser(r.text)
-            if trends:
-                _TWITTER_CACHE = {"data": trends, "fetched_at": now}
-                print(f"  Twitter/X trends: {len(trends)} trends from {url}")
-                return trends
-            else:
-                print(f"  Twitter/X: 0 trends parsed from {url}, trying next source")
-        except Exception as ex:
-            print(f"  Twitter trends error ({url}): {ex}")
-
-    print("  Twitter/X: all sources failed")
-    return _TWITTER_CACHE["data"]
-
-
-def fetch_memeorandum():
-    """Scrape Memeorandum (memeorandum.com) for top political stories.
-    Memeorandum is a political news aggregator that surfaces stories getting
-    the most cross-blog/cross-media attention — a strong editorial signal.
-    Simple static HTML, no API key, no auth required."""
-    global _MEMO_CACHE
-    now = time.time()
-    if _MEMO_CACHE["data"] and now - _MEMO_CACHE["fetched_at"] < 1800:
-        return _MEMO_CACHE["data"]
-    if not HAS_SCRAPE:
-        return _MEMO_CACHE["data"]
-    try:
-        r = requests.get(
-            "https://www.memeorandum.com/",
-            timeout=12,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml',
-                'Accept-Language': 'en-US,en;q=0.9',
-            }
-        )
-        r.raise_for_status()
-        soup = BeautifulSoup(r.text, 'html.parser')
-        stories = []
-        seen = set()
-        # Memeorandum structure (confirmed via browser inspection March 2026):
-        #   div.item
-        #     div.ii
-        #       strong.L1/.L2/.L3/.L4  ← prominence tier
-        #         a href="..."          ← main story headline
-        #     div (no class)            ← "Discussion: Site A and Site B"
-        for item in soup.find_all('div', class_='item'):
-            ii = item.find('div', class_='ii')
-            if not ii:
-                continue
-            strong = ii.find('strong')
-            if not strong:
-                continue
-            a = strong.find('a', href=True)
-            if not a:
-                continue
-            title = a.get_text(strip=True)
-            link  = a.get('href', '#')
-            if not title or title in seen or len(title) < 15:
-                continue
-            seen.add(title)
-            # Count discussants: sibling divs containing "Discussion:" text
-            discussants = 0
-            for sibling in item.find_all('div'):
-                if 'Discussion:' in sibling.get_text():
-                    discussants = len(sibling.find_all('a', href=True))
-                    break
-            stories.append({"title": title, "link": link, "discussants": discussants})
-            if len(stories) >= 20:
-                break
-        if stories:
-            _MEMO_CACHE = {"data": stories, "fetched_at": now}
-            print(f"  Memeorandum: {len(stories)} stories")
-        else:
-            print("  Memeorandum: no stories parsed")
-        return _MEMO_CACHE["data"]
-    except Exception as ex:
-        print(f"  Memeorandum fetch error: {ex}")
-        return _MEMO_CACHE["data"]
-
-
 
 # ── TF-IDF COSINE SIMILARITY CLUSTERING ──────────────────────────────────────
 # Replaces the single-keyword seed approach.
@@ -1248,11 +1105,6 @@ def refresh_data():
     if total_injected:
         print(f"  Total synthetic injections: {total_injected} across all sources")
 
-    print("  Fetching Twitter/X + Memeorandum...")
-    twitter_trends  = fetch_twitter_trends()
-    memeorandum     = fetch_memeorandum()
-    print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
-    print(f"  {'✓' if memeorandum else '✗'} Memeorandum: {len(memeorandum)} stories")
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1337,8 +1189,7 @@ def refresh_data():
 
     with data_lock:
         data_store.update({"last_updated":datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),"sources":srcs,"trending_topics":topics,
-                           "twitter_trends":twitter_trends,"memeorandum":memeorandum,
-                           "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
+                                                      "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
 def bg_loop(interval=1800):
@@ -1544,8 +1395,13 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 /* MAIN CANVAS */
 .main{margin-left:256px;margin-top:0;padding:20px 20px 24px;min-height:100vh}
-.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
-.cgrid > section{container-type:inline-size;container-name:hero-col;min-width:0}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+.cgrid > section{container-type:inline-size;container-name:hero-col;min-width:0;
+  display:flex;flex-direction:column}
+/* The list's own header sits above the leading story, so the hero reads as item 01 of
+   "Top Trending Topics" rather than as a separate block in front of it. Left where it
+   was, the eye read 01, a section heading, then 02, and the count broke. */
+.sec-hdr{order:-1}
 
 /* SECTION HEADER */
 .sec-hdr{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:16px}
@@ -1568,22 +1424,40 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* Stacked: the wrapper dissolves so the photograph can lead, which is what tells you
    at a glance on a phone which story this is. */
 .hero-side{display:contents}
-.hero-eyebrow{order:1}.hero-fig{order:2}.hero-main{order:3}.hero-foot{order:4}
+.hero-rank{order:1}.hero-eyebrow{order:2}.hero-fig{order:3}.hero-main{order:4}.hero-foot{order:5}
+/* Stacked there is no gutter to sit in, so the rank leads the eyebrow line instead. */
+.hero.on .hero-rank{font-size:26px;margin-bottom:2px}
 
-@container hero-col (min-width:760px){
-  .hero.on{display:grid;grid-template-columns:minmax(0,1fr) minmax(264px,32%);
-    column-gap:40px;align-items:start}
+@container hero-col (min-width:900px){
+  .hero.on{display:grid;grid-template-columns:94px minmax(0,1fr) minmax(264px,30%);
+    column-gap:0;align-items:start;
+    grid-template-areas:"rank eyebrow eyebrow" "rank main side"}
   /* `order` applies to grid items too, so the stacked ordering above has to be
      cleared here — left in place, `.hero-side` (no order, so 0) sorted ahead of the
      eyebrow and the photograph jumped to the top of the grid. */
-  .hero-eyebrow,.hero-fig,.hero-main,.hero-foot,.hero-side{order:0}
-  .hero-eyebrow{grid-column:1/-1}
-  .hero-side{display:block}
+  .hero-rank,.hero-eyebrow,.hero-fig,.hero-main,.hero-foot,.hero-side{order:0}
+  .hero-rank{grid-area:rank;width:44px;margin:0 0 0 18px;text-align:center;font-size:22px}
+  .hero-eyebrow{grid-area:eyebrow;margin-left:0}
+  /* The gap to the evidence column is padding, not a grid gap: a column-gap would
+     also open between the rank and the headline and push the headline 40px right of
+     the Story column it is meant to line up with. */
+  .hero-main{grid-area:main;min-width:0;padding-right:40px}
+  .hero-side{grid-area:side;display:block}
   .hero-fig{margin:6px 0 0}
-  .hero-main{min-width:0}
 }
 
+/* The rank sits in a gutter to the left of the headline, at the same x and the same
+   type as the rank column of the table below — so 01 -> 02 -> 03 reads as one ranked
+   list rather than a feature followed by a list that starts at two. The 94px first
+   column is the table's own geometry: 2px of .tbl-wrap padding, a 76px rank column,
+   then 16px of cell padding before the Story column begins. */
+.hero-rank{font-family:'Instrument Sans',system-ui,sans-serif;font-size:22px;font-weight:700;
+  color:var(--red);line-height:1.18}
 .hero-eyebrow{font-size:13px;color:var(--ink3);margin-bottom:14px}
+.hero-eyebrow-k{font-weight:500;color:var(--ink2)}
+.hero-eyebrow-n{margin-left:7px}
+.hero-eyebrow-n::before{content:'\00b7 '}
+
 .hero-hl{font-family:'Instrument Sans',system-ui,sans-serif;
   font-size:clamp(24px,2.7vw,34px);font-weight:400;letter-spacing:-.035em;line-height:1.06;
   color:var(--ink);margin:0 0 12px}
@@ -1719,27 +1593,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .sc-empty{padding:16px 12px;font-size:12px;color:var(--ink-l);font-style:italic;font-family:'Instrument Sans',system-ui,sans-serif}
 
 /* RIGHT PANEL */
-.panel{background:var(--surface-ctr);border:1px solid rgba(0,0,0,.05);border-radius:3px;overflow:hidden}
-.panel-hd{padding:14px 16px;border-bottom:1px solid var(--surface-high);display:flex;align-items:center;gap:8px}
-.panel-hd h3{font-family:'Instrument Sans',system-ui,sans-serif;font-size:18px;font-weight:700}
-.stabs{display:flex;border-bottom:2px solid var(--navy);background:var(--surface-0)}
-.stab{flex:1;padding:9px 4px;font-size:10px;font-weight:700;letter-spacing:.7px;color:var(--ink-l);text-align:center;cursor:pointer;border:none;background:none;transition:all .15s;border-bottom:3px solid transparent;margin-bottom:-2px;font-family:'Instrument Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px}
-.stab.active{color:var(--navy-d);border-bottom-color:var(--red)}
-.stab:hover:not(.active){color:var(--ink);background:rgba(0,0,0,.03)}
-.spanel{display:none}.spanel.active{display:block}
-.si{padding:10px 14px;border-bottom:1px solid var(--surface-high)}
-.si:last-child{border-bottom:none}
-.si a{font-family:'Instrument Sans',system-ui,sans-serif;color:var(--navy-d);text-decoration:none;font-size:13px;line-height:1.4;display:block}
-.si a:hover{color:var(--red);text-decoration:underline}
-.si-m{font-size:10px;color:var(--ink-l);margin-top:3px;font-family:'Instrument Sans',sans-serif}
-.tw-r{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--surface-high)}
-.tw-r:last-child{border-bottom:none}
-.tw-rk{font-family:'Instrument Sans',system-ui,sans-serif;font-size:13px;font-weight:700;color:var(--red);width:20px;flex-shrink:0}
-.tw-tm{flex:1;font-family:'Instrument Sans',sans-serif;font-size:12px;color:var(--ink)}
-.tw-bw{width:32px;flex-shrink:0}
-.tw-bg{height:3px;background:var(--surface-high);border-radius:2px}
-.tw-bf{height:3px;border-radius:2px;background:#1DA1F2}
-
 /* FAB */
 .fab{position:fixed;bottom:24px;right:24px;z-index:80;padding:12px 20px;border-radius:22px;background:var(--ink);color:#fff;border:none;cursor:pointer;font:inherit;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;box-shadow:var(--lift);transition:transform .34s cubic-bezier(.22,.61,.36,1)}
 .fab:hover{transform:scale(1.05)}
@@ -1858,7 +1711,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 </style></head><body>
 
-<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Reading 27 sources · Ranking what the press is covering…</div></div>
+<div id="ov"><div class="spin"></div><div class="ov-ttl">TrendingInRealTime.com</div><div class="ov-sub">Reading 25 newsrooms · Ranking what the press is covering…</div></div>
 
 <!-- Mobile top header bar -->
 <div class="mob-hdr" id="mob-hdr">
@@ -1890,8 +1743,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
     </a>
     <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false"><span>Live Source Feed</span>
     </a>
-    <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false"><span>Social Velocity</span>
-    </a>
     <a href="#" class="sb-lnk" id="drw-lh" onclick="switchPage('lh');closeDrawer();return false">
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
@@ -1919,8 +1770,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
     <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false"><span>Trending</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false"><span>Live Source Feed</span>
-    </a>
-    <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social Velocity</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
@@ -1969,17 +1818,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
       </div>
       <div class="src-grid" id="sg"></div>
     </section>
-    <aside>
-      <div class="panel" id="social-velocity-section">
-        <div class="panel-hd"><h3>Social Velocity</h3></div>
-        <div class="stabs">
-          <button class="stab active" onclick="switchTab('tw')">Twitter</button>
-          <button class="stab" onclick="switchTab('re')">Memo</button>
-        </div>
-        <div id="sp-tw" class="spanel active"><div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
-        <div id="sp-re" class="spanel"><div id="rl"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div></div>
-      </div>
-    </aside>
   </div>
 </main>
 
@@ -1996,8 +1834,6 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false"><span>Trending</span>
   </a>
   <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false"><span>Sources</span>
-  </a>
-  <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social</span>
   </a>
   <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false"><span>Last Hour</span>
     <span class="mob-lh-badge" id="mob-lh-badge">0</span>
@@ -2017,7 +1853,6 @@ function switchPage(pg, scrollTo){
 
   // Determine which sidebar nav item is "active" (scroll-to items map back to 'dash')
   const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
-                  : scrollTo==='social-velocity-section' ? 'nav-social'
                   : pg==='dash' ? 'nav-topics'
                   : pg==='lh'   ? 'nav-lh' : '';
   document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
@@ -2025,14 +1860,12 @@ function switchPage(pg, scrollTo){
 
   // Mobile bottom nav active state
   const activeMob = scrollTo==='live-feed-section' ? 'mob-live'
-                  : scrollTo==='social-velocity-section' ? 'mob-social'
                   : pg==='dash' ? 'mob-topics'
                   : pg==='lh'   ? 'mob-lh' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
   if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
   // Sync drawer nav active state
   const activeDrw = scrollTo==='live-feed-section' ? 'drw-live'
-                  : scrollTo==='social-velocity-section' ? 'drw-social'
                   : pg==='dash' ? 'drw-topics'
                   : pg==='lh'   ? 'drw-lh' : '';
   document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
@@ -2225,33 +2058,6 @@ function tg(i){
   const row=document.getElementById('ta'+i),icon=document.getElementById('ei'+i);
   icon.textContent=row.classList.toggle('open')?'\u25be':'\u25b8';
 }
-let _activeTab='tw';
-function switchTab(tab){
-  _activeTab=tab;
-  document.querySelectorAll('.stab').forEach((b,i)=>{b.classList.toggle('active',['tw','re'][i]===tab)});
-  document.querySelectorAll('.spanel').forEach((p,i)=>{p.classList.toggle('active',['sp-tw','sp-re'][i]==='sp-'+tab)});
-}
-function rMemo(posts){
-  const el=document.getElementById('rl');
-  if(!posts||!posts.length){
-    el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Memeorandum unavailable.<br><span style="font-size:11px;margin-top:4px;display:block">Fetching top political stories…</span></div>';
-    return;
-  }
-  el.innerHTML=posts.map((p,i)=>{
-    const disc=p.discussants>0?'<span style="color:var(--ink-l);font-size:10px">\u00b7 '+p.discussants+' sources discussing</span>':'';
-    return '<div class="si">'
-      +'<a href="'+e(p.link)+'" target="_blank" rel="noopener">'+e(p.title)+'</a>'
-      +'<div class="si-m">'
-      +'<span style="background:#1a5276;color:#fff;border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700;margin-right:5px">MEMO</span>'
-      +disc
-      +'</div></div>';
-  }).join('');
-}
-function rTw(trends){
-  const el=document.getElementById('tl2');
-  if(!trends||!trends.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Twitter/X trends unavailable</div>';return}
-  el.innerHTML=trends.slice(0,25).map((t,i)=>'<div class="tw-r"><span class="tw-rk">'+(i+1)+'</span><span class="tw-tm"><a href="https://x.com/search?q='+encodeURIComponent(t)+'&src=trend_click" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+e(t)+'</a></span><div class="tw-bw"><div class="tw-bg"><div class="tw-bf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
-}
 // ── Leading story hero ──────────────────────────────────────────────────────
 // Two rules hold here. Every sentence is computed from the data, and every
 // characterisation of the coverage is a quote from an outlet rather than a claim of
@@ -2347,7 +2153,9 @@ function rHero(t){
 
   // Each column is its own flow container: nothing in one can stretch a row in the
   // other, which is what left 160px of dead space under the headline.
-  el.innerHTML='<div class="hero-eyebrow">Leading story · '+n+' of '+sp.roster.length+' outlets</div>'
+  el.innerHTML='<div class="hero-rank">01</div>'
+    +'<div class="hero-eyebrow"><span class="hero-eyebrow-k">Leading story</span>'
+      +'<span class="hero-eyebrow-n">'+n+' of '+sp.roster.length+' outlets</span></div>'
     +'<div class="hero-main">'
       +'<div class="hero-hl">'+hl+'</div>'
       +'<div class="hero-lede">'+e(lede)+'</div>'
@@ -2401,7 +2209,7 @@ async function ld(){
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
       leanMaps(d.sources);
-      rT(d.trending_topics);rMemo(d.memeorandum);rTw(d.twitter_trends);rS(d.sources);
+      rT(d.trending_topics);rS(d.sources);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
       const lhBadge=document.getElementById('lh-badge');

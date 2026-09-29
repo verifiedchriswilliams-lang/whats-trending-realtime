@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """Live source QA for TrendingInRealTime.com.
 
-Checks every RSS feed, every homepage scrape target, and every supplemental
-API in one pass, then prints a table you can paste into CLAUDE.md's
-per-source QA section.
+Checks every RSS feed and every homepage scrape target in one pass, then prints a
+table you can paste into CLAUDE.md's per-source QA section.
 
 Run from the repo root:
 
     python3 scripts/qa_sources.py            # everything
     python3 scripts/qa_sources.py --rss      # RSS feeds only
     python3 scripts/qa_sources.py --scrape   # homepage scrapes only
-    python3 scripts/qa_sources.py --supp     # supplemental APIs only
     python3 scripts/qa_sources.py --prod     # production health only (no local fetching)
 
 Exit code is 1 if any source came back empty, so this can gate a deploy.
@@ -85,28 +83,6 @@ def check_scrape():
     return failures
 
 
-def check_supplemental():
-    print(f"\n{'='*74}\n  SUPPLEMENTAL SOURCES\n{'='*74}")
-    checks = [
-        ("Twitter/X",      td.fetch_twitter_trends, 5),
-        ("Memeorandum",    td.fetch_memeorandum,    3),
-    ]
-    failures = []
-    for name, fn, low in checks:
-        t = time.time()
-        try:
-            res = fn()
-            n = len(res)
-        except Exception as ex:
-            n, res = -1, str(ex)
-        c, v = _verdict(n, low)
-        # Twitter/X is known-flaky from servers, not a regression.
-        if n <= 0 and name != "Twitter/X":
-            failures.append(name)
-        print(f"{name:<20}{n:>5}{time.time()-t:>6.1f}  {c}[{v}]{OFF}")
-    return failures
-
-
 PROD_URL = "https://www.trendinginrealtime.com"
 
 
@@ -172,11 +148,10 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--rss", action="store_true")
     p.add_argument("--scrape", action="store_true")
-    p.add_argument("--supp", action="store_true")
     p.add_argument("--prod", action="store_true",
                    help="check the live Railway deployment instead of fetching locally")
     a = p.parse_args()
-    run_all = not (a.rss or a.scrape or a.supp or a.prod)
+    run_all = not (a.rss or a.scrape or a.prod)
 
     failures = []
     if a.prod:
@@ -185,8 +160,6 @@ def main():
         failures += check_rss()
     if run_all or a.scrape:
         failures += check_scrape()
-    if run_all or a.supp:
-        failures += check_supplemental()
 
     print(f"\n{'='*74}")
     if failures:
