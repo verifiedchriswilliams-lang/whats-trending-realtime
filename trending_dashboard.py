@@ -347,9 +347,17 @@ def fetch_source(source):
         arts = []
         cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
         rss_limit = source.get("rss_limit", 20)
+        # Several feeds list the same story more than once — NBC filed 4 duplicates and
+        # NY Post 3 in a single cycle, which put the same headline twice in a row's
+        # expanded article list and double-counted it toward the cluster's breadth.
+        # Keep the first appearance, which also keeps the best feed_position.
+        seen_titles = set()
         for i, e in enumerate(feed.entries[:rss_limit]):
             t = e.get("title","").strip()
             if not t or len(t)<10: continue
+            key = ' '.join(t.lower().split())
+            if key in seen_titles: continue
+            seen_titles.add(key)
             # Reject articles older than 48 hours — stale stories pollute clustering
             pub = parse_pub_date(e)
             if pub and pub < cutoff:
@@ -530,6 +538,16 @@ SIMILARITY_THRESHOLD = 0.28   # Tune: higher = tighter clusters, fewer false mer
 # for meaningful above-the-fold content).
 MAX_VALID_SCRAPE_POS = 80
 
+# Cosine alone is not enough to call two headlines the same story. A short headline has
+# few content tokens, so one shared word can carry most of its vector and clear the
+# threshold on its own: "I paid £30,000 for an 'influencer' degree" (4 tokens) merged
+# with "Pro-Trump TV ads paid for with Customs and Border Protection money" and with
+# "'RHONY' star ... reveals she paid ex Jon Gosselin's child support" on the single word
+# "paid" — three unrelated stories in one cluster, live on the site Sept 2026.
+# Two articles must therefore share at least this many content tokens to join, which is
+# what "share a pattern of words, not just one" was always supposed to mean.
+MIN_SHARED_TERMS = 2
+
 # Most articles from any one outlet that count toward a cluster's breadth term.
 # Without it, an outlet that files five stories on the same game or trial carries the
 # cluster on its own: sampled Sept 2026, NY Post supplied 5 of 6 articles in one cluster
@@ -543,6 +561,40 @@ def _tfidf_tokenize(title):
     words = re.findall(r"[A-Za-z']+", title.lower())
     words = [w[:-2] if w.endswith("'s") else w.rstrip("'") for w in words]
     return [w for w in words if w not in STOP_WORDS and len(w) > 3]
+
+
+# ── Vocabulary for the shared-term gate ──────────────────────────────────────
+# Deliberately NOT the TF-IDF vocabulary. STOP_WORDS holds 616 entries — among them
+# court, police, arrest, charges, shot and rate — and `len > 3` drops fed, ice, doj and
+# gop, so a headline reduces to two to five tokens. That thin vocabulary causes both
+# failure modes at once: one shared rare word dominates two short vectors and merges
+# unrelated stories, while "deportation"/"deportations" and "arrest"/"arrested" fail to
+# match and split identical ones. The vectors keep their curated vocabulary; the gate
+# gets a fuller one, so it can tell "these are the same event" from "these share a word".
+_GATE_FUNCTION_WORDS = {
+    'the','and','for','with','from','that','this','they','them','their','there','then',
+    'than','have','has','had','was','were','been','being','are','its','his','her','hers',
+    'our','you','your','who','whom','whose','what','when','where','why','how','all','any',
+    'both','each','few','more','most','other','some','such','only','own','same','too',
+    'very','can','will','would','could','should','may','might','must','into','over',
+    'under','after','before','during','about','against','between','out','off','down',
+    'not','but','nor','yet','say','says','said','amid','while','also','new','one','two',
+}
+
+def _stem(w):
+    """Crude suffix stripping — enough to make plurals and tenses match."""
+    if len(w) > 4 and w.endswith('ies'): return w[:-3] + 'y'
+    if len(w) > 5 and w.endswith('ing'): return w[:-3]
+    if len(w) > 4 and w.endswith('ed'):  return w[:-2]
+    if len(w) > 4 and w.endswith('es'):  return w[:-2]
+    if len(w) > 3 and w.endswith('s') and not w.endswith('ss'): return w[:-1]
+    return w
+
+def _gate_tokens(title):
+    """Content tokens for the shared-term gate: broad vocabulary, lightly stemmed."""
+    words = re.findall(r"[A-Za-z']+", title.lower())
+    words = [w[:-2] if w.endswith("'s") else w.rstrip("'") for w in words]
+    return {_stem(w) for w in words if len(w) > 2 and w not in _GATE_FUNCTION_WORDS}
 
 def _build_tfidf(tokenized_docs):
     """Build L2-normalised TF-IDF sparse vectors (list of dicts) for all docs."""
@@ -762,13 +814,23 @@ def cluster_topics(all_arts):
     raw_clusters = []   # list of lists of indices into flat[]
     centroids    = []   # centroid vec (sparse dict) per cluster
 
+    tok_sets = [_gate_tokens(art["title"]) for art in flat]
+
+    def shares_terms(idx, member_idxs):
+        """True if this article shares MIN_SHARED_TERMS content tokens with any member.
+
+        Checked against individual members rather than the cluster's pooled vocabulary,
+        which only gets easier to satisfy as a cluster grows."""
+        a = tok_sets[idx]
+        return any(len(a & tok_sets[m]) >= MIN_SHARED_TERMS for m in member_idxs)
+
     for i, vec in enumerate(tfidf_vecs):
         if not vec:
             continue
         best_ci, best_sim = -1, SIMILARITY_THRESHOLD
         for ci, centroid in enumerate(centroids):
             sim = _cosine(vec, centroid)
-            if sim > best_sim:
+            if sim > best_sim and shares_terms(i, raw_clusters[ci]):
                 best_sim = sim
                 best_ci = ci
         if best_ci >= 0:
@@ -793,7 +855,12 @@ def cluster_topics(all_arts):
         n_cl = len(centroids)
         for i in range(n_cl):
             for j in range(i + 1, n_cl):
-                if _cosine(centroids[i], centroids[j]) >= MERGE_THRESHOLD:
+                # Same gate as the greedy pass: centroid similarity can be carried by
+                # one shared term, so require some article in each to share a pattern.
+                pair_shares = any(
+                    len(tok_sets[a] & tok_sets[b]) >= MIN_SHARED_TERMS
+                    for a in raw_clusters[i] for b in raw_clusters[j])
+                if pair_shares and _cosine(centroids[i], centroids[j]) >= MERGE_THRESHOLD:
                     # Merge j into i
                     raw_clusters[i].extend(raw_clusters[j])
                     # Recompute centroid i as mean of all constituent TF-IDF vecs

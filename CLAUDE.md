@@ -72,7 +72,45 @@ Stories are clustered using **TF-IDF cosine similarity**, not keyword seeds. Thi
 5. Cluster centroids are updated online (running mean) as new articles join
 6. **Post-processing merge pass:** After greedy clustering, any two clusters whose centroids have cosine similarity ≥ `MERGE_THRESHOLD = 0.20` are merged. This catches false splits where the same story was seeded from two different vocabulary angles (e.g. "Oil slides after Iran ceasefire" vs "US-Iran agree to ceasefire"). Iterates until no more merges are possible.
 
-The key advantage: two articles must share a **pattern of words**, not just one, to exceed the threshold. Single shared words rarely cross it.
+**That claim used to read "two articles must share a pattern of words, not just one —
+single shared words rarely cross the threshold." It was false, and the site shipped the
+proof.** A headline reduces to very few tokens (see the stopword note below), so a single
+rare shared word can carry most of both vectors and push cosine well past 0.28. Live on
+the site Sept 2026, one cluster held *"I paid £30,000 for an 'influencer' degree"*,
+*"Pro-Trump TV ads paid for with Customs and Border Protection money"* and *"'RHONY' star
+… reveals she paid ex Jon Gosselin's child support"* — three unrelated stories whose only
+common token was **paid**.
+
+Cosine is therefore no longer sufficient on its own. Two articles must also share
+**`MIN_SHARED_TERMS = 2`** content tokens with an existing member before joining a
+cluster, and the same gate applies to the post-processing merge. That is what "share a
+pattern of words" was always supposed to mean; it is now enforced rather than assumed.
+
+**The gate deliberately uses a different vocabulary from the vectors** (`_gate_tokens()`,
+not `_tfidf_tokenize()`). `STOP_WORDS` holds **616 entries** — among them `court`,
+`police`, `arrest`, `charges`, `shot` and `rate` — and `_tfidf_tokenize` drops anything
+of 3 characters or fewer, which loses `fed`, `ice`, `doj` and `gop`. A headline is left
+with two to five tokens, and that thin vocabulary causes *both* failure modes: one shared
+rare word merges unrelated stories, while `deportation`/`deportations` and
+`arrest`/`arrested` fail to match and split identical ones. `_gate_tokens()` keeps words
+of 3+ characters, uses a ~60-word function-word list instead of the 616, and applies
+crude suffix stripping (`_stem`), so the gate can tell "the same event" from "shares a
+word". Measured on a live 415-article corpus: clusters containing an unrelated pair fell
+from 5 to 2, and the only two clusters that disappeared were both false merges — the
+`paid` one, and *"Media trust increase driven by Republicans"* joined to *"Is Social
+Media Making Us Crazy?"* on `media`.
+
+**A weak-looking pair inside a cluster is not automatically a bug.** Membership chains
+transitively: A joins B, C joins B, and A and C may share nothing directly while all
+three are the same story. Of the five clusters flagged by that metric on the cycle this
+shipped, three (Jack Smith's Senate testimony, the Cornell investigation, the RAF
+Fairford bomb plot) were correct. Judge the cluster, not the pair.
+
+**Not fixed, and worth knowing:** the 616-word stopword list is a holdover from the
+keyword-seed era. Under TF-IDF, IDF already down-weights ubiquitous words, so most of
+that list is redundant *and* actively harmful — it is what starves the vectors. Trimming
+it is the real fix for clustering quality and should be done as its own measured change,
+not folded into something else.
 
 **Constants to tune:**
 - `SIMILARITY_THRESHOLD = 0.28` — raise to tighten clusters (fewer false merges), lower to loosen (catches more related stories)
@@ -600,6 +638,8 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - **Rotate the Facebook token.** The removed code embedded app token `1491126469205088|…` in the repo and served it from the public `/debug/fb` endpoint. Deleting the code does **not** invalidate the token, and it remains in git history. Rotate/revoke it in the Meta app dashboard.
 - **Reuters RSS:** Their feed URL may periodically break as Reuters migrates infrastructure.
 - **Clustering edge cases:** Very fast-breaking stories (first 10 minutes) may not cluster correctly until multiple sources pick them up. TF-IDF needs a minimum article count to form meaningful vectors.
+- **Residual false merges.** The shared-term gate removed the single-word class but not everything. On the cycle it shipped, one cluster still held "A Google co-founder is spending $100 million to defeat California's wealth tax", "$810 million in spending canceled by President Trump" and "AI could force 11 million US workers into new careers" — joined on generic money vocabulary. Trimming `STOP_WORDS` (see the clustering section) is the likely fix.
+- **Feeds list the same story twice.** NBC filed 4 duplicates and NY Post 3 in one cycle. `fetch_source()` now drops repeats by normalised title, keeping the first appearance so the best `feed_position` survives. Without it the same headline appeared twice in a row's expanded list and counted twice toward the cluster's breadth.
 - **Post-merge threshold tuning:** `MERGE_THRESHOLD = 0.20` was chosen to catch same-story false splits. If unrelated stories start merging, raise it toward 0.25. If splits persist, lower it toward 0.15.
 - **SIMILARITY_THRESHOLD tuning:** 0.28 is the current setting. After a full day of news cycles, this may need adjustment — raise if unrelated stories are still merging, lower if related stories are splitting into separate clusters.
 
