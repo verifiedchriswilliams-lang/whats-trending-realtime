@@ -279,34 +279,41 @@ caps the one term a deeper pool could reach.
 **Note on CNN and AP:** Both use Google News RSS. CNN's direct feed returned only 2
 articles from Railway; AP's `feeds.apnews.com` fails Railway DNS.
 
-### There is no social panel, and that is deliberate
+### The social panel is Twitter only, and that is deliberate
 
-Twitter/X trends and Memeorandum were the two halves of a "Social Velocity" sidebar,
-retired Sept 2026 along with the aside that held them. Both were measured first:
+The "Social Velocity" aside carried two feeds. Both were measured, one was kept.
 
-- **Memeorandum was the *useful* one and still failed the sourcing test.** All 20 of its
-  stories were real news, but of the 20 headlines on the panel, **8 were from outlets
-  outside the roster** — including `mediamatters.org`, an advocacy organisation rather
-  than a newsroom, and a personal Substack. Across its whole front page (1,132 outbound
-  links, 142 hosts) **18% came from outlets we had specifically considered and rejected**:
+- **Memeorandum failed the sourcing test, and stays out.** All 20 of its stories were
+  real news, but of the 20 headlines on the panel, **8 were from outlets outside the
+  roster** — including `mediamatters.org`, an advocacy organisation rather than a
+  newsroom, and a personal Substack. Across its whole front page (1,132 outbound links,
+  142 hosts) **18% came from outlets we had specifically considered and rejected**:
   Newsmax, Breitbart, RedState, Gateway Pundit, Townhall, The Post Millennial, OAN, Daily
   Kos. It is not partisan in aggregate — its mainstream links lean left (177 left / 112
   center / 75 right among roster outlets) while its fringe links lean right — but a page
   that picks 25 outlets on reputation, reach and AllSides attribution cannot put an
   unvetted back door beside them with nothing marking the difference.
-- **Twitter was noise.** Of 25 live US trends sampled, **3 were news** and all three were
-  the same story. The rest: Braves, Man City, Iowa Hawkeyes, #TinaTuesday,
-  #NationalCoffeeDay, SPOOKTOOZ, Trea Turner.
+- **Twitter/X trends stay.** They were measured too and the measurement was unflattering:
+  of 25 live US trends sampled, **3 were news** and all three were the same story; the
+  rest were Braves, Man City, Iowa Hawkeyes, #TinaTuesday, #NationalCoffeeDay, SPOOKTOOZ,
+  Trea Turner. Both panels were cut on that reading in Sept 2026 and Twitter was restored
+  days later by product decision: it is a second, independent signal beside the roster,
+  and unlike Memeorandum it makes no claim to be journalism — it is labelled "Trending on
+  X, United States" and nothing on the page treats it as coverage. It feeds nothing: no
+  heat score, no clustering, no ranking.
 
-Deleting the panel dropped `fetch_twitter_trends()`, `fetch_memeorandum()`, both caches,
-the `twitter_trends`/`memeorandum` store keys, the `.stab`/`.spanel`/`.tw-*` CSS, the
-`rTw()`/`rMemo()`/`switchTab()` renderers, the Social Velocity nav item in all three
-surfaces, and the `<aside>` — which also turned `.cgrid` into a single column and gave
-the main content the sidebar's 360px.
+**What the restore changed.** `fetch_twitter_trends()`, `_TWITTER_CACHE`, the
+`twitter_trends` store key, `rTw()` and the `.tw-*` CSS are back, as is the Social
+Velocity nav item in all three surfaces and the `<aside>` — so `.cgrid` is two columns
+again. The `.stab`/`.spanel` tab strip did **not** come back: with one panel there is
+nothing to switch between, so the aside is a single `.panel` with a `.panel-sub`
+subtitle. There is no `fetch_memeorandum()`, no `_MEMO_CACHE` and no `memeorandum` store
+key.
 
 **The standard this sets:** a panel on this page has to meet the same bar as the roster.
-Reddit failed it on availability, Memeorandum on sourcing, Twitter on relevance. If a
-social signal comes back, it has to pass all three.
+Reddit failed it on availability and Memeorandum on sourcing, and neither is coming back
+on the current evidence. Twitter is carried as an explicitly labelled outside signal, not
+as a source.
 
 ---
 
@@ -449,6 +456,26 @@ label), and the evidence (image, credit, a rule, then the coverage dots and Sign
 block). 435px tall against 914px for the full-width version, so the leading story and the
 top of the ranked list share the first screen.
 
+**There are two grid bands and one stacked fallback**, at container widths 740, 480 and
+below. Restoring the Social Velocity aside took 300px back off the main column, and the
+740px three-column layout stopped firing below a ~1365px viewport — which cost the rank
+gutter at 1280 and 1100, two of the commonest laptop widths. The **mid band (480px)** is
+two columns: the rank keeps its gutter and the evidence moves *under* the argument rather
+than beside it. Three columns at a 664px section would leave the headline 302px, which
+wraps a normal headline to six lines. 480 rather than 560 because a 1100px viewport gives
+the section exactly 484px, and that is the width where losing the gutter would show most
+— the aside is still on screen. Below it (a ~1000px viewport, 384px of section) the
+argument column would be 290px and the quoted headlines 166px, so stacked takes over.
+The mid band caps the figure at **440px**, not the stacked layout's 520px: stacked the
+photograph leads and earns the width, here every pixel of its height pushes the ranked
+list off the first screen.
+
+**Below 600px the hero is forced back to stacked from a media query**, whatever the
+container says. The table drops to its card layout there and its rank column is 52px, not
+76px, so the 94px gutter lines up with nothing — it is just 94px taken off a 350px
+column. Media rules come after the container blocks in the sheet and carry the same
+specificity, so they win.
+
 **The rank gutter is the table's own geometry, and it has to stay that way.** 94px = 2px
 of `.tbl-wrap` padding + the 76px rank column + 16px of cell padding, so the hero's 01 and
 the table's 02 sit at the same x, and the hero's headline starts exactly where the Story
@@ -466,7 +493,7 @@ space under the headline and another gap under the lede. A column is not a set o
 rows. Do not reintroduce row spanning across the two columns.
 
 It keys off `@container hero-col`, not the viewport, because the main column is squeezed
-between a 256px sidebar and a 360px aside — at a 1100px viewport a percentage second
+between a 256px sidebar and a 300px aside — at a 1100px viewport a percentage second
 column resolved to a **161px image**. Stacked single-column is the default, so a browser
 without container query support gets that rather than a broken grid; `.hero-side` becomes
 `display:contents` there so the photograph can lead, which is what tells you at a glance
@@ -477,11 +504,18 @@ the full column (728px at a 768px viewport) and pushed everything else off scree
 stacked ordering has to be cleared inside the container query — left in place,
 `.hero-side` (no `order`, so 0) sorted ahead of the eyebrow and the photograph jumped to
 the top of the grid. The other two shipped a sideways-scrolling page before they were
-caught. The second column has a hard **264px floor** because the 25-dot row cannot
+caught. The third column has a hard **240px floor** because the 25-dot row cannot
 shrink or wrap — a wrapped group destroys the shape the dots exist to show — and 25 tiles
-at 10px plus three 4px gaps is 262px. And **a container query adds no specificity**: the
+at 9px plus three 4px gaps is 237px. And **a container query adds no specificity**: the
 `--dt:10px` inside `@container` lost to an equal-specificity `--dt:13px` further down the
 sheet, putting a 337px row in a 292px column. Size the hero tile once, outside the query.
+
+That last trap is why **every rule inside both container blocks is written `.hero.on X`,
+not `X`**. Bare selectors there lose to the equal-specificity plain rules further down the
+sheet — which is how the figure silently kept the stacked layout's 18px bottom margin
+inside the grid, and how `.hero.on .hero-rank{font-size:26px}` (the stacked size) beat the
+container's 22px so the hero's 01 never actually matched the table's 02. If you add a rule
+to either block, prefix it.
 
 **Thumbnails on every row were measured and rejected**, and the measurement is the reason:
 
@@ -513,7 +547,8 @@ The app uses a **fixed left sidebar** for navigation (no top nav bar). The sideb
 **Sidebar nav items (top to bottom):**
 1. **Trending** — Top Trending Topics dashboard (main view)
 2. **Live Source Feed** (`newspaper`) — smooth-scrolls to the source headline grid on the Dashboard page
-3. **Last Hour** (`schedule`) — recent articles page, with live article count badge
+3. **Social Velocity** — smooth-scrolls to the Twitter/X trends aside
+4. **Last Hour** (`schedule`) — recent articles page, with live article count badge
 
 Blue Trends and Red Trends were items 5 and 6 until Sept 2026. Any nav item that splits
 the page by political side has to be symmetric in both structure *and* data quality; those
@@ -648,10 +683,11 @@ datacentre-IP blocks and confirm on production with `--prod`.
 ## Phase 2 Roadmap
 
 ### Completed
+- [x] **Social Velocity restored, Twitter only (Sept 2026)** — the aside is back at 300px as a single panel with no tab strip ("Trending on X, United States"), plus the nav item in all three surfaces. Memeorandum stays out on the sourcing finding — 8 of its 20 headlines came from outside the roster. Restoring 300px of aside broke the hero's three-column band below a ~1365px viewport, so the hero gained a **two-column mid band at 480px** that keeps the 94px rank gutter and moves the evidence under the argument; below 600px a media query forces it back to stacked, because the table's card layout uses a 52px rank column. Every rule in both container blocks is now `.hero.on X`-prefixed, which fixed two latent specificity bugs: the figure kept the stacked 18px bottom margin inside the grid, and the hero's 01 rendered at 26px against the table's 22px.
 - [x] **Hero lead image (Sept 2026)** — `entry_image()` extracts an article image from RSS; the hero shows one, credited to the outlet it came from, and drops the figure entirely when the image fails or none exists. Thumbnails on every row were measured and rejected: the supply is 3 left / 2 center / 7 right, ~3.1MB for twenty, and 2 of 20 stories have no image at all.
 - [x] **Leading-story hero (Sept 2026)** — top cluster opens the page; table starts at 02. Computed lede (leaders + recency) plus one left-of-center and one right-of-center headline quoted verbatim, so the framing split is shown rather than characterised. No LLM, no unsourced claim. `rHero()`, `.hero-*`, and `dotSplit()` shared with the coverage dots so the legend and the dots cannot disagree.
 - [x] **Per-outlet cap on the breadth term (Sept 2026)** — `MAX_ARTICLES_PER_SOURCE = 3`. Heat's article term counts at most three articles from any one outlet, so no single newsroom's output can stand in for coverage across newsrooms. Investigated because Fox's `rss_limit: 50` looked like a thumb on the scale; measurement showed Fox was not the problem (the 48h cutoff binds first) and NY Post was, at 5 of 6 articles in one cluster. Affected 0 of 20 clusters on the cycle it shipped — it is a guardrail, not a re-ranking.
-- [x] **Social Velocity panel retired (Sept 2026)** — Twitter and Memeorandum both measured and both cut: Memeorandum put 8 of 20 headlines from outside the roster on the page (including an advocacy org and a personal Substack), and Twitter was 3 of 25 trends actually news. Removed the fetchers, caches, store keys, renderers, CSS, nav item and the `<aside>`; `.cgrid` is a single column now.
+- [x] **Social Velocity cut to Twitter only (Sept 2026)** — both halves were measured and both were cut: Memeorandum put 8 of 20 headlines from outside the roster on the page (including an advocacy org and a personal Substack), and Twitter was 3 of 25 trends actually news. Twitter was then restored by product decision as a labelled outside signal that feeds nothing; Memeorandum stays out on the sourcing finding. The aside is back at 300px (was 360px) as a single panel with no tab strip, and `.cgrid` is two columns again. `fetch_memeorandum()`, `_MEMO_CACHE` and the `memeorandum` store key are gone for good.
 - [x] **The hero is item 01 of the list (Sept 2026)** — the rank sits in a 94px gutter left of the headline, at the table's own geometry, and "Top Trending Topics" moved above the hero. Previously the eye read 01, a section heading, then 02.
 - [x] **Reddit and the two trend pages retired (Sept 2026)** — deleted `_fetch_reddit_set()`, both subreddit lists, the `.bt-*` CSS, the `rdPosts()`/`rBT()`/`rRT()` renderers, the two nav items in all three surfaces and the `liberal_reddit`/`conservative_reddit` store keys. `/bluetrends` and `/redtrends` 301 to `/`. Reddit 429d one side harder than the other most cycles, so the two pages could not be symmetric in fact, only in layout. Also cut ~30s off every refresh (44s → 14s): the `_REDDIT_DELAY` throttle was the single slowest thing in the pipeline. The Memeorandum slot took the chance to stop being called `reddit_posts` — it is `data_store['memeorandum']` / `_MEMO_CACHE` now.
 - [x] **25-source 10/5/10 rebalance with AllSides attribution (Sept 2026)** — added Bloomberg, The Dispatch, Fox Business, Daily Mail and Washington Free Beacon, all on direct feeds; nothing removed. Every outlet now carries its verbatim AllSides rating (`allsides`) plus `RATINGS_SOURCE`/`RATINGS_AS_OF`/`RATINGS_URL`, and `LEAN` collapsed from five hand-assigned tiers to three display buckets. Fixed a 67% measurement advantage for left-of-center stories (a 10-dot ceiling against 6).
@@ -680,7 +716,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [x] **Topbar removal** — "Editorial Intelligence" header bar eliminated; LIVE indicator + countdown moved into sidebar above nav items (`.sb-live`). All page containers start at `top:0`, reclaiming 64px of vertical space.
 - [x] **DW alignment prefix matching** — added 5-char prefix matching step between exact and substring fallback. Fixes `olympic`/`olympics`, `transgender`/`trans`, and similar root-word variants where DW's framing uses a different inflection.
 - [x] **Facebook tab removed** — Meta's Graph API requires App Review for `Page Public Content Access` and is incompatible with the Facebook Login app type. Removed from Social Velocity sidebar entirely.
-- [x] **Loading screen source count** — now "Scanning 27 sources" (25 news RSS + Twitter/X + Memeorandum).
+- [x] **Loading screen source count** — 25 news RSS feeds plus Twitter/X. Keep the number in step with the roster; it was "27 sources" while Memeorandum was still on the page.
 - [x] **General-market pivot (Sept 2026)** — removed Daily Wire, `compute_alignment()` (dead code), the Side by Side page and its nav in all three surfaces, and the DW framing from `/privacy`.
 - [x] **20-source rebalance** — dropped Daily Mail, Breitbart, Townhall, Fox Business, Sky News; added WaPo, WSJ, BBC, NPR, Axios, USA Today, Politico, National Review. Its claimed 7 right / 6 center / 7 left turned out to be 10/4/6 once measured against AllSides — superseded by the 25-source pass above.
 

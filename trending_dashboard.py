@@ -213,7 +213,7 @@ STOP_WORDS = {
     'court','courts','judge','judges','law','laws','legal',
 }
 
-data_store = {"last_updated":None,"sources":{},"trending_topics":[],"last_hour":[],"sources_live":0,"loading":True}
+data_store = {"last_updated":None,"sources":{},"trending_topics":[],"twitter_trends":[],"last_hour":[],"sources_live":0,"loading":True}
 data_lock = threading.Lock()
 
 # Heat history for velocity sparklines.
@@ -521,6 +521,82 @@ _SITE_NAV_TERMS = {
     'subscribe','newsletter','advertise','careers','help','faq','sitemap',
     'gumroad','youtube trending videos','x (twitter)',
 }
+
+_TWITTER_CACHE  = {"data": [], "fetched_at": 0}
+
+def fetch_twitter_trends():
+    """Scrape US Twitter/X trending topics.
+    Primary: getdaytrends.com (server-side rendered, reliable on cloud IPs)
+    Fallback: trends24.in
+    """
+    global _TWITTER_CACHE
+    now = time.time()
+    if _TWITTER_CACHE["data"] and now - _TWITTER_CACHE["fetched_at"] < 1800:
+        return _TWITTER_CACHE["data"]
+    if not HAS_SCRAPE:
+        return _TWITTER_CACHE["data"]
+
+    hdrs = {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+
+    def _parse_getdaytrends(html):
+        soup = BeautifulSoup(html, 'html.parser')
+        trends, seen = [], set()
+        # getdaytrends.com: trend names are in <p class="trend-name"> or <span class="trend-name">
+        for el in soup.select('.trend-name, [class*="trend"] p, [class*="trending"] span'):
+            text = el.get_text(strip=True)
+            if not text or len(text) < 2 or len(text) > 80: continue
+            if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
+            seen.add(text.lower())
+            trends.append(text)
+        return trends[:25]
+
+    def _parse_trends24(html):
+        soup = BeautifulSoup(html, 'html.parser')
+        trends, seen = [], set()
+        for card in soup.select('.trend-card, [class*="trend-card"]'):
+            for li in card.select('ol li a, li a'):
+                text = li.get_text(strip=True)
+                if not text or len(text) < 2 or len(text) > 80: continue
+                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
+                seen.add(text.lower())
+                trends.append(text)
+            if len(trends) >= 25: break
+        # Fallback: any <a> with a hash-like short label inside a list
+        if not trends:
+            for a in soup.select('li a'):
+                text = a.get_text(strip=True)
+                if not text or len(text) < 2 or len(text) > 80: continue
+                if text.lower() in _SITE_NAV_TERMS or text.lower() in seen: continue
+                seen.add(text.lower())
+                trends.append(text)
+                if len(trends) >= 25: break
+        return trends[:25]
+
+    sources = [
+        ("https://getdaytrends.com/united-states/", _parse_getdaytrends),
+        ("https://trends24.in/united-states/",      _parse_trends24),
+    ]
+    for url, parser in sources:
+        try:
+            r = requests.get(url, timeout=15, headers=hdrs)
+            r.raise_for_status()
+            trends = parser(r.text)
+            if trends:
+                _TWITTER_CACHE = {"data": trends, "fetched_at": now}
+                print(f"  Twitter/X trends: {len(trends)} trends from {url}")
+                return trends
+            else:
+                print(f"  Twitter/X: 0 trends parsed from {url}, trying next source")
+        except Exception as ex:
+            print(f"  Twitter trends error ({url}): {ex}")
+
+    print("  Twitter/X: all sources failed")
+    return _TWITTER_CACHE["data"]
+
 
 # ── TF-IDF COSINE SIMILARITY CLUSTERING ──────────────────────────────────────
 # Replaces the single-keyword seed approach.
@@ -1172,6 +1248,10 @@ def refresh_data():
     if total_injected:
         print(f"  Total synthetic injections: {total_injected} across all sources")
 
+    print("  Fetching Twitter/X trends...")
+    twitter_trends = fetch_twitter_trends()
+    print(f"  {'✓' if twitter_trends else '✗'} Twitter/X: {len(twitter_trends)} trends")
+
     topics = cluster_topics(all_arts)
     print(f"  → {len(topics)} trending topics")
 
@@ -1256,7 +1336,8 @@ def refresh_data():
 
     with data_lock:
         data_store.update({"last_updated":datetime.now(timezone.utc).isoformat().replace('+00:00','Z'),"sources":srcs,"trending_topics":topics,
-                                                      "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
+                                                      "twitter_trends":twitter_trends,
+                           "last_hour":last_hour,"sources_live":len(all_arts),"loading":False})
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Done. {len(all_arts)}/{len(SOURCES)} live.\n")
 
 def bg_loop(interval=1800):
@@ -1462,7 +1543,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 /* MAIN CANVAS */
 .main{margin-left:256px;margin-top:0;padding:20px 20px 24px;min-height:100vh}
-.cgrid{display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start}
+.cgrid{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:20px;align-items:start}
 .cgrid > section{container-type:inline-size;container-name:hero-col;min-width:0;
   display:flex;flex-direction:column}
 /* The list's own header sits above the leading story, so the hero reads as item 01 of
@@ -1491,26 +1572,62 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* Stacked: the wrapper dissolves so the photograph can lead, which is what tells you
    at a glance on a phone which story this is. */
 .hero-side{display:contents}
-.hero-rank{order:1}.hero-eyebrow{order:2}.hero-fig{order:3}.hero-main{order:4}.hero-foot{order:5}
 /* Stacked there is no gutter to sit in, so the rank leads the eyebrow line instead. */
-.hero.on .hero-rank{font-size:26px;margin-bottom:2px}
+.hero.on .hero-rank{order:1;font-size:26px;margin-bottom:2px}
+.hero.on .hero-eyebrow{order:2}.hero.on .hero-fig{order:3}
+.hero.on .hero-main{order:4}.hero.on .hero-foot{order:5}
 
-@container hero-col (min-width:900px){
-  .hero.on{display:grid;grid-template-columns:94px minmax(0,1fr) minmax(264px,30%);
+/* EVERY rule inside the two container queries below is written as `.hero.on X`, not
+   `X`. A container query adds no specificity, so a bare `.hero-fig` inside one loses
+   to the equal-specificity `.hero-fig` further down this sheet — which is how the
+   figure kept the stacked layout's 18px bottom margin inside the grid, and how a 13px
+   dot tile once ended up in a 292px column and scrolled the page sideways. */
+
+/* Mid band — the aside is back, so between roughly 1100px and 1365px of viewport the
+   main column has room for the rank gutter but not for a third column: at a 1280px
+   viewport the evidence column resolved to 240px and left the headline 302px, which
+   wraps "What we know about stabbing on Flydubai flight to Israel" to six lines. Two
+   columns instead, with the evidence under the argument rather than beside it. The
+   rank stays in its gutter, which is the part that has to hold at every width: 01 ->
+   02 -> 03 reads as one list only if 01 sits where 02 does.
+
+   480px, not 560: at a 1100px viewport the section is 484px, and that is exactly the
+   width where losing the gutter would be most visible — the aside is still on screen,
+   so the hero would stack beside a full-height trends list. 480 leaves 390px for the
+   headline, which holds it to three lines. Below that (a ~1000px viewport, 384px of
+   section) the argument column would be 290px and the quoted headlines 166px, so the
+   stacked layout takes over instead. */
+@container hero-col (min-width:480px){
+  .hero.on{display:grid;grid-template-columns:94px minmax(0,1fr);
     column-gap:0;align-items:start;
-    grid-template-areas:"rank eyebrow eyebrow" "rank main side"}
+    grid-template-areas:"rank eyebrow" "rank main" ". side"}
   /* `order` applies to grid items too, so the stacked ordering above has to be
      cleared here — left in place, `.hero-side` (no order, so 0) sorted ahead of the
      eyebrow and the photograph jumped to the top of the grid. */
-  .hero-rank,.hero-eyebrow,.hero-fig,.hero-main,.hero-foot,.hero-side{order:0}
-  .hero-rank{grid-area:rank;width:44px;margin:0 0 0 18px;text-align:center;font-size:22px}
-  .hero-eyebrow{grid-area:eyebrow;margin-left:0}
+  .hero.on .hero-rank,.hero.on .hero-eyebrow,.hero.on .hero-fig,
+  .hero.on .hero-main,.hero.on .hero-foot,.hero.on .hero-side{order:0}
+  .hero.on .hero-rank{grid-area:rank;width:44px;margin:0 0 0 18px;text-align:center;
+    font-size:22px}
+  .hero.on .hero-eyebrow{grid-area:eyebrow;margin-left:0}
+  .hero.on .hero-main{grid-area:main;min-width:0;padding-right:0}
+  .hero.on .hero-side{grid-area:side;display:block;min-width:0}
+  /* Capped narrower than the stacked layout's 520px. Stacked, the photograph is the
+     first thing you see and earns the width; here it sits below the argument, where
+     every pixel of its height pushes the ranked list further off the first screen. */
+  .hero.on .hero-fig{margin:20px 0 0;max-width:min(100%,440px)}
+}
+
+@container hero-col (min-width:740px){
+  .hero.on{grid-template-columns:94px minmax(0,1fr) minmax(240px,30%);
+    grid-template-areas:"rank eyebrow eyebrow" "rank main side"}
   /* The gap to the evidence column is padding, not a grid gap: a column-gap would
      also open between the rank and the headline and push the headline 40px right of
      the Story column it is meant to line up with. */
-  .hero-main{grid-area:main;min-width:0;padding-right:40px}
-  .hero-side{grid-area:side;display:block}
-  .hero-fig{margin:6px 0 0}
+  .hero.on .hero-main{padding-right:28px}
+  /* The argument column is ~460px once the aside is back, so the headline steps down
+     a size here rather than wrapping to five lines. */
+  .hero.on .hero-hl{font-size:clamp(22px,2.3vw,30px)}
+  .hero.on .hero-fig{margin:4px 0 0}
 }
 
 /* The rank sits in a gutter to the left of the headline, at the same x and the same
@@ -1574,10 +1691,10 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 /* 10px, not 13px. A container query adds no specificity, so sizing this inside one
    loses to any equal-specificity rule further down the sheet — which is how a 13px
    tile ended up in a 292px column and scrolled the page sideways. Size it once, for
-   the narrowest column it will ever sit in: 25 tiles plus three group gaps is 262px
-   against the second column's 264px floor. The row cannot wrap; a wrapped group
+   the narrowest column it will ever sit in: 25 tiles at 9px plus three group gaps is
+   237px, against the evidence column's 240px floor. The row cannot wrap; a wrapped group
    destroys the shape the dots exist to show. */
-.hero-dots .cdots{--dt:10px}
+.hero-dots .cdots{--dt:9px}
 .hero-dots .cdn{display:none}
 .hero-legend{font-size:13px;color:var(--ink3);margin-top:10px}
 .hero-stat{margin-top:20px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
@@ -1589,6 +1706,18 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   .hero-hl{font-size:clamp(23px,5.6vw,30px)}
   .hero-q{grid-template-columns:1fr;gap:3px}
   .hero-foot{gap:18px}
+  /* Back to stacked, whatever the container query says. Below 600px the table drops
+     to the card layout and its rank column is 52px, not 76px, so the hero's 94px
+     gutter no longer lines up with anything — a gutter that matches nothing is just
+     94px of white space taken off a 350px column. Media rules come after the
+     container blocks in this sheet and carry the same specificity, so these win. */
+  .hero.on{display:flex;flex-direction:column}
+  .hero.on .hero-side{display:contents}
+  .hero.on .hero-rank{order:1;width:auto;margin:0 0 2px;text-align:left;font-size:26px}
+  .hero.on .hero-eyebrow{order:2;margin-left:0}
+  .hero.on .hero-fig{order:3;margin:0 0 18px}
+  .hero.on .hero-main{order:4;padding-right:0}
+  .hero.on .hero-foot{order:5}
 }
 .sec-title{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;color:var(--navy-d);line-height:1.1}
 .sec-sub{font-size:13px;color:var(--ink-l);margin-top:4px}
@@ -1660,6 +1789,21 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .sc-empty{padding:16px 12px;font-size:12px;color:var(--ink-l);font-style:italic;font-family:'Instrument Sans',system-ui,sans-serif}
 
 /* RIGHT PANEL */
+/* Social Velocity panel. Twitter only: Memeorandum was retired on sourcing grounds
+   (see CLAUDE.md) and is not coming back, so there is nothing to tab between and the
+   tab strip is gone with it. */
+.panel{background:var(--surface-ctr);border:1px solid rgba(0,0,0,.05);border-radius:3px;overflow:hidden}
+.panel-hd{padding:14px 16px;border-bottom:1px solid var(--surface-high)}
+.panel-hd h3{font-family:'Instrument Sans',system-ui,sans-serif;font-size:18px;font-weight:700}
+.panel-sub{display:block;font-size:13px;color:var(--ink3);margin-top:3px}
+.tw-r{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--surface-high)}
+.tw-r:last-child{border-bottom:none}
+.tw-rk{font-family:'Instrument Sans',system-ui,sans-serif;font-size:13px;font-weight:700;color:var(--red);width:20px;flex-shrink:0}
+.tw-tm{flex:1;font-family:'Instrument Sans',sans-serif;font-size:12px;color:var(--ink)}
+.tw-bw{width:32px;flex-shrink:0}
+.tw-bg{height:3px;background:var(--surface-high);border-radius:2px}
+.tw-bf{height:3px;border-radius:2px;background:#1DA1F2}
+
 /* FAB */
 .fab{position:fixed;bottom:24px;right:24px;z-index:80;padding:12px 20px;border-radius:22px;background:var(--ink);color:#fff;border:none;cursor:pointer;font:inherit;font-size:14px;font-weight:500;display:flex;align-items:center;justify-content:center;box-shadow:var(--lift);transition:transform .34s cubic-bezier(.22,.61,.36,1)}
 .fab:hover{transform:scale(1.05)}
@@ -1810,6 +1954,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
     </a>
     <a href="#" class="sb-lnk" id="drw-live" onclick="switchPage('dash','live-feed-section');closeDrawer();return false"><span>Live Source Feed</span>
     </a>
+    <a href="#" class="sb-lnk" id="drw-social" onclick="switchPage('dash','social-velocity-section');closeDrawer();return false"><span>Social Velocity</span>
+    </a>
     <a href="#" class="sb-lnk" id="drw-lh" onclick="switchPage('lh');closeDrawer();return false">
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge-drw" style="display:none">0</span></span>
     </a>
@@ -1837,6 +1983,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
     <a href="#" class="sb-lnk act" id="nav-topics" onclick="switchPage('dash');return false"><span>Trending</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-live" onclick="switchPage('dash','live-feed-section');return false"><span>Live Source Feed</span>
+    </a>
+    <a href="#" class="sb-lnk" id="nav-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social Velocity</span>
     </a>
     <a href="#" class="sb-lnk" id="nav-lh" onclick="switchPage('lh');return false">
       <span style="display:flex;align-items:center;gap:6px">Last Hour<span class="lh-count" id="lh-badge" style="display:none">0</span></span>
@@ -1885,6 +2033,13 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
       </div>
       <div class="src-grid" id="sg"></div>
     </section>
+    <aside>
+      <div class="panel" id="social-velocity-section">
+        <div class="panel-hd"><h3>Social Velocity</h3>
+          <span class="panel-sub">Trending on X, United States</span></div>
+        <div id="tl2"><div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Loading…</div></div>
+      </div>
+    </aside>
   </div>
 </main>
 
@@ -1901,6 +2056,8 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   <a href="#" class="mob-nav-item active" id="mob-topics" onclick="switchPage('dash');return false"><span>Trending</span>
   </a>
   <a href="#" class="mob-nav-item" id="mob-live" onclick="switchPage('dash','live-feed-section');return false"><span>Sources</span>
+  </a>
+  <a href="#" class="mob-nav-item" id="mob-social" onclick="switchPage('dash','social-velocity-section');return false"><span>Social</span>
   </a>
   <a href="#" class="mob-nav-item" id="mob-lh" onclick="switchPage('lh');return false"><span>Last Hour</span>
     <span class="mob-lh-badge" id="mob-lh-badge">0</span>
@@ -1921,6 +2078,7 @@ function switchPage(pg, scrollTo){
   // Determine which sidebar nav item is "active" (scroll-to items map back to 'dash')
   const activeNav = scrollTo==='live-feed-section' ? 'nav-live'
                   : pg==='dash' ? 'nav-topics'
+                  : scrollTo==='social-velocity-section' ? 'nav-social'
                   : pg==='lh'   ? 'nav-lh' : '';
   document.querySelectorAll('.sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeNav){const el=document.getElementById(activeNav);if(el)el.classList.add('act');}
@@ -1928,12 +2086,14 @@ function switchPage(pg, scrollTo){
   // Mobile bottom nav active state
   const activeMob = scrollTo==='live-feed-section' ? 'mob-live'
                   : pg==='dash' ? 'mob-topics'
+                  : scrollTo==='social-velocity-section' ? 'mob-social'
                   : pg==='lh'   ? 'mob-lh' : '';
   document.querySelectorAll('.mob-nav-item').forEach(a=>a.classList.remove('active'));
   if(activeMob){const el=document.getElementById(activeMob);if(el)el.classList.add('active');}
   // Sync drawer nav active state
   const activeDrw = scrollTo==='live-feed-section' ? 'drw-live'
                   : pg==='dash' ? 'drw-topics'
+                  : scrollTo==='social-velocity-section' ? 'drw-social'
                   : pg==='lh'   ? 'drw-lh' : '';
   document.querySelectorAll('.mob-drawer .sb-lnk').forEach(a=>a.classList.remove('act'));
   if(activeDrw){const el=document.getElementById(activeDrw);if(el)el.classList.add('act');}
@@ -2125,6 +2285,11 @@ function tg(i){
   const row=document.getElementById('ta'+i),icon=document.getElementById('ei'+i);
   icon.textContent=row.classList.toggle('open')?'\u25be':'\u25b8';
 }
+function rTw(trends){
+  const el=document.getElementById('tl2');
+  if(!trends||!trends.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--ink-l);font-size:12px">Twitter/X trends unavailable</div>';return}
+  el.innerHTML=trends.slice(0,25).map((t,i)=>'<div class="tw-r"><span class="tw-rk">'+(i+1)+'</span><span class="tw-tm"><a href="https://x.com/search?q='+encodeURIComponent(t)+'&src=trend_click" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;" onmouseover="this.style.textDecoration=\'underline\'" onmouseout="this.style.textDecoration=\'none\'">'+e(t)+'</a></span><div class="tw-bw"><div class="tw-bg"><div class="tw-bf" style="width:'+Math.round(((25-i)/25)*100)+'%"></div></div></div></div>').join('');
+}
 // ── Leading story hero ──────────────────────────────────────────────────────
 // Two rules hold here. Every sentence is computed from the data, and every
 // characterisation of the coverage is a quote from an outlet rather than a claim of
@@ -2276,7 +2441,7 @@ async function ld(){
     if(d.last_updated!==_lastTs){
       _lastTs=d.last_updated;
       leanMaps(d.sources);
-      rT(d.trending_topics);rS(d.sources);
+      rT(d.trending_topics);rTw(d.twitter_trends);rS(d.sources);
       // Always update LH badge count; re-render feed if on that tab
       const lhArts=d.last_hour||[];
       const lhBadge=document.getElementById('lh-badge');

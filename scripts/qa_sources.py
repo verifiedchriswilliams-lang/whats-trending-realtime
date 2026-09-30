@@ -9,6 +9,7 @@ Run from the repo root:
     python3 scripts/qa_sources.py            # everything
     python3 scripts/qa_sources.py --rss      # RSS feeds only
     python3 scripts/qa_sources.py --scrape   # homepage scrapes only
+    python3 scripts/qa_sources.py --supp     # Twitter/X trends only
     python3 scripts/qa_sources.py --prod     # production health only (no local fetching)
 
 Exit code is 1 if any source came back empty, so this can gate a deploy.
@@ -83,6 +84,20 @@ def check_scrape():
     return failures
 
 
+def check_supplemental():
+    """Twitter/X only. Memeorandum was retired on sourcing grounds — see CLAUDE.md."""
+    print(f"\n{'='*74}\n  SUPPLEMENTAL\n{'='*74}")
+    t = time.time()
+    try:
+        n = len(td.fetch_twitter_trends())
+    except Exception as ex:
+        n = -1
+    c, v = _verdict(n, 5)
+    print(f"{'Twitter/X':<20}{n:>5}{time.time()-t:>6.1f}  {c}[{v}]{OFF}")
+    # Known-flaky from datacentre IPs; the panel degrades gracefully, so never a failure.
+    return []
+
+
 PROD_URL = "https://www.trendinginrealtime.com"
 
 
@@ -148,10 +163,11 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--rss", action="store_true")
     p.add_argument("--scrape", action="store_true")
+    p.add_argument("--supp", action="store_true")
     p.add_argument("--prod", action="store_true",
                    help="check the live Railway deployment instead of fetching locally")
     a = p.parse_args()
-    run_all = not (a.rss or a.scrape or a.prod)
+    run_all = not (a.rss or a.scrape or a.supp or a.prod)
 
     failures = []
     if a.prod:
@@ -160,6 +176,8 @@ def main():
         failures += check_rss()
     if run_all or a.scrape:
         failures += check_scrape()
+    if run_all or a.supp:
+        failures += check_supplemental()
 
     print(f"\n{'='*74}")
     if failures:
