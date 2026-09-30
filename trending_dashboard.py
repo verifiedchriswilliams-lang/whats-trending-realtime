@@ -2241,8 +2241,18 @@ function spark(delta,heat,history){
       return x+' '+y;
     });
     const p='M'+pts.join(' L');
-    const rising=history[history.length-1]>history[0];
-    const flat=history[history.length-1]===history[0];
+    // Coloured by the LAST segment, not by first-vs-last across the whole history.
+    // Those answer different questions — "where has it got to over four refreshes"
+    // versus "which way did it just move" — and the delta badge beside the curve
+    // answers the second. Scored the old way, a story that fell over three refreshes
+    // and rose on the most recent one drew a grey falling curve next to a green
+    // up-arrow, 30px apart, about itself. Green now means the same thing in both.
+    // This is delta by construction: delta = heat_score - history[-1] server-side,
+    // and heat_history is that same history with heat_score appended, so the final
+    // segment IS the delta. Read off the curve rather than the field so the drawing
+    // cannot drift from what is drawn.
+    const step=history[history.length-1]-history[history.length-2];
+    const rising=step>0;
     const color=rising?'oklch(0.55 0.11 158)':'oklch(0.53 0.007 70)';
     const sw=rising?'2.5':'1.5';
     const tip=delta===null?'First reading':delta>0?'Gaining momentum — +'+delta+' pts since last refresh':delta<0?'Losing momentum — '+delta+' pts since last refresh':'No change since last refresh';

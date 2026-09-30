@@ -523,14 +523,21 @@ the baseline and an SVG's baseline is its bottom edge, so the curve is
 because in the mid band the evidence sits under the argument and the row is the full
 column — auto flung the curve 460px from the number it belongs to.
 
-**The curve and the delta measure different windows, and it shows.** `spark()` colours by
-first-vs-last across up to four readings; the `▲17 in the last 30 minutes` line under it
-colours by the last step alone. A story that fell over three refreshes and rose on the
-most recent one therefore draws a grey falling curve beside a green up-arrow. Both are
-true and both are labelled, but they sit 30px apart in the hero where the table kept them
-in separate columns. Left as is deliberately: the colour of a line should describe that
-line. If it reads as a contradiction in use, the fix is to colour the curve by the same
-last step, not to change what the delta reports.
+**The curve is coloured by its last segment, not by first-vs-last.** `spark()` used to
+score `history[last] > history[0]`, while the `▲17 in the last 30 minutes` badge beside
+it scores the last step alone — two different questions answered differently, 30px apart,
+about the same story. A story that fell over three refreshes and rose on the most recent
+one drew a grey falling curve next to a green up-arrow. This was latent while Velocity
+and Signal were separate table columns and became obvious once the hero put them side by
+side. Measured on a live 20-cluster cycle: 2 of 20 rows were painted against their own
+arrow, both stories recovering from a dip (e.g. `[49, 49, 26, 49]`, delta +23, drawn
+grey). Now 0 of 20 disagree.
+
+The last segment **is** the delta by construction — `delta = heat_score - history[-1]`
+server-side and `heat_history` is that same history with `heat_score` appended — but
+`spark()` reads it off the curve it is drawing rather than off the field, so the colour
+cannot drift from the line. Green still means one thing on this page: gaining coverage
+since the last refresh.
 
 **With no image the evidence column centres itself** (`.hero-side:not(:has(.hero-fig))`).
 Roughly one story in ten has no picture anywhere in its cluster, and a failed hotlink
