@@ -999,12 +999,20 @@ def cluster_topics(all_arts):
         editorial_spotlight_set = set()  # scrape position 1-3 = editors are actively leading with this
 
         seen_double = set()
+        # How hard each outlet is running the story: its best homepage position, then
+        # its best feed position. This orders hero_sources below.
+        hero_rank = {}
         for a in cl_arts:
             sid_a = a["source_id"]
-            is_rss_hero    = a.get("feed_position", 99) <= 1
+            feed_pos       = a.get("feed_position", 99)
+            is_rss_hero    = feed_pos <= 1
             scrape_pos     = a.get("scrape_position")          # None if not matched
             is_scrape_hero = scrape_pos is not None and scrape_pos <= 8
             is_editorial   = scrape_pos is not None and scrape_pos <= 3
+
+            key = (scrape_pos if scrape_pos is not None else 999, feed_pos)
+            if sid_a not in hero_rank or key < hero_rank[sid_a]:
+                hero_rank[sid_a] = key
 
             if is_rss_hero or is_scrape_hero:
                 hero_set.add(sid_a)
@@ -1015,7 +1023,14 @@ def cluster_topics(all_arts):
                 double_confirmed += 1
                 seen_double.add(sid_a)
 
-        hero_sources = list(hero_set | editorial_spotlight_set)
+        # Ordered, not a set dump. This was `list(hero_set | editorial_spotlight_set)`,
+        # whose order is Python's set iteration order — arbitrary, and unstable for the
+        # same story between refreshes. Both the row subtitles and the hero lede name
+        # only the first three, so an arbitrary order meant arbitrary names. Sorted by
+        # how prominently each outlet is running it (homepage position first, then feed
+        # position), with the source id as a final tiebreak so the order is stable.
+        hero_sources = sorted(hero_set | editorial_spotlight_set,
+                              key=lambda sid: (hero_rank.get(sid, (999, 99)), sid))
         hero_count   = len(hero_set)
         editorial_spotlight = len(editorial_spotlight_set)
 
@@ -2347,12 +2362,31 @@ function rHero(t){
   const src=arts.find(a=>a.title.toLowerCase().indexOf(labNorm)===0);
   const hl=src?'<a href="'+e(src.link)+'" target="_blank" rel="noopener">'+e(lab)+'</a>':e(lab);
 
-  // Lede: leaders and recency, both straight from the cluster.
-  const leads=(t.hero_sources||[]).length, n=srcs.length, ago=agoWords(t.age_minutes);
-  let lede = leads
-    ? numWord(leads).charAt(0).toUpperCase()+numWord(leads).slice(1)+' outlet'+(leads===1?'':'s')+(leads===1?' is':' are')+' leading with it'
-    : numWord(n).charAt(0).toUpperCase()+numWord(n).slice(1)+' outlets are carrying it, none of them leading with it';
-  lede += ago?'; the most recent article landed '+ago+'.':'.';
+  // Lede: leaders, named, and recency — all three straight from the cluster, nothing
+  // characterised. It used to say "Eight outlets are leading with it" and never name
+  // one, which was the only thing every row in the table gave that the hero withheld.
+  // Capped at three names, as the rows and the artboard are. hero_sources arrives
+  // sorted by how hard each outlet is running the story, so the three are the three
+  // leading it hardest rather than whichever three a set happened to yield.
+  const leadIds=t.hero_sources||[], leads=leadIds.length, n=srcs.length;
+  const ago=agoWords(t.age_minutes);
+  const names=leadIds.slice(0,3).map(x=>SN[x]||x);
+  const andList=a=>a.length<2?(a[0]||''):a.slice(0,-1).join(', ')+' and '+a[a.length-1];
+  const cap=w=>w.charAt(0).toUpperCase()+w.slice(1);
+  let lede;
+  if(!leads){
+    lede=cap(numWord(n))+' outlets are carrying it, none of them leading with it.';
+  }else if(leads===1){
+    lede=names[0]+' is leading with it.';
+  }else if(leads<=3){
+    // Three or fewer, so the list is the whole set — no hedge in front of it.
+    lede=cap(numWord(leads))+' outlets are leading with it: '+andList(names)+'.';
+  }else{
+    lede=cap(numWord(leads))+' outlets are leading with it, among them '+andList(names)+'.';
+  }
+  // Recency as its own sentence. Hung off the first with a semicolon it collided with
+  // the list's own commas and read as one long clause.
+  if(ago)lede+=' The most recent article landed '+ago+'.';
 
   // The split, shown not asserted. Presence is judged from the full source list;
   // a quote is only shown when we actually hold one, so absence is never inferred

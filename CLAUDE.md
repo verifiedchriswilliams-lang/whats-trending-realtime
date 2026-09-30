@@ -410,6 +410,23 @@ that it reports what the press is running. So the hero computes the first senten
 actually headlined it, quoted verbatim, each in its own lean colour and linked to the
 article. Framing differences are evidence here, not assertion.
 
+**The lede names the outlets leading it**, capped at three, the way every row in the
+table does — that was the one thing the rows gave that the hero withheld. Four shapes,
+all computed: one leader is named alone ("NPR is leading with it"), two or three are the
+whole set so the list needs no hedge ("Three outlets are leading with it: NPR, CBS News
+and BBC News"), more than three take "among them", and none at all says so
+("Two outlets are carrying it, none of them leading with it"). Recency is its own
+sentence — hung off the first with a semicolon it collided with the list's own commas.
+
+**`hero_sources` is sorted, and that is what makes naming three of them honest.** It was
+`list(hero_set | editorial_spotlight_set)` — Python set iteration order, arbitrary and
+unstable for the same story between refreshes. Both the row subtitles and the hero lede
+show only the first three, so an arbitrary order meant arbitrary names. It is now sorted
+by how hard each outlet is running the story: best homepage position, then best feed
+position, then source id as a stable tiebreak. Measured on a live cycle, the top cluster
+ordered BBC/CNN/NBC (all at homepage position 1) ahead of CBS at position 1 but feed
+position 11, then NY Post at homepage position 8.
+
 Two rules for anything added to the hero later. **Every sentence is computed from the
 data, and every characterisation of the coverage is a quote.** No LLM lede. And
 **presence is read from `t.sources`, never from the article sample** — the payload caps
