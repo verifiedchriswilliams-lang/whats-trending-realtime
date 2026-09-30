@@ -1732,10 +1732,11 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-stat-l{font-size:13px;color:var(--ink3)}
 /* `.hero-stat` aligns on the baseline, and an SVG's baseline is its bottom edge — left
    to itself the curve hangs below the number. Centred against the line instead.
-   Adjacent to the label, NOT `margin-left:auto`: in the mid band the evidence sits
-   under the argument, so the row is the full column and auto flung the curve 460px
-   from the number it belongs to. */
-.hero-spark{align-self:center;display:flex;margin-left:3px}
+   It leads the row, in the table's own order — Velocity, then Signal. It is also
+   adjacent rather than pushed out with a `margin-left:auto`: in the mid band the
+   evidence sits under the argument, so the row is the full column width and auto flung
+   the curve 460px from the number it belongs to. */
+.hero-spark{align-self:center;display:flex;margin-right:3px}
 .hero-spark svg{display:block}
 .hero-delta{font-size:13px;color:var(--ink3);margin-top:6px;width:100%}
 @media(max-width:600px){
@@ -2467,12 +2468,15 @@ function rHero(t){
       +'<div class="hero-foot">'
         +'<div class="hero-dots">'+dots(srcs)+'</div>'
         +'<div class="hero-legend">'+legend+'</div>'
-        +'<div class="hero-stat"><span class="hero-stat-n">'+t.heat_score+'</span>'
-          +'<span class="hero-stat-l">Signal</span>'
-          // The same spark() the rows draw, from the same heat_history, so the hero
-          // and row 02 cannot disagree about a story's trajectory. The number is how
-          // big; the curve is which way it is going.
+        // The same spark() the rows draw, from the same heat_history, so the hero and
+        // row 02 cannot disagree about a story's trajectory. The number is how big;
+        // the curve is which way it is going. Curve FIRST, then the number: the table
+        // reads Velocity then Signal, and the hero has to read the same way round or
+        // the eye has to relearn the block at row 02.
+        +'<div class="hero-stat">'
           +'<span class="hero-spark">'+spark(t.delta,t.heat_score,t.heat_history)+'</span>'
+          +'<span class="hero-stat-n">'+t.heat_score+'</span>'
+          +'<span class="hero-stat-l">Signal</span>'
           +dh+'</div>'
       +'</div>'
     +'</div>';

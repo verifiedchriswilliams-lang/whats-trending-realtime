@@ -515,10 +515,13 @@ row carries and the hero did not.
 **The Signal number carries the velocity sparkline beside it** — the same `spark()` the
 table rows draw, from the same `heat_history`, so the hero and row 02 cannot disagree
 about a story's trajectory. The number is how big, the curve is which way it is going.
-`.hero-stat` aligns on the baseline and an SVG's baseline is its bottom edge, so the
-curve is `align-self:center`; it is placed adjacent to the label rather than with
-`margin-left:auto`, because in the mid band the evidence sits under the argument and the
-row is the full column — auto flung the curve 460px from the number it belongs to.
+**The curve leads the row, then the number** — the table's own order, Velocity then
+Signal. It shipped the other way round for one deploy and read as a break in continuity:
+the eye should not have to relearn the block between 01 and 02. `.hero-stat` aligns on
+the baseline and an SVG's baseline is its bottom edge, so the curve is
+`align-self:center`; it sits adjacent rather than pushed out with a `margin` auto,
+because in the mid band the evidence sits under the argument and the row is the full
+column — auto flung the curve 460px from the number it belongs to.
 
 **The curve and the delta measure different windows, and it shows.** `spark()` colours by
 first-vs-last across up to four readings; the `▲17 in the last 30 minutes` line under it
