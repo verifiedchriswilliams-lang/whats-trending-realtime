@@ -478,8 +478,28 @@ specificity, so they win.
 
 **The rank gutter is the table's own geometry, and it has to stay that way.** 94px = 2px
 of `.tbl-wrap` padding + the 76px rank column + 16px of cell padding, so the hero's 01 and
-the table's 02 sit at the same x, and the hero's headline starts exactly where the Story
-column does. The gap to the evidence column is `padding-right` on `.hero-main`, **not** a
+the table's 02 share a centre axis, and the hero's headline starts exactly where the Story
+column does.
+
+**01 is set at the headline's own size and sits on the headline's row**, not the eyebrow's
+— the grid areas are `". eyebrow eyebrow" "rank main side"`, so the rank's first baseline
+lands on the headline's first baseline (`line-height:1.06` on both). One token, `--hhs`,
+carries the headline size and the rank borrows it, redeclared per band on `.hero.on` so
+the two can never drift apart. Under it sits the same age chip the table rows carry, from
+the shared `whenChip()` — the hero previously had an empty gutter where every other row
+shows `7m` or `2h`.
+
+**The eyebrow carries the category, not the outlet count.** It read "Leading story · 11 of
+25 outlets" three lines above a dot legend reading "6 left · 3 center · 2 right · 14 not
+carrying it" — the same number twice, once without the breakdown that makes it worth
+stating. The count stays with the dots; the slot went to the category, which every table
+row carries and the hero did not.
+
+**With no image the evidence column centres itself** (`.hero-side:not(:has(.hero-fig))`).
+Roughly one story in ten has no picture anywhere in its cluster, and a failed hotlink
+removes the figure at runtime — either way that column is ~90px of dots and Signal against
+a 400px row, and top-aligned it left a void beneath it. `:has()` rather than a class set
+at render time, so it catches the figure that removes itself after the page has painted. The gap to the evidence column is `padding-right` on `.hero-main`, **not** a
 `column-gap`: a column gap also opens between the rank and the headline and pushes the
 headline 40px right of the column it is meant to line up with. `.sec-hdr` is `order:-1`
 so the list's header sits above the hero — left where it was, the count read 01, a

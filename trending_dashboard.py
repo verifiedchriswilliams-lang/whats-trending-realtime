@@ -1567,13 +1567,17 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
    hero actually has — at a 1100px viewport a percentage second column once resolved to
    a 161px image. Stacked is the default, so a browser without container query support
    gets a sound single column. */
-.hero{display:none;margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--surface-top)}
+.hero{display:none;margin-bottom:34px;padding-bottom:26px;border-bottom:1px solid var(--surface-top);
+  --hhs:clamp(24px,2.7vw,34px)}
 .hero.on{display:flex;flex-direction:column}
 /* Stacked: the wrapper dissolves so the photograph can lead, which is what tells you
    at a glance on a phone which story this is. */
 .hero-side{display:contents}
 /* Stacked there is no gutter to sit in, so the rank leads the eyebrow line instead. */
 .hero.on .hero-rank{order:1;font-size:26px;margin-bottom:2px}
+/* Stacked the gutter is gone, so the age chip left-aligns under the number instead of
+   centring across the full column width. */
+.hero.on .hero-rank .t-when{justify-content:flex-start;margin-top:5px}
 .hero.on .hero-eyebrow{order:2}.hero.on .hero-fig{order:3}
 .hero.on .hero-main{order:4}.hero.on .hero-foot{order:5}
 
@@ -1600,14 +1604,18 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 @container hero-col (min-width:480px){
   .hero.on{display:grid;grid-template-columns:94px minmax(0,1fr);
     column-gap:0;align-items:start;
-    grid-template-areas:"rank eyebrow" "rank main" ". side"}
+    grid-template-areas:". eyebrow" "rank main" ". side"}
   /* `order` applies to grid items too, so the stacked ordering above has to be
      cleared here — left in place, `.hero-side` (no order, so 0) sorted ahead of the
      eyebrow and the photograph jumped to the top of the grid. */
   .hero.on .hero-rank,.hero.on .hero-eyebrow,.hero.on .hero-fig,
   .hero.on .hero-main,.hero.on .hero-foot,.hero.on .hero-side{order:0}
+  /* The rank sits on the headline's row, not the eyebrow's, and takes the headline's
+     own size token — so it reads as the number *of* that headline, the way 02 does in
+     the table. `line-height` matches `.hero-hl` so the two first baselines land on the
+     same line rather than merely starting in the same box. */
   .hero.on .hero-rank{grid-area:rank;width:44px;margin:0 0 0 18px;text-align:center;
-    font-size:22px}
+    font-size:var(--hhs);line-height:1.06}
   .hero.on .hero-eyebrow{grid-area:eyebrow;margin-left:0}
   .hero.on .hero-main{grid-area:main;min-width:0;padding-right:0}
   .hero.on .hero-side{grid-area:side;display:block;min-width:0}
@@ -1619,14 +1627,21 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 @container hero-col (min-width:740px){
   .hero.on{grid-template-columns:94px minmax(0,1fr) minmax(240px,30%);
-    grid-template-areas:"rank eyebrow eyebrow" "rank main side"}
+    grid-template-areas:". eyebrow eyebrow" "rank main side";
+    /* The argument column is ~460px once the aside is back, so the headline — and with
+       it the rank — steps down a size here rather than wrapping to five lines. */
+    --hhs:clamp(22px,2.3vw,30px)}
   /* The gap to the evidence column is padding, not a grid gap: a column-gap would
      also open between the rank and the headline and push the headline 40px right of
      the Story column it is meant to line up with. */
   .hero.on .hero-main{padding-right:28px}
-  /* The argument column is ~460px once the aside is back, so the headline steps down
-     a size here rather than wrapping to five lines. */
-  .hero.on .hero-hl{font-size:clamp(22px,2.3vw,30px)}
+  /* Roughly one story in ten has no picture anywhere in its cluster, and a hotlink
+     that fails removes the figure at runtime. Either way the evidence column is then
+     just the dots and the Signal — about 90px of content against a 400px row, sitting
+     at the top with a void beneath it. Centred, it balances the argument instead.
+     `:has()` rather than a class set at render time, so it also catches the figure
+     that removes itself after the page has painted. */
+  .hero.on .hero-side:not(:has(.hero-fig)){align-self:center}
   .hero.on .hero-fig{margin:4px 0 0}
 }
 
@@ -1643,7 +1658,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-eyebrow-n::before{content:'\00b7 '}
 
 .hero-hl{font-family:'Instrument Sans',system-ui,sans-serif;
-  font-size:clamp(24px,2.7vw,34px);font-weight:400;letter-spacing:-.035em;line-height:1.06;
+  font-size:var(--hhs);font-weight:400;letter-spacing:-.035em;line-height:1.06;
   color:var(--ink);margin:0 0 12px}
 .hero-hl a{color:inherit;text-decoration:none}
 .hero-hl a:hover{text-decoration:underline;text-underline-offset:4px}
@@ -1703,7 +1718,7 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-delta{font-size:13px;color:var(--ink3);margin-top:6px;width:100%}
 @media(max-width:600px){
   .hero{margin-bottom:24px;padding-bottom:20px}
-  .hero-hl{font-size:clamp(23px,5.6vw,30px)}
+  .hero.on{--hhs:clamp(23px,5.6vw,30px)}
   .hero-q{grid-template-columns:1fr;gap:3px}
   .hero-foot{gap:18px}
   /* Back to stacked, whatever the container query says. Below 600px the table drops
@@ -2232,6 +2247,19 @@ function catBadge(cats){
     return '<span class="tag cat '+cls+'">'+lbl+'</span>';
   }).join('');
 }
+// One chip under the rank number, always the same shape: the age of the newest
+// article. Breaking is the same chip in red, not a second wider word — the gutter is
+// 76px and "Breaking" does not fit it without pushing the whole table over. The hero
+// draws the same chip in the same gutter, so 01 and 02 carry identical furniture.
+function whenChip(t){
+  const am=t.age_minutes;
+  if(am==null&&!t.is_breaking)return '';
+  const ageTxt=am==null?'':(am<60?am+'m':Math.floor(am/60)+'h');
+  const ageWords=am==null?'':(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago';
+  return t.is_breaking
+    ?'<span class="tag brk" title="Breaking \u2014 newest article published '+(ageWords||'within the last 90 minutes')+'">'+(ageTxt||'new')+'</span>'
+    :'<span class="tag age" title="Most recent article in this cluster was published '+ageWords+'">'+ageTxt+'</span>';
+}
 function rT(topics){
   const tb=document.getElementById('tl');
   if(!topics||!topics.length){tb.innerHTML='<tr><td colspan="4" style="padding:32px;text-align:center;color:var(--ink-l)">No trending topics yet.</td></tr>';return}
@@ -2243,15 +2271,7 @@ function rT(topics){
     const i=i0+1;
     const hot=i<3,heroSrcs=new Set(t.hero_sources||[]);
     const chips=dots(t.sources||[]);
-    // One chip under the rank number, always the same shape: the age of the newest
-    // article. Breaking is the same chip in red, not a second wider word — the gutter
-    // is 76px and "Breaking" does not fit it without pushing the whole table over.
-    const am=t.age_minutes;
-    const ageTxt=am==null?'':(am<60?am+'m':Math.floor(am/60)+'h');
-    const ageWords=am==null?'':(am<60?am+' minutes':Math.floor(am/60)+' hour'+(Math.floor(am/60)>1?'s':''))+' ago';
-    const whenBadge=t.is_breaking
-      ?'<span class="tag brk" title="Breaking \u2014 newest article published '+(ageWords||'within the last 90 minutes')+'">'+(ageTxt||'new')+'</span>'
-      :(am!=null?'<span class="tag age" title="Most recent article in this cluster was published '+ageWords+'">'+ageTxt+'</span>':'');
+    const whenBadge=whenChip(t);
     const SNm=window._SN||{};
     const leadNames=(t.hero_sources||[]).map(x=>SNm[x]||x);
     const catTxt=(Array.isArray(t.category)?t.category:[t.category||'national'])
@@ -2385,9 +2405,17 @@ function rHero(t){
 
   // Each column is its own flow container: nothing in one can stretch a row in the
   // other, which is what left 160px of dead space under the headline.
-  el.innerHTML='<div class="hero-rank">01</div>'
+  const wb=whenChip(t);
+  const heroCat=(Array.isArray(t.category)?t.category:[t.category||'national'])
+                  .map(c=>_CAT_LABEL[c]||'National').join(', ');
+  el.innerHTML='<div class="hero-rank">01'+(wb?'<div class="t-when">'+wb+'</div>':'')+'</div>'
+    // The eyebrow used to read "Leading story - 11 of 25 outlets", and the dot legend
+    // three lines below it read "6 left - 3 center - 2 right - 14 not carrying it".
+    // Same number, stated twice, once without the breakdown that makes it worth
+    // stating. The count stays with the dots; the slot goes to the category, which
+    // every row in the table carries and the hero did not.
     +'<div class="hero-eyebrow"><span class="hero-eyebrow-k">Leading story</span>'
-      +'<span class="hero-eyebrow-n">'+n+' of '+sp.roster.length+' outlets</span></div>'
+      +(heroCat?'<span class="hero-eyebrow-n">'+e(heroCat)+'</span>':'')+'</div>'
     +'<div class="hero-main">'
       +'<div class="hero-hl">'+hl+'</div>'
       +'<div class="hero-lede">'+e(lede)+'</div>'
