@@ -512,6 +512,23 @@ carrying it" — the same number twice, once without the breakdown that makes it
 stating. The count stays with the dots; the slot went to the category, which every table
 row carries and the hero did not.
 
+**The Signal number carries the velocity sparkline beside it** — the same `spark()` the
+table rows draw, from the same `heat_history`, so the hero and row 02 cannot disagree
+about a story's trajectory. The number is how big, the curve is which way it is going.
+`.hero-stat` aligns on the baseline and an SVG's baseline is its bottom edge, so the
+curve is `align-self:center`; it is placed adjacent to the label rather than with
+`margin-left:auto`, because in the mid band the evidence sits under the argument and the
+row is the full column — auto flung the curve 460px from the number it belongs to.
+
+**The curve and the delta measure different windows, and it shows.** `spark()` colours by
+first-vs-last across up to four readings; the `▲17 in the last 30 minutes` line under it
+colours by the last step alone. A story that fell over three refreshes and rose on the
+most recent one therefore draws a grey falling curve beside a green up-arrow. Both are
+true and both are labelled, but they sit 30px apart in the hero where the table kept them
+in separate columns. Left as is deliberately: the colour of a line should describe that
+line. If it reads as a contradiction in use, the fix is to colour the curve by the same
+last step, not to change what the delta reports.
+
 **With no image the evidence column centres itself** (`.hero-side:not(:has(.hero-fig))`).
 Roughly one story in ten has no picture anywhere in its cluster, and a failed hotlink
 removes the figure at runtime — either way that column is ~90px of dots and Signal against

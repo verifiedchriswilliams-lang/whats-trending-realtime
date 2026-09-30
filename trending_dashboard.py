@@ -1730,6 +1730,13 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 .hero-stat{margin-top:20px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
 .hero-stat-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1}
 .hero-stat-l{font-size:13px;color:var(--ink3)}
+/* `.hero-stat` aligns on the baseline, and an SVG's baseline is its bottom edge — left
+   to itself the curve hangs below the number. Centred against the line instead.
+   Adjacent to the label, NOT `margin-left:auto`: in the mid band the evidence sits
+   under the argument, so the row is the full column and auto flung the curve 460px
+   from the number it belongs to. */
+.hero-spark{align-self:center;display:flex;margin-left:3px}
+.hero-spark svg{display:block}
 .hero-delta{font-size:13px;color:var(--ink3);margin-top:6px;width:100%}
 @media(max-width:600px){
   .hero{margin-bottom:24px;padding-bottom:20px}
@@ -2461,7 +2468,12 @@ function rHero(t){
         +'<div class="hero-dots">'+dots(srcs)+'</div>'
         +'<div class="hero-legend">'+legend+'</div>'
         +'<div class="hero-stat"><span class="hero-stat-n">'+t.heat_score+'</span>'
-          +'<span class="hero-stat-l">Signal</span>'+dh+'</div>'
+          +'<span class="hero-stat-l">Signal</span>'
+          // The same spark() the rows draw, from the same heat_history, so the hero
+          // and row 02 cannot disagree about a story's trajectory. The number is how
+          // big; the curve is which way it is going.
+          +'<span class="hero-spark">'+spark(t.delta,t.heat_score,t.heat_history)+'</span>'
+          +dh+'</div>'
       +'</div>'
     +'</div>';
   el.classList.add('on');
