@@ -480,12 +480,23 @@ gutter at 1280 and 1100, two of the commonest laptop widths. The **mid band (480
 two columns: the rank keeps its gutter and the evidence moves *under* the argument rather
 than beside it. Three columns at a 664px section would leave the headline 302px, which
 wraps a normal headline to six lines. 480 rather than 560 because a 1100px viewport gives
-the section exactly 484px, and that is the width where losing the gutter would show most
-— the aside is still on screen. Below it (a ~1000px viewport, 384px of section) the
-argument column would be 290px and the quoted headlines 166px, so stacked takes over.
-The mid band caps the figure at **440px**, not the stacked layout's 520px: stacked the
-photograph leads and earns the width, here every pixel of its height pushes the ranked
-list off the first screen.
+the section exactly 484px. The mid band caps the figure at **440px**, not the stacked
+layout's 520px: stacked the photograph leads and earns the width, here every pixel of its
+height pushes the ranked list off the first screen.
+
+**The aside drops below the content at ≤1240px, and that is what makes the bands
+continuous.** With the 300px rail beside it the section is `viewport - 616`, so the
+gutter survived only down to a ~1100px viewport; between 901 and 1095 the hero stacked
+and the reading column was as little as 334px — narrower than the trends list sitting
+next to it. **1240 is where the two constraints meet**: at a 1241px viewport the aside is
+still on screen and the section is 625px, comfortably inside the mid band; at 1240 the
+aside moves below and the section jumps to 944px, which clears the three-column band. So
+there is no width between them where the gutter is lost. Swept at 25 viewport widths from
+360 to 1920: the rank and headline align at **every width from 601 up**, and nothing
+overflows horizontally. Below the content the panel is capped at **420px** — `.tw-tm` is
+`flex:1`, so full-width the trend name takes all the slack and the 32px bar ends up
+~600px from the word it measures. The `.cgrid{grid-template-columns:1fr}` in the ≤900px
+block is now redundant, and kept only so that block stays self-contained.
 
 **Below 600px the hero is forced back to stacked from a media query**, whatever the
 container says. The table drops to its card layout there and its rank column is 52px, not

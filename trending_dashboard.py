@@ -1877,6 +1877,27 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   margin-bottom:12px;background:rgba(186,3,42,.06);border-radius:4px;
   border:1px solid rgba(186,3,42,.12)}
 
+/* ── The aside drops below the content before the hero has to stack ────────
+   The hero's rank gutter is what makes 01 -> 02 -> 03 read as one list, and it needs
+   a container of at least 480px. With the 300px aside beside it the section is
+   `viewport - 616`, so the gutter survives only down to a ~1100px viewport; between
+   901 and 1095 the hero stacked and the content column was as little as 334px — a
+   reading column narrower than the trends list sitting next to it.
+
+   1240 is where the two constraints meet. At a 1241px viewport the aside is still on
+   screen and the section is 625px, comfortably inside the mid band; at 1240 the aside
+   moves below and the section jumps to 944px, which clears the three-column band. So
+   there is no width between them where the gutter is lost. Below this the rail is
+   still on the page and the Social Velocity nav item still scrolls to it. */
+@media(max-width:1240px){
+  .cgrid{grid-template-columns:1fr}
+  /* Below the content it is no longer a 300px rail, and a full-width panel reads
+     badly: `.tw-tm` is `flex:1`, so at 804px the trend name takes all the slack and
+     the 32px bar ends up ~600px from the word it measures. Capped, the row still
+     reads as one line and the panel reads as a card rather than a banner. */
+  .cgrid > aside{max-width:420px}
+}
+
 /* ── All ≤900px mobile overrides in one block ──────────────────────────── */
 @media(max-width:900px){
   .mob-hdr{display:flex}
@@ -1884,7 +1905,9 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
   /* Main pages: remove sidebar offset, add top padding for mob-hdr */
   .main{margin-left:0;padding-top:56px;padding-bottom:76px}
   .lh-page{margin-left:0!important;padding-top:56px!important;padding-bottom:76px!important}
-  .cgrid{grid-template-columns:1fr}
+  .cgrid{grid-template-columns:1fr}  /* redundant under the 1240 rule above; kept so
+                                        this block stays self-contained if that
+                                        breakpoint ever moves */
   .fab{display:none}
   .mob-nav{display:flex}
 }
