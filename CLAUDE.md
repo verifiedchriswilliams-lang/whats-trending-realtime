@@ -469,9 +469,16 @@ such.
 
 **The hero is three columns, gated on a container query:** a 94px rank gutter, the
 argument (headline, lede, the quoted headlines under a "How it is being headlined"
-label), and the evidence (image, credit, a rule, then the coverage dots and Signal as one
-block). 435px tall against 914px for the full-width version, so the leading story and the
-top of the ranked list share the first screen.
+label, then the coverage dots and their legend), and the evidence (image, credit, a rule,
+then Velocity and Signal). 435px tall against 914px for the full-width version, so the
+leading story and the top of the ranked list share the first screen.
+
+**The dots close the argument; the measurements sit under the photograph.** The dots and
+their legend used to float in the evidence column above the Signal number, which read as
+a pile of unrelated things in a narrow column. In the argument column they finish the
+sentence the row is making: headline → who is leading it → how they are headlining it →
+who is carrying it. It also frees the evidence column of the one element that could not
+shrink or wrap.
 
 **There are two grid bands and one stacked fallback**, at container widths 740, 480 and
 below. Restoring the Social Velocity aside took 300px back off the main column, and the
@@ -523,16 +530,24 @@ carrying it" — the same number twice, once without the breakdown that makes it
 stating. The count stays with the dots; the slot went to the category, which every table
 row carries and the hero did not.
 
-**The Signal number carries the velocity sparkline beside it** — the same `spark()` the
-table rows draw, from the same `heat_history`, so the hero and row 02 cannot disagree
-about a story's trajectory. The number is how big, the curve is which way it is going.
-**The curve leads the row, then the number** — the table's own order, Velocity then
-Signal. It shipped the other way round for one deploy and read as a break in continuity:
-the eye should not have to relearn the block between 01 and 02. `.hero-stat` aligns on
-the baseline and an SVG's baseline is its bottom edge, so the curve is
-`align-self:center`; it sits adjacent rather than pushed out with a `margin` auto,
-because in the mid band the evidence sits under the argument and the row is the full
-column — auto flung the curve 460px from the number it belongs to.
+**Velocity and Signal are the table's own header row, redrawn.** Two labelled cells —
+label above value, Velocity then Signal, the pair right-aligned to the column edge under
+the photograph — so the hero's block and the `Velocity | Signal` headers a few hundred
+pixels below it are the same typography (13px, weight 400, `--ink3`) in the same order at
+close to the same x. The curve is the same `spark()` the rows draw, from the same
+`heat_history`, so the hero and row 02 cannot disagree about a trajectory; the number is
+how big, the curve is which way it is going.
+
+Two things that layout needs. `.hero-metrics` is **`align-items:flex-start`**: the two
+values are different heights (a 32px SVG against a 30px number), so aligning the cells'
+bottoms put the two labels on different lines, which is the one thing a header row must
+not do. The value boxes then take a common 32px and centre in it, so labels share a line
+and values share a line. And **`.hero-metric-v` is a flex box** rather than
+`text-align:right` — an SVG's baseline is its bottom edge, so inline layout hangs the
+curve below the line.
+
+The order shipped reversed for one deploy (number, then curve) and read as a break in
+continuity: the eye should not have to relearn the block between 01 and 02.
 
 **The curve is coloured by its last segment, not by first-vs-last.** `spark()` used to
 score `history[last] > history[0]`, while the `▲17 in the last 30 minutes` badge beside
@@ -579,9 +594,10 @@ the full column (728px at a 768px viewport) and pushed everything else off scree
 stacked ordering has to be cleared inside the container query — left in place,
 `.hero-side` (no `order`, so 0) sorted ahead of the eyebrow and the photograph jumped to
 the top of the grid. The other two shipped a sideways-scrolling page before they were
-caught. The third column has a hard **240px floor** because the 25-dot row cannot
-shrink or wrap — a wrapped group destroys the shape the dots exist to show — and 25 tiles
-at 9px plus three 4px gaps is 237px. And **a container query adds no specificity**: the
+caught. The third column has a hard **240px floor**. That floor was originally set by the
+25-dot row, which cannot shrink or wrap; the dots have since moved into the argument
+column, and the floor now holds for the photograph — 240px is already a small hero image,
+and Velocity plus Signal need ~180px of it anyway. And **a container query adds no specificity**: the
 `--dt:10px` inside `@container` lost to an equal-specificity `--dt:13px` further down the
 sheet, putting a 337px row in a 292px column. Size the hero tile once, outside the query.
 

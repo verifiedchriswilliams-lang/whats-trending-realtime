@@ -1716,34 +1716,44 @@ body{background:var(--bg);color:var(--ink);font-family:'Instrument Sans',system-
 
 /* The measurements read as one block, under a rule that separates them from the
    photograph above: how broadly it is carried, then how strong that is. */
-.hero-foot{margin-top:20px;padding-top:16px;border-top:1px solid var(--surface-high)}
+/* Coverage closes the argument column, under the quoted headlines. */
+.hero-cov{margin-top:24px}
 .hero-dots .cdrow{margin-top:0}
-/* 10px, not 13px. A container query adds no specificity, so sizing this inside one
-   loses to any equal-specificity rule further down the sheet — which is how a 13px
-   tile ended up in a 292px column and scrolled the page sideways. Size it once, for
-   the narrowest column it will ever sit in: 25 tiles at 9px plus three group gaps is
-   237px, against the evidence column's 240px floor. The row cannot wrap; a wrapped group
-   destroys the shape the dots exist to show. */
+/* Sized once, outside any container query: a container query adds no specificity, so a
+   `--dt` set inside one loses to an equal-specificity rule further down the sheet —
+   which is how a 13px tile once ended up in a 292px column and scrolled the page
+   sideways. 9px is the table rows' own tile, so the hero's dot row and row 02's are the
+   same object at the same scale. 25 tiles at 9px plus three group gaps is 237px, and
+   the argument column is never narrower than ~388px. The row cannot wrap; a wrapped
+   group destroys the shape the dots exist to show. */
 .hero-dots .cdots{--dt:9px}
 .hero-dots .cdn{display:none}
 .hero-legend{font-size:13px;color:var(--ink3);margin-top:10px}
-.hero-stat{margin-top:20px;display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+
+/* Velocity and Signal as the table's own header row: label above value, the two cells
+   side by side in that order, the pair right-aligned to the column edge under the
+   photograph. The labels are the table's `thead th` — 13px, weight 400, `--ink3` — so
+   the hero's block and the column headers below it are the same typography. */
+.hero-foot{margin-top:20px;padding-top:16px;border-top:1px solid var(--surface-high)}
+/* Top-aligned, not bottom-aligned. The two values are different heights — a 32px SVG
+   against a 30px number — so aligning the cells' bottoms pushed the two labels onto
+   different lines, which is the one thing a header row must not do. The value boxes
+   then take a common 32px and centre inside it, so the labels sit on one line and the
+   curve and the number sit on another. */
+.hero-metrics{display:flex;justify-content:flex-end;align-items:flex-start;gap:30px}
+.hero-metric{text-align:right;min-width:0}
+.hero-metric-v{min-height:32px;display:flex;align-items:center;justify-content:flex-end}
+.hero-metric-l{font-size:13px;font-weight:400;color:var(--ink3);
+  font-family:'Instrument Sans',system-ui,sans-serif;margin-bottom:8px;white-space:nowrap}
 .hero-stat-n{font-family:'Instrument Sans',system-ui,sans-serif;font-size:30px;font-weight:700;line-height:1}
-.hero-stat-l{font-size:13px;color:var(--ink3)}
-/* `.hero-stat` aligns on the baseline, and an SVG's baseline is its bottom edge — left
-   to itself the curve hangs below the number. Centred against the line instead.
-   It leads the row, in the table's own order — Velocity, then Signal. It is also
-   adjacent rather than pushed out with a `margin-left:auto`: in the mid band the
-   evidence sits under the argument, so the row is the full column width and auto flung
-   the curve 460px from the number it belongs to. */
-.hero-spark{align-self:center;display:flex;margin-right:3px}
+/* An SVG's baseline is its bottom edge, so inline layout hangs it below the line —
+   `.hero-metric-v` being a flex box is what keeps the curve on the line instead. */
 .hero-spark svg{display:block}
-.hero-delta{font-size:13px;color:var(--ink3);margin-top:6px;width:100%}
+.hero-delta{font-size:13px;color:var(--ink3);margin-top:10px;text-align:right}
 @media(max-width:600px){
   .hero{margin-bottom:24px;padding-bottom:20px}
   .hero.on{--hhs:clamp(23px,5.6vw,30px)}
   .hero-q{grid-template-columns:1fr;gap:3px}
-  .hero-foot{gap:18px}
   /* Back to stacked, whatever the container query says. Below 600px the table drops
      to the card layout and its rank column is 52px, not 76px, so the hero's 94px
      gutter no longer lines up with anything — a gutter that matches nothing is just
@@ -2495,22 +2505,33 @@ function rHero(t){
       +'<div class="hero-hl">'+hl+'</div>'
       +'<div class="hero-lede">'+e(lede)+'</div>'
       +(split?'<div class="hero-split">'+split+'</div>':'')
+      // The dots close the argument rather than floating in the evidence column: the
+      // row now reads headline -> who is leading it -> how they are headlining it ->
+      // who is carrying it. In the narrow evidence column they were also the one thing
+      // that could not shrink, and they set that column's floor.
+      +'<div class="hero-cov">'
+        +'<div class="hero-dots">'+dots(srcs)+'</div>'
+        +'<div class="hero-legend">'+legend+'</div>'
+      +'</div>'
     +'</div>'
     +'<div class="hero-side">'
       +fig
       +'<div class="hero-foot">'
-        +'<div class="hero-dots">'+dots(srcs)+'</div>'
-        +'<div class="hero-legend">'+legend+'</div>'
-        // The same spark() the rows draw, from the same heat_history, so the hero and
-        // row 02 cannot disagree about a story's trajectory. The number is how big;
-        // the curve is which way it is going. Curve FIRST, then the number: the table
-        // reads Velocity then Signal, and the hero has to read the same way round or
-        // the eye has to relearn the block at row 02.
-        +'<div class="hero-stat">'
-          +'<span class="hero-spark">'+spark(t.delta,t.heat_score,t.heat_history)+'</span>'
-          +'<span class="hero-stat-n">'+t.heat_score+'</span>'
-          +'<span class="hero-stat-l">Signal</span>'
-          +dh+'</div>'
+        // Two labelled cells, Velocity then Signal, each label above its value and the
+        // pair right-aligned under the photograph — the table's own column header row,
+        // in the table's own order. The same spark() the rows draw, from the same
+        // heat_history, so the hero and row 02 cannot disagree about a trajectory.
+        +'<div class="hero-metrics">'
+          +'<div class="hero-metric">'
+            +'<div class="hero-metric-l">Velocity</div>'
+            +'<div class="hero-metric-v hero-spark">'
+              +spark(t.delta,t.heat_score,t.heat_history)+'</div>'
+          +'</div>'
+          +'<div class="hero-metric">'
+            +'<div class="hero-metric-l">Signal</div>'
+            +'<div class="hero-metric-v hero-stat-n">'+t.heat_score+'</div>'
+          +'</div>'
+        +'</div>'+dh
       +'</div>'
     +'</div>';
   el.classList.add('on');
