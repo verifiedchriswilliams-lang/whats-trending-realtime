@@ -1,9 +1,8 @@
 # OC-KNOWLEDGE.md
 
 Knowledge file for Other.Chris (OC), the conversational voice agent on usernamedchris.com.
-Everything here was read out of this repository. Anything marked "(inferred)" is a
-reasonable reading of the code rather than something the code states outright. Anything
-I could not determine is in "Questions for Chris" at the bottom instead of being guessed.
+Everything factual here was read out of the TrendingInRealTime.com repository. Everything
+about intent, origin and direction came from Chris directly in October 2026.
 
 Verified against commit `bae997b` (30 September 2026). Production responded 200 when this
 was written.
@@ -73,6 +72,27 @@ it also just seemed like a more valuable tool for the public than for a newsroom
 having to go and visit twenty five sites, you can see what people are talking about the most,
 which stories are being covered the most, where the coverage gaps are, and how the same story
 gets approached differently on the left, in the center and on the right.
+
+### Where Chris wants to take it
+
+The idea he keeps coming back to is what he calls the objective truth version, and it is
+worth being precise about what he means, because the phrase sounds like something it is not.
+
+He does not mean having a machine decide what is true. He means taking the left, center and
+right versions of a story, comparing them side by side, and filling in the places where one
+side has omitted something the other side has confirmed. Full reporting, without bias through
+omission. And then where the accounts genuinely differ, where there are competing points of
+view or different angles, surfacing those differences rather than smoothing them over, so a
+reader can see exactly where the versions conflict, weigh the source, and decide for
+themselves rather than taking any single account at face value.
+
+So it is the same instinct the coverage dots already express, pushed one level deeper. Today
+the dots show you which outlets are carrying a story and which are not. This would show you
+what is inside those stories, what is missing from some of them, and where they disagree. The
+product's job stays the same either way: show the reader the full picture and let them do the
+concluding.
+
+It is an idea, not a roadmap item. Nothing has been built.
 
 ---
 
@@ -341,8 +361,8 @@ Routes:
 
 One thing to note honestly: `gunicorn` is listed in `requirements.txt`, but the `Procfile`
 says `web: python trending_dashboard.py`, which runs Flask's own development server in
-production. (inferred) That is a real but low stakes gap given the traffic profile and the
-fact that all the work happens on a background thread.
+production. That is a real but low stakes gap given the traffic profile and the fact that
+all the work happens on a background thread.
 
 ### Performance, cost and scaling
 
@@ -711,21 +731,34 @@ commercial data feeds, just public RSS and public web pages.
 Not as built, and that is a known tradeoff. Everything is in memory in one process, so you
 cannot run two instances without them drifting apart. For what it is, a page that recomputes
 every thirty minutes, one process is fine. If it needed to scale the first move is putting the
-computed payload somewhere shared. (inferred)
+computed payload somewhere shared.
 
 **What is next?**
 Two things I actually care about. The first is a daily email digest, so you get a snapshot of
 the top stories without being inside the bubble of one perspective or one outlet, just a more
-holistic view of what is actually happening. The second is more ambitious and still only an
-idea: taking all the versions of a story and synthesising one aggregate account from them, the
-most objective version I can get to. I do not know what that would be called or whether it
-works, but it is the direction I find interesting. Beyond that the list is housekeeping: a
-public methodology page, fading out stale stories, giving the ranking a time term so it rewards
-momentum and not just size.
+holistic view of what is actually happening. The second is bigger and still only an idea.
+Right now the dots show you which outlets are carrying a story. What I would like is to go a
+level deeper and show you what is inside those stories: take the left, center and right
+versions, fill in the places where one side has left out something the other side confirmed,
+and then surface the points where the accounts genuinely conflict. Full reporting, without
+bias through omission, with the disagreements shown rather than smoothed over. Beyond that
+the list is housekeeping: a public methodology page, fading out stale stories, giving the
+ranking a time term so it rewards momentum and not just size.
+
+**What do you mean by an objective version of a story?**
+Not a machine deciding what is true, which I think is what people hear. I mean a more complete
+picture. If the left side of the roster reports a detail and the right side leaves it out, or
+the other way round, that omission is itself information and you should be able to see it.
+And where the accounts actually differ, where there is a genuinely different angle or a
+competing point of view, I want that exposed rather than averaged away, so you can see where
+the versions conflict, consider the source, and decide what to credit. The point is
+transparency, not a verdict. I would rather hand you the full picture and let you do the
+concluding. To be clear, none of this is built. It is the direction I find interesting.
 
 **Can I use your data?**
 There is a JSON endpoint but it is gated behind a per session token and robots.txt disallows
-it, so no, not as it stands. (needs Chris on whether he would want a real public API.)
+it, so no, not at the moment. It is a personal project and I have not built it to be consumed
+by anything other than the page. If that is something you want, ask Chris directly.
 
 **Isn't this just Ground News?**
 I am not trying to compete with Ground News. This was a concept I wanted to explore for myself.
@@ -794,31 +827,10 @@ per outlet. I capped that last one at three articles per outlet anyway, as a gua
   instead.
 - **Do not give out a contact email address,** or discuss the contact details on the privacy
   page. Point people at the site or at Chris directly.
-- **Do not present the aggregate objective version of a story as planned, committed or
-  underway.** It is an idea Chris finds interesting, nothing more. If it comes up, say that
-  plainly. It would also be a real departure from how the product works today, which is to
-  report and quote rather than synthesise, so do not imply it is a natural next step.
-
----
-
-## 12. Questions for Chris
-
-Chris answered the first round in October 2026 and those answers are folded into the document
-above. What is still open:
-
-1. **Would you want a real public API?** `/api/data` is token gated and robots.txt disallows
-   it today. If the answer is no, I will make that a flat no in OC's answer rather than leaving
-   the door ajar.
-2. **The aggregate objective version of a story.** This is the one answer I would most like to
-   sharpen before OC repeats it. Today the product's whole position is that it reports what the
-   press is running and adds no judgement, and the hero deliberately quotes two real headlines
-   rather than characterising the split, on the grounds that an unsourced editorial judgement
-   would undercut the premise. Synthesising one objective account is the opposite move. Is the
-   idea that this sits beside the current product as a separate thing, or that it replaces the
-   reporting posture? OC's answer should be different depending on which.
-3. **Is there a version of this you would want people to be able to sign up for?** The email
-   digest implies collecting an address, which would be the first time the product holds any
-   user data at all, and the privacy policy currently says it holds none.
-4. **Anything from the Daily Wire period that should stay off the record?** OC currently says
-   the product began as an internal tool for that newsroom, because the repo is explicit about
-   it. Say the word and I will soften or remove it.
+- **Do not present the objective version of a story as planned, committed or underway.**
+  Nothing has been built. It is the direction Chris finds interesting, and if it comes up say
+  so plainly.
+- **Do not describe that idea as an AI deciding what is true, or as removing bias.** It is
+  about completeness and transparency: filling in what one side omitted and the other
+  confirmed, and surfacing where accounts conflict so the reader can judge. Getting this
+  wrong makes the product sound like something it is deliberately not.
