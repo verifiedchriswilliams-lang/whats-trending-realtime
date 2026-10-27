@@ -824,8 +824,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
 - [ ] **Update the privacy policy contact address** — `/privacy` publishes a
   `@dwventures.com` address, which is Daily Wire–era and outdated after the general-market
-  pivot. Chris has confirmed it needs to change; confirm the exact replacement address before
-  editing, since it goes on a public page.
+  pivot. Confirmed replacement: `chris.williams@mail.com`.
 - [ ] **`.mob-nav` has never rendered** — the base rule `.mob-nav{display:none}` sits *after*
   the `@media(max-width:900px){.mob-nav{display:flex}}` override at equal specificity, so the
   later rule wins and the fixed bottom bar is permanently off. Dead since `13dca8c`, the commit

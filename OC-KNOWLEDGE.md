@@ -166,6 +166,66 @@ nothing: no heat score, no clustering, no ranking.
 **Refresh.** Everything refreshes together on a thirty minute cycle, and the countdown in the
 sidebar tells you when the next one lands.
 
+### How to read the page
+
+This is the part worth OC being really good at, because the page uses a few numbers and shapes
+that do not explain themselves.
+
+**The rank is coverage, not importance.** Position 01 means the press is covering that story
+most widely and most prominently right now. It does not mean it matters most, and it carries
+no claim about whether any of it is true. A celebrity death and a war can both sit at the top
+on the same logic.
+
+**Signal is the heat score.** It is the single number behind the ranking. Bigger means more
+outlets carrying it, and those outlets running it more prominently. There is no fixed scale
+and no maximum, so the number is only meaningful against the other numbers on the page that
+day. A story at 450 next to one at 120 is being carried roughly three to four times as hard.
+Do not read it as a percentage or a rating.
+
+**Velocity is direction, not size.** The sparkline plots the heat score over the last four
+refreshes, so up to two hours. Green and rising means the story is gaining coverage, grey
+means it is flat or falling. Falling is deliberately grey rather than red, because a story
+losing coverage is not a warning. The small number beside it is the change since the last
+refresh alone. A flat line usually just means the story is new and there is only one reading
+so far.
+
+**The dots are the whole argument.** One dot per outlet across the full twenty five, in a
+fixed order: left of center, then center, then right of center, then the outlets not carrying
+it, which are drawn pale. So the shape tells you two things at once. A long solid run with a
+pale tail means wide coverage. A block of colour on one side with pale dots on the other means
+a story one half of the press is running and the other half is not.
+
+**What a pale dot does and does not mean.** It means that outlet's story did not show up: not
+in its feed inside the window, and not on its homepage when the page was last crawled. That
+could be an editorial decision, or it could be timing, a slow feed, or a feed that was
+briefly unavailable. The page does not distinguish between those, and OC should not either.
+Say it as absence of evidence, not evidence of suppression. The honest reading is "these
+outlets are not carrying it right now", and the interesting part is the pattern across many
+stories rather than any single row.
+
+**Left, center and right are perspective, not quality.** The colours come from AllSides and
+describe where an outlet sits politically on online US political content. They say nothing
+about whether an outlet is accurate or trustworthy, and the colours are deliberately matched
+in weight so that no side looks darker or more negative than another.
+
+**The subtitle tells you who is leading it.** "Crime, led by CBS News, BBC News and 2 more"
+means those outlets are running it near the top of their feed or their homepage, not that they
+broke it or own it. Led is about prominence right now.
+
+**The age chip is the newest article in the story,** not when the story started. A chip
+reading 2h means nothing new has landed on it in two hours.
+
+**Click the row.** Everything above is a summary. Expanding a row gives you every article in
+the cluster, grouped by outlet, with marks showing which ones are near the top of that
+outlet's feed, which were found on its homepage, and which are both. That is where you check
+the clustering for yourself, and every headline links out to the publisher.
+
+**The leading story shows the split rather than describing it.** Under "How it is being
+headlined" are two real headlines for the same story, one from a left of center outlet and
+one from a right of center outlet, quoted word for word. Reading those two lines next to each
+other is the fastest way to see how framing differs, and it is evidence rather than anybody's
+characterisation of it.
+
 ---
 
 ## 5. How it works under the hood
@@ -778,6 +838,64 @@ homepages every thirty minutes to see where a story sits and how it is moving. O
 stories up their own page when they are performing, when they are sticky, when they are getting
 shared. So watching that movement is a way of inferring how a story is being consumed, not just
 that somebody reported it. The score captures both halves.
+
+**What does the Signal number actually mean? Is 400 a lot?**
+Signal is the heat score, the number the ranking is built on. It goes up with the number of
+outlets carrying a story and with how prominently each one is running it. There is no fixed
+scale and no maximum, so it only means something relative to the other numbers on the page
+that day. If the top story is at 450 and the one below it is at 120, the top one is being
+carried about three or four times as hard. It is not a percentage and not a rating.
+
+**What do the empty dots mean? Is that censorship?**
+It means that outlet's version did not turn up: not in its feed inside the window, and not on
+its homepage when I last crawled it. That might be an editorial call, or it might be timing,
+or a slow feed, or a feed that was down for a cycle. I do not distinguish between those and I
+would not want the page to imply I can. So read a pale dot as "not carrying it right now",
+not as proof anybody buried anything. The interesting signal is the pattern across a lot of
+stories, not one row.
+
+**Does a story at number one mean it is the most important thing happening?**
+No, and this is the thing I would most want people to understand. Rank one means the press is
+covering it most widely and most prominently at this moment. It is a measure of coverage, not
+of importance, and it makes no claim at all about whether any of it is true. Plenty of days
+the most covered story is not the one that matters most.
+
+**What is the difference between Velocity and Signal?**
+Signal is how big, Velocity is which way it is going. Signal is the heat score right now.
+Velocity is that same score plotted across the last four refreshes, so up to two hours of
+history, with the change since the last refresh shown beside it. Green and rising means a
+story is gaining coverage. Grey means flat or falling, and it is grey rather than red on
+purpose, because a story losing coverage is not a warning.
+
+**Why is the sparkline flat on some stories?**
+Usually because the story is new and there is only one reading so far. The history also
+resets whenever the server restarts, since nothing is written to disk, so after a deploy
+everything starts from a flat line and fills back in over the next couple of hours.
+
+**Why is a story I care about not on the list?**
+A few possible reasons. The list only shows the top twenty by coverage, so a real story
+covered by two outlets will sit below the cut. It needs at least two credible outlets before
+it clusters at all. And anything published more than forty eight hours ago is dropped
+entirely. If it is genuinely breaking, check the Last Hour view instead, because that shows
+everything published in the last sixty minutes whether or not it has clustered yet.
+
+**How do I check that you clustered a story correctly?**
+Click the row. It expands to show every article in that cluster, grouped by outlet, with the
+headline and a link out to the publisher. If something is in there that does not belong, you
+will see it immediately. I would rather show the working than ask you to trust the grouping.
+
+**Why do the colours not mean one side is better?**
+Because they are not a quality judgement, they are a position. They come from AllSides, which
+rates where an outlet sits politically on online US political content, explicitly not whether
+it is accurate or credible. I also made the three colours identical in lightness and
+saturation so no side reads as darker or heavier than another. The page is trying to show you
+the spread, not score it.
+
+**Why is the same story headlined so differently?**
+That is more or less the point of the leading story block. Under "How it is being headlined"
+I show you the same story as a left of center outlet and a right of center outlet actually
+wrote it, word for word. I do not describe the difference, I just put the two lines next to
+each other and let you see it.
 
 **Why is the leading story treated differently?**
 Because the top story usually deserves more than one line. It gets the rank number, a computed
