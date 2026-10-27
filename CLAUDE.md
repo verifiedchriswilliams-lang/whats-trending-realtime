@@ -803,7 +803,7 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [x] **AP News fix** — switched from direct RSS (Railway DNS failure) to Google News RSS.
 - [x] **CNN fix** — switched from direct RSS (2 articles) to Google News RSS (~20 articles).
 - [x] **Sidebar navigation** — removed top nav bar; all navigation moved to fixed left sidebar using Material Symbols icons.
-- [x] **Mobile bottom nav** — fixed bottom bar visible at ≤900px; sidebar collapses. Solves disappearing navigation on mobile web.
+- [x] **Mobile navigation** — the sidebar collapses at ≤900px and a `.mob-hdr` top bar with a Menu button takes over, opening `.mob-drawer` with all four nav items. Verified working on production at 390px. A `.mob-nav` bottom bar was also written in the same commit but has never rendered — see the backlog item below.
 - [x] **Topbar removal** — "Editorial Intelligence" header bar eliminated; LIVE indicator + countdown moved into sidebar above nav items (`.sb-live`). All page containers start at `top:0`, reclaiming 64px of vertical space.
 - [x] **DW alignment prefix matching** — added 5-char prefix matching step between exact and substring fallback. Fixes `olympic`/`olympics`, `transgender`/`trans`, and similar root-word variants where DW's framing uses a different inflection.
 - [x] **Facebook tab removed** — Meta's Graph API requires App Review for `Page Public Content Access` and is incompatible with the Facebook Login app type. Removed from Social Velocity sidebar entirely.
@@ -822,6 +822,21 @@ datacentre-IP blocks and confirm on production with `--prod`.
 - [ ] **Display normalization within buckets** — coverage dots now span an uneven roster (10/5/10), so "9 of 10 left · 3 of 5 center · 4 of 10 right" reads more honestly than raw dot counts
 - [ ] **Sources / Methodology page** — surface the AllSides attribution, the snapshot date, and the "perspective only, not accuracy" disclaimer in the UI, not just in this file
 - [ ] **Fix `run.sh`** — installs `pytrends` (unused — nothing in the app imports it) and does not install `requests`, `beautifulsoup4`, or `gunicorn`. It should just be `pip install -r requirements.txt`.
+- [ ] **Update the privacy policy contact address** — `/privacy` publishes a
+  `@dwventures.com` address, which is Daily Wire–era and outdated after the general-market
+  pivot. Chris has confirmed it needs to change; confirm the exact replacement address before
+  editing, since it goes on a public page.
+- [ ] **`.mob-nav` has never rendered** — the base rule `.mob-nav{display:none}` sits *after*
+  the `@media(max-width:900px){.mob-nav{display:flex}}` override at equal specificity, so the
+  later rule wins and the fixed bottom bar is permanently off. Dead since `13dca8c`, the commit
+  that introduced it. `.main` still reserves `padding-bottom:76px` for a bar that is not there,
+  so every mobile page ends in 76px of dead space. Navigation itself is fine: the Menu drawer
+  carries all four items. Decide whether to restore the bar (move the base rule above its
+  override; the space is already allocated) or delete it along with its markup, CSS and the
+  reserved padding. `.mob-hdr` works only because its base rule happens to come first.
+- [ ] **`Procfile` runs Flask's development server** — `web: python trending_dashboard.py`,
+  while `gunicorn` sits unused in `requirements.txt`. Low stakes at current traffic, since all
+  the work happens on a background thread, but it is not what the dependency list implies.
 
 ---
 

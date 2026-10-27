@@ -55,8 +55,24 @@ reputation and reach, their political placement comes from a third party, and th
 dots are described as "the whole claim". Nothing in the interface is supposed to editorialise
 beyond that.
 
-What is not in the repo is why Chris started it in the first place, what he wanted out of it
-commercially, or who he imagined using it. Those are questions below.
+### Why I built it (from Chris, October 2026)
+
+I built it for editorial executives and editorial teams. The idea was that in one snapshot
+you could see the velocity of the stories moving in the world, both the most published and
+the most engaged, and at the same time see how those stories were being reported across
+different outlets, where the bias was, where the emphasis differed depending on who was
+covering it.
+
+What I did not expect is who actually ended up using it. The producers, the podcast hosts and
+the podcast producers picked it up for show prep, because it told them whether they were
+talking about the most timely and topical thing. So it solved a completely different problem
+from the one I built it for, and it has pivoted from there.
+
+The move to a general audience in 2026 was partly a consequence of leaving the Daily Wire, but
+it also just seemed like a more valuable tool for the public than for a newsroom. Without
+having to go and visit twenty five sites, you can see what people are talking about the most,
+which stories are being covered the most, where the coverage gaps are, and how the same story
+gets approached differently on the left, in the center and on the right.
 
 ---
 
@@ -252,6 +268,16 @@ three or more characters, and applies crude suffix stripping so that "arrest" ma
 "arrested". Measured on a live 415 article corpus, clusters containing an unrelated pair fell
 from five to two, and the only two clusters that disappeared were both false merges.
 
+**3. Heat score, and why homepage position is the interesting half.**
+Chris's framing of this, which is worth having in full because it is not obvious from the
+code alone: the RSS feed gives you the chronology of what an outlet published, but crawling
+the homepage every thirty minutes tells you where that story sits and how it is moving. An
+outlet moves a story up its own page when it is performing, when it is sticky, when it is
+being shared. So tracking position over time is a way of inferring how a story is being
+consumed, not just that it was reported. Both halves feed the score, and because the score
+is what the velocity sparkline plots, a story climbing an outlet's homepage shows up as a
+rising curve.
+
 **3. Heat score.**
 ```
 heat = (source_count x 12)
@@ -388,6 +414,17 @@ chroma and differ only in hue, so no side reads as heavier or more negative. Ris
 green and falling is neutral grey, never red, because a story gaining coverage should not read
 as a warning.
 
+**The interface went through three redesigns.** Chris worked with Claude Design to get to the
+current visual language, then kept refining that output through development rather than
+implementing it as drawn. The design system and artboards in `docs/design/` are the artefacts
+of that process, and the project notes record several places where the artboards were
+deliberately not followed because measurement said otherwise.
+
+**The name is settled.** It was "What's Trending In Real Time" first. He landed on
+"Trending In Real Time" because the URL is shorter and it was available. The old name survives
+in `run.sh` and in the retired `trending_dashboard_v2.py`, which are leftovers rather than a
+live question.
+
 **Deliberately simple.** One file, no database, no build step, no framework on the front end.
 No icon font at all, because every icon sat beside a text label anyway and removing it dropped
 a 328KB font.
@@ -397,8 +434,10 @@ a 328KB font.
 ## 7. Timeline and status
 
 - **Before April 2026:** the project existed as an internal Daily Wire editorial intelligence
-  tool. The first commit in this repository already contains a complete 2,580 line application,
-  so the repo starts partway through the story. (inferred)
+  tool. Chris built the original over a single weekend. Most of the work since has been
+  subtraction rather than addition, including a set of velocity metrics and most of the social
+  sources. The first commit in this repository already contains a complete 2,580 line
+  application, so the repo starts partway through the story.
 - **7 April 2026:** first commit in this repo. That month's work was the Blue Trends page,
   Bluesky trending topics, Reddit fetchers, and the post clustering merge pass.
 - **Roughly three month gap.**
@@ -573,15 +612,20 @@ tilted by about 67 percent. I fixed it by adding five outlets rather than removi
 got it to ten, five and ten.
 
 **Why build this?**
-(needs Chris) What I can say from the code is what it solves. The site's own description puts
-it well: most of us read two or three outlets and assume that is the news. This shows you all
-twenty five at once, what is genuinely major, and what your sources skipped. The origin is that
-it started as an internal tool for a newsroom and got turned outward.
+I built it for editorial executives and editorial teams. The idea was that one snapshot would
+show you the velocity of the stories moving in the world, the most published and the most
+engaged, and at the same time show you how those stories were being reported across different
+outlets, where the bias sat and where the emphasis changed depending on who was covering it.
+Then it got away from me in a good way. The podcast producers and hosts started using it for
+show prep, to check they were talking about the most timely thing. It ended up solving a
+different problem from the one I built it for.
 
 **Who is it for?**
-(needs Chris) The project describes the audience as general market, mass consumption, with the
-goal that anyone can open the page and see at a glance what is happening and which stories are
-gaining coverage. I do not have real audience data to tell you who actually uses it.
+Anyone who wants the whole picture without visiting twenty five sites. That is the general
+version. In practice it was built for newsrooms and then found an audience with podcast
+producers and hosts doing show prep. I should be straight with you though: I run no analytics
+on it at all, so I genuinely cannot tell you who uses it today. It is a pet project, not a
+business, and I have deliberately not instrumented it.
 
 **What was it before?**
 It was an internal editorial intelligence tool for The Daily Wire, built to show that newsroom
@@ -670,14 +714,37 @@ every thirty minutes, one process is fine. If it needed to scale the first move 
 computed payload somewhere shared. (inferred)
 
 **What is next?**
-(needs Chris for priorities) The backlog has a public methodology page explaining the AllSides
-attribution in the interface rather than only in my notes, a daily email digest, fading out
-stale stories, adding a time term so the ranking rewards momentum rather than just size, and
-fixing the image supply so pictures could appear on every row without the skew.
+Two things I actually care about. The first is a daily email digest, so you get a snapshot of
+the top stories without being inside the bubble of one perspective or one outlet, just a more
+holistic view of what is actually happening. The second is more ambitious and still only an
+idea: taking all the versions of a story and synthesising one aggregate account from them, the
+most objective version I can get to. I do not know what that would be called or whether it
+works, but it is the direction I find interesting. Beyond that the list is housekeeping: a
+public methodology page, fading out stale stories, giving the ranking a time term so it rewards
+momentum and not just size.
 
 **Can I use your data?**
-There is a JSON endpoint but it is gated behind a per session token and robots.txt disallows it,
-so no, not as it stands. (needs Chris on whether he would want a real public API.)
+There is a JSON endpoint but it is gated behind a per session token and robots.txt disallows
+it, so no, not as it stands. (needs Chris on whether he would want a real public API.)
+
+**Isn't this just Ground News?**
+I am not trying to compete with Ground News. This was a concept I wanted to explore for myself.
+It started as a snapshot tool for a newsroom, then podcast producers started using it for show
+prep, and it has pivoted from there. If you want the polished commercial product in this space,
+that is not what this is.
+
+**How long did it take to build?**
+The original took me a weekend. Most of the work since has been taking things out rather than
+putting them in. There were a lot more velocity metrics in the first version, and a run of
+social sources, and almost all of that is gone now because it did not earn its place.
+
+**What is the cleverest part of it?**
+The velocity scoring, and it is less intuitive than it looks. I pull the RSS feeds, which give
+me the chronology of what each outlet published. At the same time I crawl their actual
+homepages every thirty minutes to see where a story sits and how it is moving. Outlets move
+stories up their own page when they are performing, when they are sticky, when they are getting
+shared. So watching that movement is a way of inferring how a story is being consumed, not just
+that somebody reported it. The score captures both halves.
 
 **Why is the leading story treated differently?**
 Because the top story usually deserves more than one line. It gets the rank number, a computed
@@ -721,41 +788,37 @@ per outlet. I capped that last one at three articles per outlet anyway, as a gua
   predecessor that nothing imports or serves.
 - **Do not quote a specific uptime, latency or reliability figure.** There is no monitoring to
   back one up.
+- **Do not raise known defects or maintenance items.** There are a few open housekeeping items
+  on the backlog. They are tracked and they are not interesting to a visitor. Do not volunteer
+  them, and if pushed on limitations, use the honest product limitations already listed above
+  instead.
+- **Do not give out a contact email address,** or discuss the contact details on the privacy
+  page. Point people at the site or at Chris directly.
+- **Do not present the aggregate objective version of a story as planned, committed or
+  underway.** It is an idea Chris finds interesting, nothing more. If it comes up, say that
+  plainly. It would also be a real departure from how the product works today, which is to
+  report and quote rather than synthesise, so do not imply it is a natural next step.
 
 ---
 
 ## 12. Questions for Chris
 
-1. **Why did you start this?** The repo shows it began as an internal Daily Wire editorial
-   intelligence tool, but not what made you want to build it in the first place, or what
-   problem it was solving for that newsroom.
-2. **Why did you pivot it to a general audience in September 2026?** Was that a deliberate
-   product decision, a consequence of leaving the Daily Wire context, or something else?
-3. **Who is actually using it?** Any sense of traffic, repeat visitors, or who it has resonated
-   with. The site runs no analytics so I have nothing.
-4. **Is there a commercial goal,** or is this a portfolio and curiosity project? The backlog
-   mentions an email digest, which hints at an audience play.
-5. **How long did the original version take to build,** and roughly when did the project really
-   start? The first commit here is 7 April 2026 but already contains a complete application.
-6. **What would you do differently** if you rebuilt it today?
-7. **What is the single thing you are proudest of** in it? My guess would be the AllSides
-   rebalance, since it meant admitting the balance claim had been wrong, but that is my read.
-8. **How did you pick the twenty five outlets?** The criterion in the notes is reputation and
-   reach, and six were explicitly rejected, but not the reasoning behind each call.
-9. **Do you want a public API or data access?** Right now `/api/data` is token gated and
-   robots.txt disallows it.
-10. **Is the email digest actually planned,** and for whom?
-11. **The privacy policy contact address is cwilliams@dwventures.com,** which is a Daily Wire
-    Ventures domain and looks like a leftover from before the pivot. Should it change?
-12. **Did you design the interface yourself** or was the 2030 design system work done elsewhere?
-    The docs reference a Claude Design project that is not reachable from the repo.
-13. **Is the name settled?** `run.sh` and the old v2 file still say "WhatsTrendingInRealTime.com"
-    while everything shipping says "TrendingInRealTime.com".
-14. **How do you want OC to handle comparisons to Ground News?** It is the obvious competitor and
-    is not mentioned anywhere in the repo, so I have deliberately not raised it in the answers
-    above.
-15. **Three small things the code shows that you may want to fix before OC talks about them:**
-    the `Procfile` starts Flask's development server rather than gunicorn even though gunicorn is
-    a dependency; `run.sh` installs `pytrends`, which nothing imports, and does not install
-    requests, beautifulsoup4 or gunicorn; and the mobile bottom navigation bar has a CSS ordering
-    bug that means it has never rendered, though the Menu drawer covers navigation fine.
+Chris answered the first round in October 2026 and those answers are folded into the document
+above. What is still open:
+
+1. **Would you want a real public API?** `/api/data` is token gated and robots.txt disallows
+   it today. If the answer is no, I will make that a flat no in OC's answer rather than leaving
+   the door ajar.
+2. **The aggregate objective version of a story.** This is the one answer I would most like to
+   sharpen before OC repeats it. Today the product's whole position is that it reports what the
+   press is running and adds no judgement, and the hero deliberately quotes two real headlines
+   rather than characterising the split, on the grounds that an unsourced editorial judgement
+   would undercut the premise. Synthesising one objective account is the opposite move. Is the
+   idea that this sits beside the current product as a separate thing, or that it replaces the
+   reporting posture? OC's answer should be different depending on which.
+3. **Is there a version of this you would want people to be able to sign up for?** The email
+   digest implies collecting an address, which would be the first time the product holds any
+   user data at all, and the privacy policy currently says it holds none.
+4. **Anything from the Daily Wire period that should stay off the record?** OC currently says
+   the product began as an internal tool for that newsroom, because the repo is explicit about
+   it. Say the word and I will soften or remove it.
